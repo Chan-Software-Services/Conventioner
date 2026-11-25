@@ -22,6 +22,14 @@ and an excepted write it cannot read fails, naming its file and line, until it i
 write's filter may name an owned field: the claim holds the status it read. A one-time migration an
 operator runs is listed but not read, since it runs outside any request and outside the owner's
 rules by design.
+
+Its second check (T277 ticket 02) reads every back-end module outside the owner, ``tests/`` and
+``migrations/`` for a read of a status the review no longer writes (``RETIRED``):
+``ApplicationStatus.UNDER_REVIEW``, an old offers flow's status, or ``CANCELLED``. A module that
+names one spells a state out again beside ``ReviewState.state_of``, which reads every stored
+spelling as the state it stands for, so it fails unless ``RETIRED_EXCEPTIONS`` lists it, keyed by
+module and function, with its reason. ``datatypes.py`` defines the members by assignment, which is
+not a read.
 """
 import ast
 from pathlib import Path
@@ -60,11 +68,26 @@ EXCEPTIONS: Dict[Tuple[str, str], str] = {
     ("reset_database", "reset_database"): (
         "an operator script emptying every collection of a local database, which it names by a "
         "variable the walk cannot read"),
+    ("migrations.migrate_application_status", "written"): _A_MIGRATION,
     ("migrations.migrate_submitted_at_to_iso", "migrate"): _A_MIGRATION,
     ("migrations.migrate_table_share_answer", "migrate"): _A_MIGRATION,
     ("migrations.migrate_tier_preference_per_date", "migrate"): _A_MIGRATION,
     ("migrations.migrate_business_name", "copy_answers"): _A_MIGRATION,
     ("migrations.migrate_business_name", "clean_answers"): _A_MIGRATION,
+}
+
+
+#: The statuses the review no longer writes: ``under_review``, which ``open`` replaced, and the old
+#: offers flow's. Only the owner names one, reading it as the state it stands for.
+RETIRED = frozenset({
+    "UNDER_REVIEW", "UNASSIGNED", "ASSIGNED", "ASSIGNMENT_SENT", "VENDOR_ACCEPTED",
+    "VENDOR_REFUSED", "CANCELLED",
+})
+
+#: Each read of a ``RETIRED`` status outside the owner, by (module, function), and why.
+RETIRED_EXCEPTIONS: Dict[Tuple[str, str], str] = {
+    ("app", "pending_offers_count"): (
+        "the offers stage's count of sent offers, which nothing enters and T277 ticket 14 removes"),
 }
 
 
@@ -334,6 +357,144 @@ def test_the_owned_fields_are_the_review_state():
     assert set(ReviewState.OWNED_FIELDS) == {
         "status", "verdict_by", "verdict_at", "verdict_reason", "follow_up_owner", "undo_to",
         "added_by", "added_at", "origin", "arriving", "reviewer"}
+
+
+class RetiredRead(NamedTuple):
+    """One read of a status the review no longer writes, by file, line, module and function."""
+    path: Path
+    line: int
+    module: str
+    function: str
+    member: str
+
+
+def _reads_retired(node: ast.AST) -> Optional[str]:
+    """The ``RETIRED`` member ``node`` reads, as ``ApplicationStatus.X`` or as
+    ``<module>.ApplicationStatus.X``, or None."""
+    if not (isinstance(node, ast.Attribute) and node.attr in RETIRED
+            and isinstance(node.ctx, ast.Load)):
+        return None
+    return node.attr if _named(node.value) == "ApplicationStatus" else None
+
+
+class _RetiredWalk(ast.NodeVisitor):
+    def __init__(self, path: Path, module: str):
+        self.path, self.module = path, module
+        self.scope: List[str] = []
+        self.found: List[RetiredRead] = []
+
+    def _scoped(self, node):
+        self.scope.append(node.name)
+        self.generic_visit(node)
+        self.scope.pop()
+
+    visit_FunctionDef = visit_AsyncFunctionDef = visit_ClassDef = _scoped
+
+    def visit_Attribute(self, node: ast.Attribute):
+        member = _reads_retired(node)
+        if member:
+            self.found.append(RetiredRead(self.path, node.lineno, self.module,
+                                          ".".join(self.scope) or "<module>", member))
+        self.generic_visit(node)
+
+
+def retired_reads(root: Path) -> Iterator[RetiredRead]:
+    """Every read of a ``RETIRED`` status in a back-end module outside the owner, ``tests/`` and
+    ``migrations/``: a one-time migration reads the stored spellings to rewrite them."""
+    for path in sorted(root.rglob("*.py")):
+        relative = path.relative_to(root).parts
+        module = _module(path, root)
+        if not _walked(relative) or relative[0] == "migrations" or module == OWNER:
+            continue
+        walk = _RetiredWalk(path, module)
+        walk.visit(ast.parse(path.read_text(), str(path)))
+        yield from walk.found
+
+
+def unexcused_reads(root: Path, exceptions: Dict[Tuple[str, str], str]) -> List[str]:
+    """What fails the second check, by file and line: each read of a ``RETIRED`` status outside
+    the owner and the exceptions."""
+    return [
+        f"{read.path.relative_to(root)}:{read.line}: ApplicationStatus.{read.member} read in "
+        f"{read.function}, outside {OWNER}; read the state through ReviewState.state_of, or list "
+        "the site with its reason"
+        for read in retired_reads(root) if (read.module, read.function) not in exceptions]
+
+
+def test_no_reader_outside_the_owner_names_a_status_the_review_no_longer_writes():
+    assert unexcused_reads(BACK_END_DIR, RETIRED_EXCEPTIONS) == []
+
+
+def test_every_retired_exception_names_a_site_that_still_reads_one():
+    """An exception whose read went (T277 ticket 14 removes the offers stage) leaves the list."""
+    read = {(site.module, site.function) for site in retired_reads(BACK_END_DIR)}
+    assert set(RETIRED_EXCEPTIONS) - read == set()
+
+
+def test_every_retired_exception_says_why():
+    assert [site for site, reason in RETIRED_EXCEPTIONS.items() if len(reason.split()) < 4] == []
+
+
+def test_the_owner_reads_the_retired_statuses_unseen_by_the_check():
+    """The owner reads every spelling as the state it stands for, which is what the check sends
+    every other reader to; ``datatypes.py`` defines them, by assignment, which is not a read."""
+    path = BACK_END_DIR / "application_status.py"
+    walk = _RetiredWalk(path, OWNER)
+    walk.visit(ast.parse(path.read_text()))
+    # The walk sees the owner's reads, so it would see one anywhere else.
+    assert {read.member for read in walk.found} >= {"UNDER_REVIEW", "CANCELLED"}
+    assert not [read for read in retired_reads(BACK_END_DIR)
+                if read.module in (OWNER, "datatypes")]
+
+
+class TestThePlantedRead:
+    @staticmethod
+    def _tree(tmp_path, source: str, path: str = "api/planted.py") -> Path:
+        (tmp_path / path).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / path).write_text(source)
+        return tmp_path
+
+    def test_a_module_naming_under_review_fails_it_by_file_and_line(self, tmp_path):
+        root = self._tree(tmp_path, (
+            "from datatypes import ApplicationStatus\n"
+            "def undecided(app):\n"
+            "    return app.status in (ApplicationStatus.OPEN, ApplicationStatus.UNDER_REVIEW)\n"))
+
+        assert unexcused_reads(root, RETIRED_EXCEPTIONS) == [
+            "api/planted.py:3: ApplicationStatus.UNDER_REVIEW read in undecided, outside "
+            "application_status; read the state through ReviewState.state_of, or list the site "
+            "with its reason"]
+
+    def test_every_retired_status_is_found_however_the_enum_is_reached(self, tmp_path):
+        root = self._tree(tmp_path, "".join(
+            f"X{index} = datatypes.ApplicationStatus.{member}\n"
+            for index, member in enumerate(sorted(RETIRED))))
+
+        assert [failure.split(": ")[1].split(" ")[0]
+                for failure in unexcused_reads(root, {})] == [
+            f"ApplicationStatus.{member}" for member in sorted(RETIRED)]
+
+    def test_a_status_the_review_writes_passes(self, tmp_path):
+        root = self._tree(tmp_path, (
+            "def f():\n"
+            "    return (ApplicationStatus.OPEN, ApplicationStatus.NEEDS_FOLLOW_UP,\n"
+            "            ApplicationStatus.REVIEWER_APPROVED, ApplicationStatus.REVIEWER_REJECTED)\n"))
+
+        assert unexcused_reads(root, {}) == []
+
+    def test_listing_the_read_lets_it_pass(self, tmp_path):
+        root = self._tree(tmp_path, "def count():\n    return ApplicationStatus.ASSIGNMENT_SENT\n")
+
+        assert unexcused_reads(root, {("api.planted", "count"): "a reason"}) == []
+
+    def test_the_owner_the_tests_the_migrations_and_a_definition_are_not_read(self, tmp_path):
+        root = self._tree(tmp_path, "X = ApplicationStatus.UNDER_REVIEW\n", "application_status.py")
+        self._tree(root, "X = ApplicationStatus.UNDER_REVIEW\n", "tests/test_x.py")
+        self._tree(root, "X = ApplicationStatus.UNDER_REVIEW\n", "migrations/migrate_x.py")
+        self._tree(root, "class ApplicationStatus:\n    UNDER_REVIEW = 'under_review'\n",
+                   "datatypes.py")
+
+        assert unexcused_reads(root, {}) == []
 
 
 class TestThePlantedWrite:

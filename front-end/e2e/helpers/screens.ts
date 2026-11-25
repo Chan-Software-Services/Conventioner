@@ -2140,7 +2140,8 @@ function seatOn(
  * read is the server's, so a market in its days has its self check-in switch set first, in the
  * database since nobody here is signed in to turn it: on unless a state is of the switch off, since
  * the vendor's own controls are offered only where it is on (T496), and the door code's states
- * turn it off and on.
+ * turn it off and on. Today is reckoned from one instant, at which the page's clock is held before it
+ * opens: a run that passes midnight between the seats and the page would find no today card.
  */
 function asAVendorAt(
   market: 'big' | 'archived',
@@ -2149,6 +2150,7 @@ function asAVendorAt(
   selfCheckIn = true,
 ) {
   return async (page: Page, seed: TheScreensSeed) => {
+    const at = new Date();
     const { marketId, marketSlug } = seed[market];
     if (market === 'big') {
       mongoEval(
@@ -2174,12 +2176,13 @@ function asAVendorAt(
       submittedAt: '2099-06-01T00:00:00+00:00',
       updatedAt: '2099-06-01T00:00:00+00:00',
       outcome: 'has_a_table',
-      seats: seats(calendarToday()),
+      seats: seats(calendarToday(at)),
       vendorName: 'Maximilian Alexander Featherstonehaugh-Montgomery',
     };
     await page.route(`**/public/markets/${marketSlug}/applicant/application`, (route) =>
       route.fulfill({ json: { application } }),
     );
+    await page.clock.setFixedTime(at);
     await page.goto(vendorPagePath(marketSlug));
     await visible(page, ready);
   };

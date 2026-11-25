@@ -30,6 +30,7 @@ from api.applicants import (
     review_application,
 )
 from conftest import (
+    a_review_view,
     FakeApplicationsCollection, FakeMarketsCollection, let_in, reviewing, seen_as_read,
 )
 
@@ -98,13 +99,16 @@ def test_application_response_shows_open_status_regardless():
 
 def test_application_response_organizer_always_sees_truth():
     """The organizer response never applies the publication gate."""
-    response = _application_response_organizer(_app(ApplicationStatus.REVIEWER_APPROVED))
+    response = _application_response_organizer(_app(ApplicationStatus.REVIEWER_APPROVED),
+    a_review_view())
     assert response["status"] == ApplicationStatus.REVIEWER_APPROVED.value
 
-    response = _application_response_organizer(_app(ApplicationStatus.REVIEWER_REJECTED))
+    response = _application_response_organizer(_app(ApplicationStatus.REVIEWER_REJECTED),
+    a_review_view())
     assert response["status"] == ApplicationStatus.REVIEWER_REJECTED.value
 
-    response = _application_response_organizer(_app(ApplicationStatus.UNDER_REVIEW))
+    response = _application_response_organizer(
+        _app(ApplicationStatus.UNDER_REVIEW), a_review_view())
     assert response["status"] == ApplicationStatus.UNDER_REVIEW.value
 
 
@@ -227,7 +231,7 @@ def test_list_market_applications_returns_raw_statuses(monkeypatch):
     }]
     monkeypatch.setattr(ApplicationsApi, "applications_collection", fake)
 
-    result, status = list_market_applications("market-1")
+    result, status = list_market_applications("market-1", a_review_view())
 
     assert status == 200
     apps = result["applications"]
@@ -258,7 +262,8 @@ def test_review_application_updates_status(monkeypatch):
 
     result, status = review_application(
         "market-1", "app-1", ApplicationStatus.REVIEWER_APPROVED, by=REVIEWER,
-        reviewing=reviewing("market-1", REVIEWER.email), seen=seen_as_read("app-1"),
+        reviewing=reviewing("market-1", REVIEWER.email), view=a_review_view(),
+        seen=seen_as_read("app-1"),
     )
 
     assert status == 200
@@ -283,7 +288,8 @@ def test_review_application_rejects_invalid_status(monkeypatch):
 
     result, status = review_application(
         "market-1", "app-1", ApplicationStatus.OPEN, by=REVIEWER,
-        reviewing=reviewing("market-1", REVIEWER.email), seen=seen_as_read("app-1"),
+        reviewing=reviewing("market-1", REVIEWER.email), view=a_review_view(),
+        seen=seen_as_read("app-1"),
     )
     assert status == 400
     assert "invalid" in result["error"].lower()
@@ -295,7 +301,8 @@ def test_review_application_404_on_missing_app(monkeypatch):
 
     result, status = review_application(
         "market-1", "nonexistent", ApplicationStatus.REVIEWER_APPROVED, by=REVIEWER,
-        reviewing=reviewing("market-1", REVIEWER.email), seen=seen_as_read("nonexistent"),
+        reviewing=reviewing("market-1", REVIEWER.email), view=a_review_view(),
+        seen=seen_as_read("nonexistent"),
     )
     assert status == 404
 
@@ -317,7 +324,8 @@ def test_review_application_rejects_app_from_different_market(monkeypatch):
 
     result, status = review_application(
         "market-1", "app-1", ApplicationStatus.REVIEWER_APPROVED, by=REVIEWER,
-        reviewing=reviewing("market-1", REVIEWER.email), seen=seen_as_read("app-1"),
+        reviewing=reviewing("market-1", REVIEWER.email), view=a_review_view(),
+        seen=seen_as_read("app-1"),
     )
     assert status == 404
 

@@ -17,7 +17,7 @@ application, and the database is what enforces that -- see ``ensure_application_
 """
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from pymongo.errors import PyMongoError
 
@@ -584,8 +584,11 @@ def count_applications_with_status(market_id: str, status: str) -> int:
     })
 
 
-def count_applications_with_any_status(market_id: str, statuses: List[str]) -> int:
-    """How many applications for a market hold any of the given statuses."""
+def count_applications_with_any_status(
+    market_id: str, statuses: Sequence[Optional[str]],
+) -> int:
+    """How many applications for a market hold any of the given statuses; None among them counts
+    one stored with none, as Mongo matches a missing field to null."""
     ensure_application_indexes()
     return applications_collection.count_documents({
         **market_filter(market_id),

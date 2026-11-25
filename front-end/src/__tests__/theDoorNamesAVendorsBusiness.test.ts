@@ -17,12 +17,18 @@ import DoorRosterPrint, { type PrintedRow } from '@/components/DoorRosterPrint.v
 import VendorDrawer from '@/components/VendorDrawer.vue';
 import VendorIdentity from '@/components/VendorIdentity.vue';
 import VendorNameButton from '@/components/VendorNameButton.vue';
-import { MarketPhase, type Application, type Market } from '@/assets/types/datatypes';
+import {
+  ApplicationStatus,
+  MarketPhase,
+  type Application,
+  type Market,
+} from '@/assets/types/datatypes';
 import { BUSINESS_NAME_KEY, FULL_NAME_KEY } from '@/utils/essentialFields';
 import { calendarToday } from '@/utils/marketGuide';
 import { useVendorDetails } from '@/utils/vendorDetails';
 import { vendorMatches } from '@/utils/vendorIdentity';
 import { answersRefusing } from './support/servedAnswers';
+import { servedReview } from './support/servedReview';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() }));
 const fetchMarketApplications = vi.hoisted(() => vi.fn());
@@ -356,13 +362,14 @@ describe("the vendor drawer's head", () => {
       id: `app-${email}`,
       marketId: 'market-1',
       applicantEmail: email,
-      status: 'approved',
+      status: ApplicationStatus.ReviewerApproved,
+      ...servedReview('approved'),
       formData,
       submittedAt: '2026-09-15T14:20:18+00:00',
       updatedAt: '2026-09-15T14:20:18+00:00',
     }) as unknown as Application;
 
-  /** The head's lines under the eyebrow, by test id. */
+  /** The head's lines under the eyebrow, by test id: each vendor is approved, which its last says. */
   const head = () =>
     [...document.querySelectorAll('[data-testid="vendors-detail-head"] .detail-title-wrap > *')]
       .slice(1)
@@ -397,6 +404,7 @@ describe("the vendor drawer's head", () => {
       ['vendors-detail-title', 'Ana Clay'],
       ['vendors-detail-business', 'Paper & Pine'],
       ['vendors-detail-email', ANA],
+      ['vendors-detail-giver', 'Approved'],
     ]);
     expect(document.querySelector(testid('vendors-detail-business'))?.hasAttribute('title')).toBe(
       false,
@@ -412,6 +420,7 @@ describe("the vendor drawer's head", () => {
     expect(head()).toEqual([
       ['vendors-detail-title', name],
       ['vendors-detail-email', email],
+      ['vendors-detail-giver', 'Approved'],
     ]);
   });
 });

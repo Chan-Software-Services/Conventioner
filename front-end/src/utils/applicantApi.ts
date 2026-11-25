@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { api, getApiErrorMessage } from '@/utils/api';
-import type { Application } from '@/assets/types/datatypes';
+import type { ApplicantApplication, Application } from '@/assets/types/datatypes';
 
 /**
  * Request a login code for the applicant's email.
@@ -141,12 +141,12 @@ export const APPLICANT_READ_TIMEOUT_MS = 15000;
 export async function fetchApplicantApplication(
   marketSlug: string,
   token: string,
-): Promise<Application | null> {
+): Promise<ApplicantApplication | null> {
   const { data } = await api.get(`/public/markets/${marketSlug}/applicant/application`, {
     headers: { Authorization: `Bearer ${token}` },
     timeout: APPLICANT_READ_TIMEOUT_MS,
   });
-  return (data.application as Application | null) ?? null;
+  return (data.application as ApplicantApplication | null) ?? null;
 }
 
 /**
@@ -162,13 +162,13 @@ export async function saveApplicantApplication(
   token: string,
   formData: Record<string, unknown>,
   formVersion: string | null,
-): Promise<Application> {
+): Promise<ApplicantApplication> {
   const { data } = await api.put(
     `/public/markets/${marketSlug}/applicant/application`,
     { formData, formVersion },
     { headers: { Authorization: `Bearer ${token}` } },
   );
-  return data.application as Application;
+  return data.application as ApplicantApplication;
 }
 
 /**

@@ -24,6 +24,7 @@ import { useVendorNotes } from '@/utils/vendorNotes';
 import type { MarketPayments } from '@/utils/paymentsPage';
 import { PAYMENT_WRITTEN } from '@/utils/payments';
 import { answersRefusing } from './support/servedAnswers';
+import { servedReview } from './support/servedReview';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() }));
 const fetchMarketApplications = vi.hoisted(() => vi.fn());
@@ -112,6 +113,7 @@ function applicationOf(email: string, name: string): Application {
     id: `app-${email}`,
     applicantEmail: email,
     status: 'reviewer_approved',
+    ...servedReview('approved'),
     formData: { [PREFERRED_NAME_KEY]: name },
   } as unknown as Application;
 }

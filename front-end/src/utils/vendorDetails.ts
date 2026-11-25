@@ -28,6 +28,7 @@ import type {
   ApplicationStatus,
   Market,
   MarketDateObject,
+  ReviewState,
   TableShareNotice as TableShareNoticeData,
 } from '@/assets/types/datatypes';
 
@@ -94,9 +95,15 @@ export interface VendorRow {
    * by hand, who is out of the run and unassigned like anyone until seated.
    */
   needsATable: boolean;
-  /** Their application's status, which the Vendors list shows for anyone outside the run. */
+  /** Their application's status, whose label the Vendors list shows for anyone outside the run. */
   status: ApplicationStatus;
-  /** Recorded on the day rather than applying (E36/F03/S01): outside the run, though approved. */
+  /** Their review state as the server serves it (ADR 0037), which "Rejected only" reads. */
+  reviewState: ReviewState;
+  /**
+   * Added by hand and never applied (E36/F03/S01), as the server serves their origin: outside the
+   * run, though approved. One whose answers arrived since, by an import or their own save, is an
+   * applicant like any other (T277 P7), though the drawer still says who added them.
+   */
   added: boolean;
 }
 
@@ -331,6 +338,7 @@ export function useVendorDetails(
       const assignmentsByDate =
         assignmentsByEmail.value.get(email) ?? new Map<string, VendorTableAssignment>();
       const answers = (application.formData ?? {}) as Record<string, unknown>;
+      const added = application.origin === 'added';
       return {
         rowIndex: index,
         applicationId: application.id,
@@ -343,7 +351,7 @@ export function useVendorDetails(
         reachableDateCount: Math.max(
           assignmentsByDate.size,
           datesTheyNeed(
-            { answers, added: Boolean(application.addedBy) },
+            { answers, added },
             marketDates.value.map((d) => d.date),
             market.value?.setupObject?.assignmentOptions?.maxAssignmentsPerVendor,
           ),
@@ -355,7 +363,8 @@ export function useVendorDetails(
         verdict: addedLine(application) ?? verdictLine(application),
         needsATable: placements.value?.needingATable.has(email) ?? false,
         status: application.status,
-        added: Boolean(application.addedBy),
+        reviewState: application.review.state,
+        added,
       };
     }),
   );

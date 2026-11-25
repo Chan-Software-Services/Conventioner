@@ -10,9 +10,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DOMWrapper, flushPromises, mount } from '@vue/test-utils';
 import ApplicationMonitor from '@/components/application/ApplicationMonitor.vue';
 import { ApplicationStatus, type Application, type Market } from '@/assets/types/datatypes';
-import { isDecided } from '@/utils/verdicts';
 import { newestVerdictFirst, reviewed } from '@/utils/reviewQueue';
 import { nameAndEmail, undoLine } from '@/utils/verdictUndo';
+import { answeredWith, servedReview } from './support/servedReview';
 
 const fetchMarketApplications = vi.fn();
 const reviewApplication = vi.fn();
@@ -29,9 +29,7 @@ vi.mock('@/utils/api', async (importOriginal) => {
     if (named) return { data: { application: named } };
     const apps: Application[] = await fetchMarketApplications('m1');
     const wanted = body.want ? apps.find((app) => app.id === body.want) : undefined;
-    const handed =
-      wanted ??
-      apps.find((app) => !isDecided(app) && app.status !== ApplicationStatus.NeedsFollowUp);
+    const handed = wanted ?? apps.find((app) => app.review.state === 'open');
     return { data: { application: handed ?? null } };
   };
   return { ...actual, api: { get: answered, post, put: answered, delete: answered } };
@@ -48,8 +46,14 @@ vi.mock('@/utils/applicantApi', async (importOriginal) => {
   };
 });
 
-function application(id: string, status: ApplicationStatus, extra = {}): Application {
+function application(
+  id: string,
+  status: ApplicationStatus,
+  served: ReturnType<typeof servedReview>,
+  extra = {},
+): Application {
   return {
+    ...served,
     id,
     marketId: 'm1',
     applicantEmail: `${id}@example.com`,
@@ -70,13 +74,25 @@ const MARKET = {
 
 describe('the undo line', () => {
   it('names the applicant then their address, or the address alone', () => {
-    const jane = application('jane', ApplicationStatus.Open, named('Jane Doe'));
+    const jane = application(
+      'jane',
+      ApplicationStatus.Open,
+      servedReview('open'),
+      named('Jane Doe'),
+    );
     expect(nameAndEmail(jane)).toBe('Jane Doe (jane@example.com)');
-    expect(nameAndEmail(application('kim', ApplicationStatus.Open))).toBe('kim@example.com');
+    expect(nameAndEmail(application('kim', ApplicationStatus.Open, servedReview('open')))).toBe(
+      'kim@example.com',
+    );
   });
 
   it('says what was decided', () => {
-    const jane = application('jane', ApplicationStatus.Open, named('Jane Doe'));
+    const jane = application(
+      'jane',
+      ApplicationStatus.Open,
+      servedReview('open'),
+      named('Jane Doe'),
+    );
     expect(undoLine(ApplicationStatus.ReviewerRejected, jane)).toBe(
       'Rejected Jane Doe (jane@example.com).',
     );
@@ -92,19 +108,19 @@ describe('the undo line', () => {
 describe('the reviewed list', () => {
   it('is newest verdict first, those with no verdict time last in arrival order', () => {
     const apps = [
-      application('old', ApplicationStatus.ReviewerApproved, {
+      application('old', ApplicationStatus.ReviewerApproved, servedReview('approved'), {
         verdictAt: '2026-10-01T10:00:00+00:00',
       }),
-      application('none-late', ApplicationStatus.Assigned, {
+      application('none-late', ApplicationStatus.Assigned, servedReview('approved'), {
         submittedAt: '2026-09-20T00:00:00Z',
       }),
-      application('new', ApplicationStatus.ReviewerRejected, {
+      application('new', ApplicationStatus.ReviewerRejected, servedReview('rejected'), {
         verdictAt: '2026-10-02T10:00:00+00:00',
       }),
-      application('none-early', ApplicationStatus.Assigned, {
+      application('none-early', ApplicationStatus.Assigned, servedReview('approved'), {
         submittedAt: '2026-09-10T00:00:00Z',
       }),
-      application('open', ApplicationStatus.Open),
+      application('open', ApplicationStatus.Open, servedReview('open')),
     ];
 
     expect(reviewed(apps).map((a) => a.id)).toEqual(['new', 'old', 'none-early', 'none-late']);
@@ -123,9 +139,9 @@ describe('one by one', () => {
     undoVerdict.mockReset();
     reviewApplication.mockReset();
     const list = [
-      application('jane', ApplicationStatus.Open, named('Jane Doe')),
-      application('kim', ApplicationStatus.Open),
-      application('earlier', ApplicationStatus.ReviewerApproved, {
+      application('jane', ApplicationStatus.Open, servedReview('open'), named('Jane Doe')),
+      application('kim', ApplicationStatus.Open, servedReview('open')),
+      application('earlier', ApplicationStatus.ReviewerApproved, servedReview('approved'), {
         ...named('Earl Ier'),
         verdictAt: '2026-10-01T00:00:00+00:00',
       }),
@@ -142,14 +158,13 @@ describe('one by one', () => {
     };
     reviewApplication.mockImplementation(async (_m: string, app: Application, status: string) => ({
       application: store({
-        ...app,
-        status,
+        ...answeredWith(app, status),
         verdictAt: '2026-11-01T10:00:00+00:00',
       } as Application),
       undoSeconds: 120,
     }));
     undoVerdict.mockImplementation(async (_m: string, item: { application: Application }) =>
-      store({ ...item.application, status: ApplicationStatus.Open, verdictAt: null }),
+      store({ ...answeredWith(item.application, ApplicationStatus.Open), verdictAt: null }),
     );
   });
   afterEach(() => vi.useRealTimers());
@@ -225,7 +240,9 @@ describe('one by one', () => {
 
     it('says the key did not count when another card is handed out, and decides neither', async () => {
       const wrapper = await opened();
-      const release = holdHandOuts(application('lee', ApplicationStatus.Open));
+      const release = holdHandOuts(
+        application('lee', ApplicationStatus.Open, servedReview('open')),
+      );
 
       await press('a');
       await press('r');
@@ -268,7 +285,11 @@ describe('one by one', () => {
 
       await press('a');
       await press('r');
-      const decided = application('kim', ApplicationStatus.ReviewerApproved);
+      const decided = application(
+        'kim',
+        ApplicationStatus.ReviewerApproved,
+        servedReview('approved'),
+      );
       fetchMarketApplications.mockImplementation(async () => [decided]);
       release();
       await flushPromises();
@@ -351,7 +372,7 @@ describe('one by one', () => {
       await press('n');
       await release(0);
       await press('r');
-      await release(1, application('lee', ApplicationStatus.Open));
+      await release(1, application('lee', ApplicationStatus.Open, servedReview('open')));
 
       expect(verdictsOn()).toEqual([['jane', ApplicationStatus.ReviewerApproved]]);
       expect(wrapper.text()).toContain('That key did not count');
@@ -378,7 +399,7 @@ describe('one by one', () => {
       const read = fetchMarketApplications.getMockImplementation()!;
       fetchMarketApplications.mockImplementation(async () => [
         ...(await read()),
-        application('fay', ApplicationStatus.NeedsFollowUp),
+        application('fay', ApplicationStatus.NeedsFollowUp, servedReview('follow_up')),
       ]);
       const wrapper = await opened();
       const release = holdEachHandOut();
@@ -392,7 +413,10 @@ describe('one by one', () => {
       expect(verdictsOn()).toEqual([['jane', ApplicationStatus.ReviewerApproved]]);
       expect(wrapper.text()).not.toContain('did not count');
 
-      await release(1, application('fay', ApplicationStatus.NeedsFollowUp));
+      await release(
+        1,
+        application('fay', ApplicationStatus.NeedsFollowUp, servedReview('follow_up')),
+      );
       expect(verdictsOn()).toEqual([['jane', ApplicationStatus.ReviewerApproved]]);
       expect(wrapper.text()).toContain('That key did not count');
     });

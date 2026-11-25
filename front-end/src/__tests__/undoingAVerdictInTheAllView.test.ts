@@ -14,6 +14,7 @@ import { ApplicationStatus, type Application, type Market } from '@/assets/types
 import { MarketAction } from '@/utils/marketActions';
 import { answersRefusing } from './support/servedAnswers';
 import { isDecided } from '@/utils/verdicts';
+import { answeredWith, servedReview } from './support/servedReview';
 
 const ME = 'ana@example.com';
 
@@ -39,8 +40,14 @@ vi.mock('@/utils/applicantApi', async (importOriginal) => {
 });
 vi.mock('@/utils/signedIn', () => ({ signedInEmail: () => ME }));
 
-function application(id: string, status: ApplicationStatus, extra = {}): Application {
+function application(
+  id: string,
+  status: ApplicationStatus,
+  served: ReturnType<typeof servedReview>,
+  extra = {},
+): Application {
   return {
+    ...served,
     id,
     marketId: 'm1',
     applicantEmail: `${id}@vendor.test`,
@@ -69,7 +76,7 @@ const VERDICT_AT = '2026-11-01T10:00:00+00:00';
 
 function setStatus(id: string, status: string, verdictAt: string | null) {
   stored = stored.map((app) =>
-    app.id === id ? ({ ...app, status, verdictAt } as Application) : app,
+    app.id === id ? ({ ...answeredWith(app, status), verdictAt } as Application) : app,
   );
   return stored.find((app) => app.id === id)!;
 }
@@ -78,9 +85,13 @@ beforeEach(() => {
   setActivePinia(createPinia());
   route.query = {};
   stored = [
-    application('jo', ApplicationStatus.Open, { formData: { essential_full_name: 'Jo Lee' } }),
-    application('al', ApplicationStatus.Open),
-    application('decided', ApplicationStatus.ReviewerRejected, { verdictAt: VERDICT_AT }),
+    application('jo', ApplicationStatus.Open, servedReview('open'), {
+      formData: { essential_full_name: 'Jo Lee' },
+    }),
+    application('al', ApplicationStatus.Open, servedReview('open')),
+    application('decided', ApplicationStatus.ReviewerRejected, servedReview('rejected'), {
+      verdictAt: VERDICT_AT,
+    }),
   ];
   fetchMarketApplications.mockReset().mockImplementation(async () => stored.map((a) => ({ ...a })));
   for (const call of Object.values(api)) call.mockReset().mockResolvedValue({ data: {} });
