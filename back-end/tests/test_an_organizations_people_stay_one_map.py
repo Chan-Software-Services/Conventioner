@@ -49,12 +49,11 @@ OUTSIDER = SimpleNamespace(id="user-out", email="outsider@example.com")
 #: The six accounts every requester and target of the property test is drawn from.
 PEOPLE = (OWNER, ADMIN, MEMBER, SECOND_ADMIN, SECOND_MEMBER, OUTSIDER)
 
-UNFOLDED = {
-    "id": ORG, "name": "Ember Markets", "owner": OWNER.id, "admins": [ADMIN.id],
-    "members": [MEMBER.id], "markets": [], "theme": None,
+FOLDED = {
+    "id": ORG, "name": "Ember Markets",
+    "people": {OWNER.id: "owner", ADMIN.id: "admin", MEMBER.id: "member"},
+    "owner": OWNER.id, "admins": [ADMIN.id], "members": [MEMBER.id], "markets": [], "theme": None,
 }
-FOLDED = {**UNFOLDED, "people": {OWNER.id: "owner", ADMIN.id: "admin", MEMBER.id: "member"}}
-SHAPES = {"folded": FOLDED, "unfolded": UNFOLDED}
 
 
 @pytest.fixture
@@ -105,14 +104,13 @@ def _as_it_was_or_handed_on(doc):
     assert_one_map(doc)
 
 
-@pytest.mark.parametrize("shape", sorted(SHAPES))
 def test_a_transfer_cut_before_its_owner_write_leaves_an_organization_that_parses(
-        monkeypatch, accounts, recorded, shape):
+        monkeypatch, accounts, recorded):
     # On dev the transfer to a member wrote: the member pulled (1), the owner added to admins (2),
     # the owner set (3). Cut at the third, the owner stood in its own admins and the organization
     # did not parse, so its admin held nothing through it on any market. Now the transfer is one
     # write, and a cut where the third was finds its ownership transferred whole.
-    stored = install_organizations(monkeypatch, FakeOrganizations(SHAPES[shape]))
+    stored = install_organizations(monkeypatch, FakeOrganizations(FOLDED))
     stored.cut_at = 3
 
     try:
@@ -123,12 +121,11 @@ def test_a_transfer_cut_before_its_owner_write_leaves_an_organization_that_parse
     _as_it_was_or_handed_on(stored.doc)
 
 
-@pytest.mark.parametrize("shape", sorted(SHAPES))
 def test_a_transfer_cut_after_the_pull_leaves_the_new_owner_a_place(
-        monkeypatch, accounts, recorded, shape):
+        monkeypatch, accounts, recorded):
     # On dev a cut after the transfer's first write, the pull, left the member it was handed to
     # with no place in it at all. Now there is no write between the pull and the owner's.
-    stored = install_organizations(monkeypatch, FakeOrganizations(SHAPES[shape]))
+    stored = install_organizations(monkeypatch, FakeOrganizations(FOLDED))
     stored.cut_at = 2
 
     try:
@@ -154,13 +151,12 @@ def _cut_history(*_args, **_kwargs):
     raise WriteCut("the connection was lost at the history's write")
 
 
-@pytest.mark.parametrize("shape", sorted(SHAPES))
 @pytest.mark.parametrize("new_owner", [MEMBER, ADMIN], ids=["from a member", "from an admin"])
 @pytest.mark.parametrize("cut", ["the organization's", "the account copy's", "the history's"])
 def test_a_cut_at_each_write_of_a_transfer_leaves_one_owner(
-        monkeypatch, accounts, shape, new_owner, cut):
+        monkeypatch, accounts, new_owner, cut):
     accounts_fake = CutAccountCopies() if cut == "the account copy's" else None
-    stored = install_organizations(monkeypatch, FakeOrganizations(SHAPES[shape]), accounts_fake)
+    stored = install_organizations(monkeypatch, FakeOrganizations(FOLDED), accounts_fake)
     if cut == "the organization's":
         stored.cut_at = 1
     monkeypatch.setattr(
@@ -173,7 +169,7 @@ def test_a_cut_at_each_write_of_a_transfer_leaves_one_owner(
     assert_one_map(stored.doc)
     people = organization_people_of(stored.doc)
     if cut == "the organization's":
-        assert stored.doc == SHAPES[shape], "a cut write stored something"
+        assert stored.doc == FOLDED, "a cut write stored something"
     else:
         assert people[new_owner.id] == "owner" and people[OWNER.id] == "admin"
 
@@ -223,8 +219,7 @@ def _answer(run):
 @pytest.mark.parametrize("seed", SEEDS)
 def test_no_sequence_of_changes_breaks_the_map(monkeypatch, accounts, recorded, seed):
     rng = random.Random(seed)
-    stored = install_organizations(
-        monkeypatch, FakeOrganizations(SHAPES["unfolded" if seed % 2 else "folded"]))
+    stored = install_organizations(monkeypatch, FakeOrganizations(FOLDED))
     interleaved = 0
 
     for step in range(EVENTS_PER_SEED):

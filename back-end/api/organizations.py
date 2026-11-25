@@ -149,8 +149,9 @@ def get_organizations_for_user(user_email: str) -> List[Dict[str, Any]]:
     Every owner, admin and member of all of them is read in one ``get_users_by_ids`` (T204), never
     one account at a time: the Organizations page and Manage organization make this read on open.
 
-    Each is served with ``owner``, ``admins`` and ``members`` derived from its people map, in the
-    map's order, whatever its stored lists hold (T283): a member made an admin is listed once.
+    Each is served with ``owner``, ``admins`` and ``members`` derived from its people map alone, in
+    the map's order, whatever lists it still stores (T283, T583): a member made an admin is listed
+    once.
     """
     user = UsersApi.get_user(user_email)
     if not user:
@@ -224,7 +225,7 @@ def update_organization(org_id: str, requesting_user_email: str, name: str) -> U
 
 def _role_in(org: Dict[str, Any], user_id: str) -> Optional[str]:
     """The person's place in the organization: ``owner``, ``admin``, ``member``, or None, read
-    from its people map, or its old lists folded when it has none (T283)."""
+    from its people map alone (T283, T583)."""
     place = organization_people_of(org).get(user_id)
     return place if place in (OrganizationRole.OWNER, OrganizationRole.ADMIN,
                               OrganizationRole.MEMBER) else None

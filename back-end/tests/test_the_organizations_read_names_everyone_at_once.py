@@ -59,23 +59,13 @@ def organization(org_id, owner, admins, members):
     }
 
 
-def stored_before_the_map(org_id, owner, admins, members):
-    """An organization stored before the people map (T283), its people in three lists alone."""
-    return {
-        "_id": f"mongo-{org_id}", "id": org_id, "name": f"Example {org_id}", "owner": owner.id,
-        "admins": [person.id for person in admins], "members": [person.id for person in members],
-        "markets": [], "theme": None,
-    }
-
-
-def folded(org_id, people, **lists):
-    """An organization stored with its people map (T283), ``lists`` what its old lists hold."""
+def folded(org_id, people):
+    """An organization stored with its people map (T283), ``people`` its (person, place) pairs in
+    the map's order."""
     return {
         "_id": f"mongo-{org_id}", "id": org_id, "name": f"Example {org_id}",
         "people": {person.id: place for person, place in people},
         "markets": [], "theme": None,
-        **{key: [person.id for person in value] if isinstance(value, list) else value.id
-           for key, value in lists.items()},
     }
 
 
@@ -177,13 +167,14 @@ def test_a_reader_in_no_organization_reads_no_account_by_id(reads):
 
 
 def test_a_folded_organization_serves_its_people_from_the_map_in_its_order(reads):
-    """Its lists only mirror the map, so a stale one is never served: a member made an admin
-    keeps their place in the map's order and is listed once, among the admins (T283)."""
-    reads(folded(
-        "org-1", [(CAL, "member"), (OWNER, "owner"), (ADA, "admin"), (READER, "member"),
-                  (BEA, "admin")],
-        owner=OWNER, admins=[ADA], members=[CAL, READER, BEA],
-    ))
+    """A stale list it still stores until the migration removes it is never served: a member made
+    an admin keeps their place in the map's order and is listed once, among the admins (T283,
+    T583)."""
+    reads({
+        **folded("org-1", [(CAL, "member"), (OWNER, "owner"), (ADA, "admin"), (READER, "member"),
+                           (BEA, "admin")]),
+        "owner": OWNER.id, "admins": [ADA.id], "members": [CAL.id, READER.id, BEA.id],
+    })
 
     [listed] = OrgsApi.get_organizations_for_user(READER.email)
 
@@ -197,16 +188,3 @@ def test_a_folded_organization_serves_its_people_from_the_map_in_its_order(reads
     ]
     assert listed["ownerEmail"] == OWNER.email
     assert listed["userRole"] == "member"
-
-
-def test_an_unfolded_organization_whose_lists_overlap_serves_each_person_once(reads):
-    """Stored before the map, its owner also an admin and an admin also a member: served folded,
-    the owner winning, then the admins, so nobody is listed twice."""
-    reads(stored_before_the_map("org-1", READER, [READER, ADA], [ADA, READER, BEA]))
-
-    [listed] = OrgsApi.get_organizations_for_user(READER.email)
-
-    assert (listed["owner"], listed["admins"], listed["members"]) == (READER.id, [ADA.id], [BEA.id])
-    assert listed["adminPeople"] == [{"userId": ADA.id, "email": ADA.email}]
-    assert listed["memberPeople"] == [{"userId": BEA.id, "email": BEA.email}]
-    assert listed["userRole"] == "owner"

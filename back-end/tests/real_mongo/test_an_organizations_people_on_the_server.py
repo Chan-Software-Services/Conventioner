@@ -36,15 +36,14 @@ def people(real_db):
             for email in (OWNER, ADMIN, MEMBER, NEW)}
 
 
-@pytest.fixture(params=["folded", "unfolded"])
-def organization(request, real_db, people):
-    """The organization: its owner, an admin and a member, stored with its people map or, as
-    before the map, by its lists alone. Answers a reader of it as stored."""
-    doc = {"id": ORG, "name": "Race Markets", "owner": people[OWNER], "admins": [people[ADMIN]],
-           "members": [people[MEMBER]], "markets": [], "theme": None}
-    if request.param == "folded":
-        doc["people"] = {people[OWNER]: "owner", people[ADMIN]: "admin",
-                         people[MEMBER]: "member"}
+@pytest.fixture
+def organization(real_db, people):
+    """The organization: its owner, an admin and a member, stored with its people map. Answers a
+    reader of it as stored."""
+    doc = {"id": ORG, "name": "Race Markets",
+           "people": {people[OWNER]: "owner", people[ADMIN]: "admin", people[MEMBER]: "member"},
+           "owner": people[OWNER], "admins": [people[ADMIN]], "members": [people[MEMBER]],
+           "markets": [], "theme": None}
     real_db["organizations"].insert_one(doc)
     harness.warm(real_db["organizations"], 2)
     return lambda: real_db["organizations"].find_one({"id": ORG}, {"_id": 0})

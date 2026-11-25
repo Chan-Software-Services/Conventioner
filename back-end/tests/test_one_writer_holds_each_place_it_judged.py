@@ -4,9 +4,8 @@
 change an organization's people only through
 ``organization_people``: its table (``next_people``) says what each change does to the target's
 place as read and who may ask for it, and each change is one conditional write that lands only
-while the requester's and the target's places still stand as read. On an organization stored before
-the people map, the write holds its three lists as read and folds the map in. Every write keeps
-``owner``, ``admins`` and ``members`` an exact mirror of the map.
+while the requester's and the target's places still stand as read, by their keys in the people
+map. Every write keeps ``owner``, ``admins`` and ``members`` an exact mirror of the map.
 
 A write that met another change answers 404 when the organization, or the person being removed, is
 gone, and otherwise ``OrganizationChanged``, a 409 in the spec's words: an "Add member" judged
@@ -60,12 +59,11 @@ NEW = SimpleNamespace(id="user-new", email="new@example.com")
 OUTSIDER = SimpleNamespace(id="user-out", email="outsider@example.com")
 PEOPLE = (OWNER, ADMIN, MEMBER, NEW, OUTSIDER)
 
-UNFOLDED = {
-    "id": ORG, "name": "Ember Markets", "owner": OWNER.id, "admins": [ADMIN.id],
-    "members": [MEMBER.id], "markets": [], "theme": None,
+FOLDED = {
+    "id": ORG, "name": "Ember Markets",
+    "people": {OWNER.id: "owner", ADMIN.id: "admin", MEMBER.id: "member"},
+    "owner": OWNER.id, "admins": [ADMIN.id], "members": [MEMBER.id], "markets": [], "theme": None,
 }
-FOLDED = {**UNFOLDED, "people": {OWNER.id: "owner", ADMIN.id: "admin", MEMBER.id: "member"}}
-SHAPES = {"folded": FOLDED, "unfolded": UNFOLDED}
 
 
 @pytest.fixture
@@ -93,15 +91,10 @@ def accounts(monkeypatch):
                         lambda ids: {i: by_id[i] for i in ids if i in by_id})
 
 
-@pytest.fixture(params=sorted(SHAPES))
-def shape(request):
-    return request.param
-
-
 @pytest.fixture
-def stored(monkeypatch, accounts, recorded, shape):
-    """The organization, in the shape the test is parametrized over."""
-    return install_organizations(monkeypatch, FakeOrganizations(SHAPES[shape]))
+def stored(monkeypatch, accounts, recorded):
+    """The organization, with its people map."""
+    return install_organizations(monkeypatch, FakeOrganizations(FOLDED))
 
 
 def assert_one_map(doc):
@@ -510,10 +503,7 @@ def the_write(stored):
     return held, update
 
 
-HELD_UNFOLDED = {"id": ORG, "people": {"$exists": False}, "owner": OWNER.id,
-                 "admins": [ADMIN.id], "members": [MEMBER.id]}
-
-#: (what is done, the folded write's filter and update, the map after).
+#: (what is done, the write's filter and update, the map after).
 WRITES = [
     (lambda: OrganizationPeople.add_admin(ORG, NEW.email, OWNER.email),
      {"id": ORG, "people.user-owner": "owner", "people.user-new": {"$exists": False}},
@@ -576,40 +566,6 @@ def test_a_write_on_a_folded_organization_holds_both_places_and_moves_one_key(
 
     assert the_write(stored) == (query, update)
     assert stored.doc["people"] == after
-    assert_one_map(stored.doc)
-
-
-@pytest.mark.parametrize("change,_query,_update,after", WRITES, ids=WRITE_IDS)
-def test_a_write_on_an_unfolded_organization_holds_its_lists_and_folds_it(
-        monkeypatch, accounts, recorded, change, _query, _update, after):
-    stored = install_organizations(monkeypatch, FakeOrganizations(UNFOLDED))
-
-    change()
-
-    owner = next(user_id for user_id, place in after.items() if place == "owner")
-    assert the_write(stored) == (HELD_UNFOLDED, {"$set": {
-        "people": after,
-        "admins": [u for u, place in after.items() if place == "admin"],
-        "members": [u for u, place in after.items() if place == "member"],
-        "owner": owner,
-    }})
-    assert stored.doc["people"] == after
-    assert_one_map(stored.doc)
-
-
-def test_an_unfolded_organization_whose_owner_is_also_listed_is_folded_clean(
-        monkeypatch, accounts, recorded):
-    # It did not parse on dev; the first change to it folds it, the owner winning, and the
-    # mirror drops the owner and the admin listed again from the lists.
-    doc = {**UNFOLDED, "admins": [ADMIN.id, OWNER.id], "members": [MEMBER.id, ADMIN.id]}
-    stored = install_organizations(monkeypatch, FakeOrganizations(doc))
-
-    OrganizationPeople.add_member(ORG, NEW.email, OWNER.email)
-
-    assert stored.doc["people"] == {OWNER.id: "owner", ADMIN.id: "admin", MEMBER.id: "member",
-                                    NEW.id: "member"}
-    assert (stored.doc["owner"], stored.doc["admins"], stored.doc["members"]) == (
-        OWNER.id, [ADMIN.id], [MEMBER.id, NEW.id])
     assert_one_map(stored.doc)
 
 
