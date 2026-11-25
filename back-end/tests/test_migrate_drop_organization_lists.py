@@ -133,17 +133,12 @@ def test_a_dry_run_writes_and_drops_nothing_and_says_what_a_run_would(capsys):
     assert migrate(FakeDb(organizations)) == dry
 
 
-@pytest.mark.parametrize("people", ["absent", [], None, "u-owner"],
-                         ids=["no people", "people a list", "people null", "people a string"])
 @pytest.mark.parametrize("dry_run", [False, True], ids=["run", "dry run"])
-def test_it_refuses_writing_and_dropping_nothing_while_an_organization_holds_no_map(
-        people, dry_run, capsys):
+def test_it_refuses_writing_and_dropping_nothing_while_an_organization_has_no_people_field(
+        dry_run, capsys):
     organizations = _organizations()
-    unfolded = {"id": "org-old", "name": "Fixture Old Co", "markets": [], "owner": "u-owner",
-                "admins": ["u-admin"], "members": []}
-    if people != "absent":
-        unfolded["people"] = people
-    organizations.docs.insert(1, unfolded)
+    organizations.docs.insert(1, {"id": "org-old", "name": "Fixture Old Co", "markets": [],
+                                  "owner": "u-owner", "admins": ["u-admin"], "members": []})
     before = copy.deepcopy(organizations.docs)
 
     counts = migrate(FakeDb(organizations), dry_run=dry_run)
@@ -156,12 +151,35 @@ def test_it_refuses_writing_and_dropping_nothing_while_an_organization_holds_no_
         "Refused: 1 organization(s) hold no people map, so their lists are the only record of "
         "their people. Nothing was changed.",
         "  ! org-old: no people map",
-        "Fold them first with migrate_organization_people.py from the last commit that holds it, "
-        "then run this again:",
+        "Fold the ones with no people field first with migrate_organization_people.py from the "
+        "last commit that holds it, then run this again:",
         '  cd "$(git rev-parse --show-toplevel)"',
         '  git worktree add ../fold "$(git rev-list -n 1 HEAD -- '
         'back-end/migrations/migrate_organization_people.py)^"',
     ]
+
+
+@pytest.mark.parametrize("people", [[], None, "u-owner"],
+                         ids=["people a list", "people null", "people a string"])
+@pytest.mark.parametrize("dry_run", [False, True], ids=["run", "dry run"])
+def test_it_refuses_writing_and_dropping_nothing_while_a_people_field_is_not_a_map(
+        people, dry_run, capsys):
+    organizations = _organizations()
+    organizations.docs.insert(1, {"id": "org-old", "name": "Fixture Old Co", "markets": [],
+                                  "people": people, "owner": "u-owner", "admins": ["u-admin"],
+                                  "members": []})
+    before = copy.deepcopy(organizations.docs)
+
+    counts = migrate(FakeDb(organizations), dry_run=dry_run)
+
+    assert counts == {"no_map": 1, "removed": 0, "already_clear": 0, "indexes": [],
+                      "refused": True}
+    assert organizations.docs == before and organizations.writes == []
+    assert organizations.dropped == [] and sorted(organizations.indexes) == sorted(BOOT_INDEXES)
+    out = capsys.readouterr().out
+    assert "  ! org-old: no people map" in out
+    assert "migrate_organization_people" not in out
+    assert "git worktree" not in out
 
 
 def test_its_lines_name_each_organization_by_id_never_by_name(capsys):

@@ -79,20 +79,24 @@ def migrate(db, dry_run: bool = False) -> Dict[str, Any]:
 
     # Every organization, tombstoned ones too: one being deleted still holds its people.
     stored = list(organizations.find({}, {"id": 1, "people": 1}))
-    no_map = [doc.get("id") for doc in stored if not isinstance(doc.get("people"), dict)]
+    no_map = [doc for doc in stored if not isinstance(doc.get("people"), dict)]
     if no_map:
         counts.update(no_map=len(no_map), refused=True)
         print(f"Refused: {len(no_map)} organization(s) hold no people map, so their lists are the "
               "only record of their people. Nothing was changed.")
-        for organization_id in no_map:
-            print(f"  ! {organization_id}: no people map")
-        print("Fold them first with migrate_organization_people.py from the last commit that "
-              "holds it, then run this again:")
-        # From the repository's root: the script runs from back-end/, where the pathspec finds
-        # nothing and ../fold would be a worktree inside the checkout.
-        print('  cd "$(git rev-parse --show-toplevel)"')
-        print('  git worktree add ../fold "$(git rev-list -n 1 HEAD -- '
-              'back-end/migrations/migrate_organization_people.py)^"')
+        for doc in no_map:
+            print(f"  ! {doc.get('id')}: no people map")
+        unfolded = [doc for doc in no_map if "people" not in doc]
+        if unfolded:
+            print("Fold the ones with no people field first with migrate_organization_people.py "
+                  "from the last commit that holds it, then run this again:")
+            # From the repository's root: the script runs from back-end/, where the pathspec finds
+            # nothing and ../fold would be a worktree inside the checkout.
+            print('  cd "$(git rev-parse --show-toplevel)"')
+            print('  git worktree add ../fold "$(git rev-list -n 1 HEAD -- '
+                  'back-end/migrations/migrate_organization_people.py)^"')
+        if len(unfolded) < len(no_map):
+            print("Repair the ones whose people field is not a map by hand, then run this again.")
         return counts
 
     if dry_run:
