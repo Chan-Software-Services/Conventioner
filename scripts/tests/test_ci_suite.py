@@ -683,6 +683,7 @@ JOBS = [
     "e2e-shard",
     "warm-caches",
     "test-map",
+    "e2e-retries",
     "e2e",
 ]
 SIX = ["backend", "knowledge-graph", "real-data-and-workflows", "frontend-unit", "frontend-lint-and-types", "docker-build"]
@@ -1298,6 +1299,22 @@ def test_the_test_map_expects_every_shard_of_a_whole_run():
     build = step_of("test-map", "name", "Build the map")
 
     assert '--shards-expected "$E2E_SHARDS"' in build["run"]
+
+
+def test_the_retry_report_runs_only_nightly_or_by_hand_reading_actions_and_never_fails_the_run():
+    retries = workflow_jobs()["e2e-retries"]
+
+    # It reads GitHub's API alone, so it waits on no job and reads no `suite` word.
+    assert retries["name"] == "e2e-retries"
+    assert retries["if"] == "github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'"
+    assert "needs" not in retries
+    assert retries["continue-on-error"] == "true"
+    assert retries["permissions"] == {"contents": "read", "actions": "read"}
+    checkout, report = retries["steps"]
+    assert checkout["uses"].startswith("actions/checkout@")
+    assert checkout["with"] == {"persist-credentials": "false"}
+    assert report["env"] == {"GITHUB_TOKEN": "${{ github.token }}"}
+    assert report["run"] == "python3 scripts/e2e_retries.py --runs 20\n"
 
 
 def test_only_a_nightly_or_hand_started_run_s_shards_record():
