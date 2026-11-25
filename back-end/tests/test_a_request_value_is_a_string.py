@@ -9,6 +9,7 @@ oracle-free answer where it has one, and never a query.
 The collections here match the way the database does, operators included, so a lookup
 that lets a non-string through finds what the database would find.
 """
+import copy
 import os
 import sys
 from types import SimpleNamespace
@@ -24,6 +25,7 @@ skip_without_real_dependencies()
 import app as app_module
 import api.markets as MarketsApi
 import api.organizations as OrgsApi
+import api.permissions as PermissionsApi
 import api.users as UsersApi
 from test_a_vendor_checks_in_with_the_door_code import world  # noqa: E402,F401
 from datatypes import MarketPhase
@@ -400,6 +402,62 @@ class TestTheVendorsOwnCheckIn:
                                headers=vendor_door.signed_in())
 
         assert response.status_code == 400
+        assert vendor_door.world.attendance.documents == []
+
+
+class TestTheOrganizersDoor:
+    """An organizer's check-in and check-out at the door, and the undo of each, by the vendor's
+    address and the date in the body: a value that is not a string is the missing value's 400, and
+    nothing changes."""
+
+    CHECKED_IN = {"checked_in_at": "2099-08-01T09:00:00+00:00", "checked_in_by": "o@x"}
+    CHECKED_OUT = {**CHECKED_IN, "checked_out_at": "2099-08-01T17:00:00+00:00",
+                   "checked_out_by": "o@x"}
+    # Each route, and the record its write would change, if any.
+    ROUTES = [
+        ("POST", "/markets/market-123/attendance", None),
+        ("DELETE", "/markets/market-123/attendance", CHECKED_IN),
+        ("POST", "/markets/market-123/attendance/check-out", CHECKED_IN),
+        ("DELETE", "/markets/market-123/attendance/check-out", CHECKED_OUT),
+    ]
+
+    @pytest.fixture
+    def organizer(self, monkeypatch, world, signed_in):
+        """The fixture user, allowed to check vendors in at the vendor door's market."""
+        monkeypatch.setattr(PermissionsApi, "user_has_permission", lambda *_a, **_k: True)
+        return signed_in
+
+    @pytest.mark.parametrize("method, path, stored", ROUTES)
+    @pytest.mark.parametrize("field", ["vendorEmail", "date"])
+    @pytest.mark.parametrize("value", NOT_AN_ADDRESS)
+    def test_an_address_or_date_that_is_not_a_string_is_refused(
+        self, organizer, vendor_door, method, path, stored, field, value,
+    ):
+        attendance = vendor_door.world.attendance
+        if stored:
+            attendance.insert_one({"market_id": "market-123", "vendor_email": vendor_door.VENDOR,
+                                   "date": vendor_door.TODAY, **stored})
+        before = copy.deepcopy(attendance.documents)
+        body = {"vendorEmail": vendor_door.VENDOR, "date": vendor_door.TODAY, field: value}
+
+        response = organizer.open(path, method=method, json=body)
+
+        assert (response.status_code, response.get_json()) == (
+            400, {"error": f"{field} is required"})
+        assert attendance.documents == before
+
+    def test_strings_still_check_in_and_out_and_undo_both(self, organizer, vendor_door):
+        body = {"vendorEmail": vendor_door.VENDOR, "date": vendor_door.TODAY}
+
+        answers = [organizer.open(path, method=method, json=body).status_code
+                   for method, path in [
+                       ("POST", "/markets/market-123/attendance"),
+                       ("POST", "/markets/market-123/attendance/check-out"),
+                       ("DELETE", "/markets/market-123/attendance/check-out"),
+                       ("DELETE", "/markets/market-123/attendance"),
+                   ]]
+
+        assert answers == [200, 200, 200, 200]
         assert vendor_door.world.attendance.documents == []
 
 

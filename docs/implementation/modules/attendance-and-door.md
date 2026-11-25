@@ -275,6 +275,7 @@ It loads through the change loader (`_market_change`), so an archived market's r
 Its `check_out` and `undo_check_out` are built the same way over `record_check_out` and `undo_check_out`, at `/markets/<id>/attendance/check-out`, a route of their own so each of the four writes has its own address; they take any date with a record, as the undo of a check-in takes any date.
 It writes through `record_attendance` and `undo_attendance`, passing the Check vendors in asking the loader returned, whose person `record_attendance` stamps as `checked_in_by` and the history records as the actor, so the two doors record alike, and a vendor checking in again after an organizer did is no longer credited to the organizer.
 `_door_write` catches nothing: a market that does not exist answers 404, an archived one or a person the row refuses 403 with its sentence, and one that cannot be read `Invalid market data`, 400, each raised by the change loader ([an exception never reaches a client](../conventions/an-exception-never-reaches-a-client.md)); a body that is not a JSON object is `A JSON object is required`, 400.
+It reads `vendorEmail` and `date` with `string_field`, so a value that is not a string is a missing one, `vendorEmail is required` or `date is required`, 400 ([a request value is a string](../conventions/a-request-value-is-a-string.md)).
 An organizer checking a vendor in on a past market date is not refused, and on one to come is (above).
 
 **The roster stays fresh by itself** (T318).
