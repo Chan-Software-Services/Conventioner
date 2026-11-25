@@ -26,6 +26,13 @@
  * permissions its new markets copy (E39/F02/S01); the people and the controls an owner or an admin
  * manages are theirs alone.
  *
+ * An owner invites an admin or a member, and an admin a member (T538, ADR 0047): "Invite admin" and
+ * "Invite member" send an invitation, answered alike for every address, and the person joins Admins
+ * or Members only once they accept it. The invitations waiting are listed under "Invited", for the
+ * owner and the admins, with Withdraw where the reader may invite to that place; a member makes no
+ * read of them. They are a keyed read of their own (`useServerRead`), keyed by the organization
+ * Manage organization is open on.
+ *
  * Each write belongs to the opening it was sent from (T411): its handle (`useDialogSubmit`) is keyed
  * by the organization Manage organization is open on, or by what its confirmation was opened with,
  * and handed to the dialog that sent it, so the shell holds that dialog while it writes and a second
@@ -33,12 +40,13 @@
  * another organization, leaves the dialog the person is in alone, and so does a re-read of the
  * organization it had been open on; the list behind is still told of a change that landed.
  */
-import { nextTick, ref, watch, type Ref } from 'vue';
+import { computed, nextTick, ref, watch, type Ref } from 'vue';
 import {
   type Organization,
   type OrganizationPerson,
   type OrganizationRoleType,
   type PermissionTableRow,
+  type SentInvitation,
 } from '@/assets/types/datatypes';
 import { api, getApiErrorMessage, getApiErrorStatus, isOrganizationChanged } from '@/utils/api';
 import {
@@ -47,15 +55,25 @@ import {
   organizationRemoval,
   type OrganizationPlace,
 } from '@/utils/organizations';
+import {
+  fetchOrganizationInvitations,
+  invitedAs,
+  inviteToOrganization,
+  notEmailedLine,
+  sentLine,
+  withdrawOrganizationInvitation,
+} from '@/utils/invitations';
 import { useDialogSubmit } from '@/utils/useDialogSubmit';
+import { useServerRead } from '@/utils/useServerRead';
 import type { LateAnswer } from '@/utils/useSubmit';
 import AppDialog from '@/components/AppDialog.vue';
 import DeleteOrgDialog from '@/components/DeleteOrgDialog.vue';
 import EmailAddress from '@/components/EmailAddress.vue';
 import HistorySection from '@/components/HistorySection.vue';
-import ListFrame, { LIST_FIND_FROM } from '@/components/ListFrame.vue';
+import ListFrame from '@/components/ListFrame.vue';
 import OrganizationHistory from '@/components/OrganizationHistory.vue';
 import OrganizationPermissions from '@/components/OrganizationPermissions.vue';
+import ReadFailed from '@/components/ReadFailed.vue';
 
 const props = defineProps<{
   manageOpen: boolean;
@@ -77,6 +95,13 @@ const newAdminEmail = ref('');
 const newMemberEmail = ref('');
 const addAdminErrorLine = ref<HTMLElement | null>(null);
 const addMemberErrorLine = ref<HTMLElement | null>(null);
+/**
+ * What each invite row says of the invitation it last sent, until the next is sent or the row
+ * closes: its address as the server keeps it, and whether its email went.
+ */
+type InviteSent = { address: string; emailed: boolean } | null;
+const adminInviteSent = ref<InviteSent>(null);
+const memberInviteSent = ref<InviteSent>(null);
 const deleteConfirming = ref(false);
 /** Counts the changes this dialog has made, so its History reads them as they land. */
 const changesMade = ref(0);
@@ -103,11 +128,19 @@ const placing = ref<{
   text: string;
   confirmLabel: string;
 } | null>(null);
+/**
+ * The invitation a Withdraw is asking about, until it is confirmed or cancelled, with the words its
+ * confirmation says, taken when it opens, as Remove's are.
+ */
+const withdrawing = ref<{ id: string; email: string } | null>(null);
 const adminsList = ref<HTMLElement | null>(null);
 const membersList = ref<HTMLElement | null>(null);
+const invitedList = ref<HTMLElement | null>(null);
 /** What finds in Admins and in Members, for as long as the dialog is open: never in the address. */
 const adminWords = ref('');
 const memberWords = ref('');
+/** What finds in "Invited", for as long as the dialog is open. */
+const invitedWords = ref('');
 
 const ADMIN = { one: 'admin', many: 'admins' };
 const MEMBER = { one: 'member', many: 'members' };
@@ -124,17 +157,17 @@ const over =
     props.manageOpen ? asked() : null;
 
 /**
- * Add admin's, Add member's and Rename's writes, each said beside its row; Manage organization
- * holds while any one sends.
+ * Invite admin's, Invite member's and Rename's writes, each said beside its row; Manage
+ * organization holds while any one sends.
  */
 const addAdmin = useDialogSubmit({
   opening: openOn,
-  failure: 'The admin was not added.',
+  failure: 'The invitation was not sent.',
   says: 'self',
 });
 const addMember = useDialogSubmit({
   opening: openOn,
-  failure: 'The member was not added.',
+  failure: 'The invitation was not sent.',
   says: 'self',
 });
 const rename = useDialogSubmit({
@@ -154,6 +187,10 @@ const placeChange = useDialogSubmit({
   opening: over(() => placing.value),
   failure: 'Their place was not changed.',
 });
+const withdrawal = useDialogSubmit({
+  opening: over(() => withdrawing.value),
+  failure: 'The invitation was not withdrawn.',
+});
 watch(
   () => [props.manageOpen, props.org] as const,
   ([open, org]) => {
@@ -162,11 +199,15 @@ watch(
       renameValue.value = org.name;
       showAddAdminForm.value = false;
       showAddMemberForm.value = false;
+      adminInviteSent.value = null;
+      memberInviteSent.value = null;
       deleteConfirming.value = false;
       removing.value = null;
       placing.value = null;
+      withdrawing.value = null;
       adminWords.value = '';
       memberWords.value = '';
+      invitedWords.value = '';
       errorMessage.value = '';
     } else {
       orgData.value = null;
@@ -182,6 +223,38 @@ function canManage(): boolean {
 
 function isOwner(): boolean {
   return orgData.value?.userRole === 'owner';
+}
+
+/**
+ * The invitations waiting on the organization, read for its owner and its admins, as the server
+ * serves them only to them; keyed by the organization Manage organization is open on, so an answer
+ * for the one it was open on never lands in another opening. A member makes no read.
+ */
+const invitations = useServerRead<string, SentInvitation[]>(
+  () => (props.manageOpen && canManage() ? (orgData.value?.id ?? null) : null),
+  fetchOrganizationInvitations,
+  { failure: 'Could not read the invitations.' },
+);
+const invitedRows = computed(() => invitations.data.value ?? []);
+const invitationsFailed = computed(
+  () => invitations.phase.value === 'failed' || invitations.phase.value === 'refresh_failed',
+);
+const INVITATION = { one: 'invitation', many: 'invitations' };
+const findsInvitation = (invitation: SentInvitation, words: string) =>
+  invitation.email.includes(words.toLowerCase());
+const keyOfInvitation = (invitation: SentInvitation) => invitation.id;
+/**
+ * Whoever may invite to an invitation's place may withdraw it, as the server asks: the owner every
+ * one, an admin a member's.
+ */
+const mayWithdraw = (invitation: SentInvitation) => isOwner() || invitation.role === 'member';
+
+/**
+ * Reads the invitations again after a write sent in this opening: once Manage organization has
+ * moved on, nothing is read.
+ */
+async function rereadInvitations(isCurrent: () => boolean) {
+  if (isCurrent()) await invitations.reread();
 }
 
 /**
@@ -241,9 +314,9 @@ async function readAgainIfChanged(err: unknown, isCurrent: () => boolean): Promi
 }
 
 /**
- * "Add admin" and "Add member" open the row they add, and the row carries its own Cancel, as
- * Manage market's "Add user" does: the opening button used to turn into a Cancel of its own, left
- * above the row it cancelled (bug 43, fixed there first).
+ * "Invite admin" and "Invite member" open the row they invite from, and the row carries its own
+ * Cancel, as Manage market's "Invite someone" does: the opening button used to turn into a Cancel of
+ * its own, left above the row it cancelled (bug 43, fixed there first).
  */
 const addAdminButton = ref<HTMLButtonElement | null>(null);
 const addAdminInput = ref<HTMLInputElement | null>(null);
@@ -269,6 +342,7 @@ async function openAddAdmin() {
 async function closeAddAdmin() {
   showAddAdminForm.value = false;
   newAdminEmail.value = '';
+  adminInviteSent.value = null;
   addAdmin.edit();
   await nextTick();
   addAdminButton.value?.focus();
@@ -285,6 +359,7 @@ async function openAddMember() {
 async function closeAddMember() {
   showAddMemberForm.value = false;
   newMemberEmail.value = '';
+  memberInviteSent.value = null;
   addMember.edit();
   await nextTick();
   addMemberButton.value?.focus();
@@ -314,15 +389,6 @@ async function handleRename() {
   });
 }
 
-/**
- * Someone just added takes their place in the stored order, past the fold on a long list, so the
- * section narrows to them. A list too short for a find field already draws every row, unless words
- * are narrowing it.
- */
-function findAdded(words: Ref<string>, people: OrganizationPerson[], email: string) {
-  if (people.length > LIST_FIND_FROM || words.value) words.value = email;
-}
-
 /** A refusal stands under its form, which a short window's body can hold at its very foot. */
 function showsRefusal(sentence: Ref<string>, line: Ref<HTMLElement | null>) {
   watch(
@@ -337,45 +403,86 @@ showsRefusal(addAdminSentence, addAdminErrorLine);
 showsRefusal(addMemberSentence, addMemberErrorLine);
 
 /**
- * Adds someone to `place` and reads the organization again, both inside the write, so a second
- * press sends nothing until the list shows them. The form stays open with an empty field: adding
- * two people in a row is the case this story is named after. A refusal leaves the typed address
- * exactly where it was.
+ * Invites someone to `place` and reads the invitations again, both inside the write, so a second
+ * press sends nothing until "Invited" lists them. The answer is the same for every address, and
+ * nobody is under Admins or Members until they accept. The form stays open with an empty field:
+ * inviting two people in a row is the case this story is named after. A refusal is said under the
+ * form in the server's words, the typed address kept exactly where it was.
  */
-async function addPerson(place: 'admins' | 'members') {
-  const adding = place === 'admins' ? addAdmin : addMember;
-  const field = place === 'admins' ? newAdminEmail : newMemberEmail;
-  const words = place === 'admins' ? adminWords : memberWords;
+async function invite(place: OrganizationPlace) {
+  const inviting = place === 'admin' ? addAdmin : addMember;
+  const field = place === 'admin' ? newAdminEmail : newMemberEmail;
+  const said = place === 'admin' ? adminInviteSent : memberInviteSent;
   const email = field.value.trim();
   const org = orgData.value;
   if (!org || !email) return;
-  await adding.submit(
+  said.value = null;
+  await inviting.submit(
     async (isCurrent) => {
-      try {
-        await api.post(`/organizations/${encodeURIComponent(org.id)}/${place}`, {
-          user_email: email,
-        });
-      } catch (err) {
-        await readAgainIfChanged(err, isCurrent);
-        throw err;
-      }
-      await readAfterSaving(isCurrent);
+      const sent = await inviteToOrganization(org.id, email, place);
+      await rereadInvitations(isCurrent);
+      return { address: sent.invitation?.email ?? email, emailed: sent.emailed !== false };
     },
     {
-      done: () => {
+      done: (sent) => {
         field.value = '';
-        changeLanded(true);
-        const people =
-          place === 'admins' ? orgData.value?.adminPeople : orgData.value?.memberPeople;
-        findAdded(words, people ?? [], email);
+        said.value = sent;
+        // The invitation is in the organization's History.
+        changesMade.value++;
       },
-      late: lateAnswer,
     },
   );
 }
 
-const handleAddAdmin = () => addPerson('admins');
-const handleAddMember = () => addPerson('members');
+const handleAddAdmin = () => invite('admin');
+const handleAddMember = () => invite('member');
+
+/** Withdraw asks first: a mistyped address must not be able to join, nor a typed one lose it by a slip. */
+function askToWithdraw(invitation: SentInvitation) {
+  withdrawing.value = { id: invitation.id, email: invitation.email };
+}
+
+/** Cancel, Escape and the backdrop change nothing; the shell gives focus back to the row's Withdraw. */
+function cancelWithdraw() {
+  withdrawing.value = null;
+}
+
+/**
+ * Confirmed: the invitation is withdrawn, and the invitations re-read in place with Manage
+ * organization still open; the Withdraw that opened the confirmation is gone with it, so focus goes
+ * to the list, or to Members when none is left. A 404 is an invitation already accepted, declined,
+ * ended or withdrawn: nobody can accept it any more, which is what was asked, so it is read as done.
+ * A 409 is one sent again meanwhile, to the other place: it is said in the confirmation, and the
+ * list behind it re-read, so what was sent again is in sight before it is withdrawn.
+ */
+async function handleWithdraw() {
+  const target = withdrawing.value;
+  const org = orgData.value;
+  if (!org || !target) return;
+  await withdrawal.submit(
+    async (isCurrent) => {
+      try {
+        await withdrawOrganizationInvitation(org.id, target.id);
+      } catch (err) {
+        if (getApiErrorStatus(err) !== 404) {
+          if (getApiErrorStatus(err) === 409) await rereadInvitations(isCurrent);
+          throw err;
+        }
+      }
+      // Held until the confirmation closes: during the re-read its Withdraw would send again.
+      await rereadInvitations(isCurrent);
+    },
+    {
+      done: async () => {
+        changesMade.value++;
+        withdrawing.value = null;
+        // Once the confirmation has closed and the page behind it is no longer inert.
+        await nextTick();
+        (invitedList.value ?? membersList.value)?.focus();
+      },
+    },
+  );
+}
 
 /**
  * Remove asks first (E38/F15/S01): it took someone's access to every market of the organization in
@@ -588,7 +695,8 @@ function handleDeleted() {
               </template>
             </ListFrame>
           </div>
-          <!-- Opens the row it adds, which carries its own Cancel, as Manage market's "Add user". -->
+          <!-- Opens the row it invites from, which carries its own Cancel, as Manage market's
+               "Invite someone". -->
           <button
             v-if="isOwner() && !showAddAdminForm"
             type="button"
@@ -597,9 +705,9 @@ function handleDeleted() {
             data-testid="manage-org-add-admin-button"
             @click="openAddAdmin"
           >
-            Add admin
+            Invite admin
           </button>
-          <!-- Its own form, so Enter in the field adds the admin through the very same handler. -->
+          <!-- Its own form, so Enter in the field sends the invitation through the very same handler. -->
           <form v-if="showAddAdminForm" class="add-user-form" @submit.prevent="handleAddAdmin">
             <div class="add-org-row">
               <input
@@ -608,8 +716,9 @@ function handleDeleted() {
                 v-model="newAdminEmail"
                 name="admin-email"
                 type="email"
-                placeholder="User email"
-                aria-label="Email of the admin to add"
+                autocomplete="off"
+                placeholder="Email address"
+                aria-label="Email of the admin to invite"
                 class="field"
                 data-testid="manage-org-add-admin-input"
               />
@@ -619,7 +728,7 @@ function handleDeleted() {
                 :disabled="!newAdminEmail.trim()"
                 data-testid="manage-org-add-admin-submit"
               >
-                Add
+                Send invitation
               </button>
               <button
                 type="button"
@@ -630,6 +739,9 @@ function handleDeleted() {
                 Cancel
               </button>
             </div>
+            <p class="form-hint" data-testid="manage-org-add-admin-hint">
+              They get an email, and join once they accept it signed in with this address.
+            </p>
             <p
               v-if="addAdminSentence"
               ref="addAdminErrorLine"
@@ -638,6 +750,23 @@ function handleDeleted() {
             >
               {{ addAdminSentence }}
             </p>
+            <!-- Always drawn, so a screen reader hears each line as it lands in it. -->
+            <div class="invite-said" aria-live="polite" data-testid="manage-org-add-admin-said">
+              <p
+                v-if="adminInviteSent?.emailed"
+                class="invite-sent"
+                data-testid="manage-org-add-admin-sent"
+              >
+                <EmailAddress :words="sentLine(adminInviteSent.address)" />
+              </p>
+              <p
+                v-else-if="adminInviteSent"
+                class="invite-sent"
+                data-testid="manage-org-add-admin-not-emailed"
+              >
+                <EmailAddress :words="notEmailedLine(adminInviteSent.address)" />
+              </p>
+            </div>
           </form>
         </section>
 
@@ -700,7 +829,7 @@ function handleDeleted() {
             data-testid="manage-org-add-member-button"
             @click="openAddMember"
           >
-            Add member
+            Invite member
           </button>
           <form v-if="showAddMemberForm" class="add-user-form" @submit.prevent="handleAddMember">
             <div class="add-org-row">
@@ -710,8 +839,9 @@ function handleDeleted() {
                 v-model="newMemberEmail"
                 name="member-email"
                 type="email"
-                placeholder="User email"
-                aria-label="Email of the member to add"
+                autocomplete="off"
+                placeholder="Email address"
+                aria-label="Email of the member to invite"
                 class="field"
                 data-testid="manage-org-add-member-input"
               />
@@ -721,7 +851,7 @@ function handleDeleted() {
                 :disabled="!newMemberEmail.trim()"
                 data-testid="manage-org-add-member-submit"
               >
-                Add
+                Send invitation
               </button>
               <button
                 type="button"
@@ -732,6 +862,9 @@ function handleDeleted() {
                 Cancel
               </button>
             </div>
+            <p class="form-hint" data-testid="manage-org-add-member-hint">
+              They get an email, and join once they accept it signed in with this address.
+            </p>
             <p
               v-if="addMemberSentence"
               ref="addMemberErrorLine"
@@ -740,7 +873,79 @@ function handleDeleted() {
             >
               {{ addMemberSentence }}
             </p>
+            <!-- Always drawn, so a screen reader hears each line as it lands in it. -->
+            <div class="invite-said" aria-live="polite" data-testid="manage-org-add-member-said">
+              <p
+                v-if="memberInviteSent?.emailed"
+                class="invite-sent"
+                data-testid="manage-org-add-member-sent"
+              >
+                <EmailAddress :words="sentLine(memberInviteSent.address)" />
+              </p>
+              <p
+                v-else-if="memberInviteSent"
+                class="invite-sent"
+                data-testid="manage-org-add-member-not-emailed"
+              >
+                <EmailAddress :words="notEmailedLine(memberInviteSent.address)" />
+              </p>
+            </div>
           </form>
+        </section>
+
+        <!-- The invitations waiting, for the owner and the admins: nobody in them is in the
+             organization until they accept, so they are their own list, after the people who are. -->
+        <section v-if="canManage() && (invitationsFailed || invitedRows.length)" class="section">
+          <ReadFailed
+            v-if="invitationsFailed"
+            name="manage-org-invited"
+            message="Could not read the invitations."
+            @retry="invitations.reread()"
+          />
+          <template v-if="invitedRows.length">
+            <h3 id="manage-org-invited-heading" data-testid="manage-org-invited-heading">
+              Invited
+            </h3>
+            <div
+              ref="invitedList"
+              class="users-list"
+              role="group"
+              aria-labelledby="manage-org-invited-heading"
+              tabindex="-1"
+              data-testid="manage-org-invited"
+            >
+              <ListFrame
+                v-model:words="invitedWords"
+                :items="invitedRows"
+                :finds="findsInvitation"
+                :itemKey="keyOfInvitation"
+                :noun="INVITATION"
+                findLabel="Find in invited"
+                testid="manage-org-invited-list"
+              >
+                <template #row="{ item: invitation }">
+                  <div class="user-card" data-testid="manage-org-invited-row">
+                    <!-- The address and its line stacked, so a long address keeps the card's width. -->
+                    <div class="invited-who">
+                      <span class="user-email"><EmailAddress :words="invitation.email" /></span>
+                      <span class="invited-as" data-testid="manage-org-invited-as">
+                        {{ invitedAs('organization', invitation) }}
+                      </span>
+                    </div>
+                    <button
+                      v-if="mayWithdraw(invitation)"
+                      type="button"
+                      class="btn btn--secondary btn--destructive"
+                      data-testid="manage-org-invited-withdraw"
+                      @click="askToWithdraw(invitation)"
+                    >
+                      Withdraw<span class="visually-hidden"> {{ invitation.email }}</span>
+                    </button>
+                  </div>
+                </template>
+              </ListFrame>
+            </div>
+          </template>
         </section>
 
         <!-- The table its new markets copy (E39/F02/S01): a line here and the rows in a dialog of
@@ -806,6 +1011,23 @@ function handleDeleted() {
     @submit="handleRemoveUser"
   >
     <p class="confirm-text" data-testid="manage-org-remove-consequence">{{ removing?.loses }}</p>
+  </AppDialog>
+
+  <!-- Destructive, as Remove's is, and opened on Cancel: the address it names can no longer join by
+       it, and only a new invitation, a new email, undoes it. -->
+  <AppDialog
+    :open="manageOpen && !!withdrawing"
+    :title="`Withdraw the invitation to ${withdrawing?.email ?? ''}?`"
+    testid="manage-org-withdraw"
+    destructive
+    confirm-label="Withdraw"
+    :submission="withdrawal"
+    @close="cancelWithdraw"
+    @submit="handleWithdraw"
+  >
+    <p class="confirm-text" data-testid="manage-org-withdraw-consequence">
+      They can no longer accept it.
+    </p>
   </AppDialog>
 
   <!-- Not destructive, since another change undoes it, as a market role change's is not (T211). -->
@@ -900,6 +1122,34 @@ function handleDeleted() {
   white-space: nowrap;
 }
 
+/* An invitation's address over its place and when it ends, beside its Withdraw, with a floor; on a
+   phone it takes the card's width, with Withdraw beneath, as a person's row does. */
+.invited-who {
+  flex: 1;
+  min-width: min(100%, 12rem);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-hairline);
+}
+
+/* In the stack, the address takes its line's width and no more: its floor and its phone basis are
+   the stack's. */
+.invited-who .user-email {
+  flex: none;
+}
+
+@media (width <= 640px) {
+  .invited-who {
+    flex-basis: 100%;
+  }
+}
+
+/* An invitation's place and when it ends, in the muted ink that reaches AA on the card's beige. */
+.invited-as {
+  font-size: var(--text-xs);
+  color: var(--mm-text-muted-on-beige);
+}
+
 /* Opaque chip grounds, so a badge reads the same on a dialog's beige as on white (T79). */
 .role-owner {
   background: var(--mm-chip-informational);
@@ -936,9 +1186,26 @@ function handleDeleted() {
   align-items: center;
 }
 
-/* On a phone an add row's email field takes the row, with Add and Cancel beneath it at its end:
-   beside them it was squeezed to 141px, too narrow to read the address being typed. The rename row
-   stays one row. */
+/* The sent line's live region, drawn while it says nothing: it then takes no gap of the form. */
+.invite-said:empty {
+  margin-top: calc(-1 * var(--space-2));
+}
+
+.invite-sent {
+  margin: 0;
+  color: var(--mm-text-green);
+  font-size: var(--text-xs);
+}
+
+.form-hint {
+  margin: 0;
+  color: var(--mm-text-muted);
+  font-size: var(--text-xs);
+}
+
+/* On a phone an invite row's email field takes the row, with Send invitation and Cancel beneath it
+   at its end: beside them it was squeezed to 141px, too narrow to read the address being typed. The
+   rename row stays one row. */
 @media (width <= 640px) {
   .add-org-row {
     flex-wrap: wrap;

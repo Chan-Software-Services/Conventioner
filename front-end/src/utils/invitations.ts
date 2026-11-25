@@ -1,8 +1,8 @@
 /**
  * Invitations (T538, ADR 0047), and their words: the ones waiting for the signed-in person's
  * address, which the Invitations page reads, accepts and declines and the Markets list counts, and
- * the ones a market's organizers send, read and withdraw in Manage market. One module, so a screen's
- * tests mock one import.
+ * the ones a market's organizers send, read and withdraw in Manage market, and an organization's
+ * owner and admins in Manage organization. One module, so a screen's tests mock one import.
  */
 import type { Invitation, SentInvitation } from '@/assets/types/datatypes';
 import { api } from '@/utils/api';
@@ -118,6 +118,34 @@ export async function fetchMarketInvitations(marketId: string): Promise<SentInvi
 export async function withdrawMarketInvitation(marketId: string, id: string): Promise<void> {
   await api.delete(
     `/markets/${encodeURIComponent(marketId)}/invitations/${encodeURIComponent(id)}`,
+  );
+}
+
+/**
+ * Invite `email` to `place`, `admin` or `member`, in the organization whose `id` is `orgId`. The
+ * answer is the same for every address, as a market's is: nobody is placed until they accept.
+ */
+export async function inviteToOrganization(
+  orgId: string,
+  email: string,
+  place: 'admin' | 'member',
+): Promise<Sent> {
+  const response = await api.post(`/organizations/${encodeURIComponent(orgId)}/invitations`, {
+    email,
+    place,
+  });
+  return response.data as Sent;
+}
+
+/** The invitations waiting on an organization, to either place, newest first. */
+export async function fetchOrganizationInvitations(orgId: string): Promise<SentInvitation[]> {
+  const response = await api.get(`/organizations/${encodeURIComponent(orgId)}/invitations`);
+  return (response.data.invitations ?? []) as SentInvitation[];
+}
+
+export async function withdrawOrganizationInvitation(orgId: string, id: string): Promise<void> {
+  await api.delete(
+    `/organizations/${encodeURIComponent(orgId)}/invitations/${encodeURIComponent(id)}`,
   );
 }
 

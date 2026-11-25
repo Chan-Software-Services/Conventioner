@@ -2,12 +2,14 @@ import { expect, type Locator, type Page } from '@playwright/test';
 
 /**
  * Page object for the Organizations view (OrganizationsView) and the
- * ManageOrgOverlay. Covers org CRUD: create, rename, add/remove admin/member,
- * delete, the organization's History, and its default permissions for new markets.
+ * ManageOrgOverlay. Covers org CRUD: create, rename, inviting an admin or a member and withdrawing
+ * the invitation, removing someone, delete, the organization's History, and its default permissions
+ * for new markets.
  *
  * The manage dialog is built on `AppDialog` (E20/F01/S02), so its window, scrim and close ids
- * come from the shell's `manage-org` prefix. **It no longer closes when something saves**: add
- * and remove leave it open showing the new membership, and the helpers here no longer reopen it.
+ * come from the shell's `manage-org` prefix. **It no longer closes when something saves**: an
+ * invitation and a removal leave it open showing what changed, and the helpers here no longer reopen
+ * it. "Invite admin" and "Invite member" keep the testids of the adds they replaced (T538).
  */
 export class OrganizationsPage {
   readonly page: Page;
@@ -37,9 +39,26 @@ export class OrganizationsPage {
   readonly addAdminButton: Locator;
   readonly addAdminInput: Locator;
   readonly addAdminSubmit: Locator;
+  readonly addAdminCancel: Locator;
+  readonly addAdminError: Locator;
+  readonly addAdminSent: Locator;
+  readonly addAdminNotEmailed: Locator;
   readonly addMemberButton: Locator;
   readonly addMemberInput: Locator;
   readonly addMemberSubmit: Locator;
+  readonly addMemberCancel: Locator;
+  readonly addMemberError: Locator;
+  readonly addMemberSent: Locator;
+  readonly addMemberNotEmailed: Locator;
+  /** "Invited": the invitations waiting, for the owner and the admins (T538). */
+  readonly invited: Locator;
+  readonly invitedRows: Locator;
+  readonly invitedWithdrawButtons: Locator;
+  readonly invitedReadFailed: Locator;
+  readonly withdrawConfirm: Locator;
+  readonly withdrawConsequence: Locator;
+  readonly withdrawConfirmButton: Locator;
+  readonly withdrawCancelButton: Locator;
   readonly removeUserButtons: Locator;
   readonly removeMemberButtons: Locator;
   readonly admins: Locator;
@@ -124,6 +143,23 @@ export class OrganizationsPage {
     this.addMemberButton = page.getByTestId('manage-org-add-member-button');
     this.addMemberInput = page.getByTestId('manage-org-add-member-input');
     this.addMemberSubmit = page.getByTestId('manage-org-add-member-submit');
+    this.addAdminCancel = page.getByTestId('manage-org-add-admin-cancel');
+    this.addAdminError = page.getByTestId('manage-org-add-admin-error');
+    this.addAdminSent = page.getByTestId('manage-org-add-admin-sent');
+    this.addAdminNotEmailed = page.getByTestId('manage-org-add-admin-not-emailed');
+    this.addMemberCancel = page.getByTestId('manage-org-add-member-cancel');
+    this.addMemberError = page.getByTestId('manage-org-add-member-error');
+    this.addMemberSent = page.getByTestId('manage-org-add-member-sent');
+    this.addMemberNotEmailed = page.getByTestId('manage-org-add-member-not-emailed');
+    this.invited = page.getByTestId('manage-org-invited');
+    this.invitedRows = page.getByTestId('manage-org-invited-row');
+    this.invitedWithdrawButtons = page.getByTestId('manage-org-invited-withdraw');
+    this.invitedReadFailed = page.getByTestId('manage-org-invited-read-failed');
+    // Withdraw asks first: its own destructive dialog, a sibling of Manage organization.
+    this.withdrawConfirm = page.getByTestId('manage-org-withdraw-window');
+    this.withdrawConsequence = page.getByTestId('manage-org-withdraw-consequence');
+    this.withdrawConfirmButton = page.getByTestId('manage-org-withdraw-submit-button');
+    this.withdrawCancelButton = page.getByTestId('manage-org-withdraw-cancel-button');
     this.removeUserButtons = page.getByTestId('manage-org-remove-user-button');
     this.removeMemberButtons = page.getByTestId('manage-org-remove-member-button');
     this.admins = page.getByTestId('manage-org-admins');
@@ -236,44 +272,40 @@ export class OrganizationsPage {
     await this.renameSaveButton.click();
   }
 
-  // ── Add admin ──
+  // ── Invite admin, Invite member ──
 
-  async clickAddAdmin(): Promise<void> {
-    await this.addAdminButton.click();
+  /**
+   * Invites `email` as an admin from "Invite admin", opening its row only when it is closed, so two
+   * invitations in a row type into the row the first left open. It waits for nothing: the caller
+   * reads the sent line or the error.
+   */
+  async inviteAdmin(email: string): Promise<void> {
+    await this.inviteFrom(this.addAdminButton, this.addAdminInput, this.addAdminSubmit, email);
   }
 
-  async fillAdminEmail(email: string): Promise<void> {
-    await this.addAdminInput.fill(email);
+  /** As `inviteAdmin`, from "Invite member". */
+  async inviteMember(email: string): Promise<void> {
+    await this.inviteFrom(this.addMemberButton, this.addMemberInput, this.addMemberSubmit, email);
   }
 
-  async submitAddAdmin(): Promise<void> {
-    await this.addAdminSubmit.click();
+  private async inviteFrom(opener: Locator, input: Locator, submit: Locator, email: string) {
+    // Whichever is drawn once the dialog has the organization: the button, or the row it opened.
+    await opener.or(input).first().waitFor();
+    if (await opener.isVisible()) await opener.click();
+    await input.fill(email);
+    await submit.click();
   }
 
-  async addAdmin(email: string): Promise<void> {
-    await this.clickAddAdmin();
-    await this.fillAdminEmail(email);
-    await this.submitAddAdmin();
+  /** The row under "Invited" of the invitation to `email`. */
+  invitation(email: string): Locator {
+    return this.invitedRows.filter({ hasText: email });
   }
 
-  // ── Add member ──
-
-  async clickAddMember(): Promise<void> {
-    await this.addMemberButton.click();
-  }
-
-  async fillMemberEmail(email: string): Promise<void> {
-    await this.addMemberInput.fill(email);
-  }
-
-  async submitAddMember(): Promise<void> {
-    await this.addMemberSubmit.click();
-  }
-
-  async addMember(email: string): Promise<void> {
-    await this.clickAddMember();
-    await this.fillMemberEmail(email);
-    await this.submitAddMember();
+  /** Withdraws the invitation to `email`, through the confirmation its Withdraw opens. */
+  async withdraw(email: string): Promise<void> {
+    await this.invitation(email).getByTestId('manage-org-invited-withdraw').click();
+    await this.withdrawConfirmButton.click();
+    await this.withdrawConfirm.waitFor({ state: 'detached' });
   }
 
   // ── Remove users ──
