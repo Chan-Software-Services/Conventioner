@@ -5,6 +5,7 @@ import { savePlan } from './helpers/savePlan';
 import { marketScreenPath } from './helpers/marketScreens';
 import { mongoEval } from './helpers/mongo';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { withUser } from './helpers/withUser';
 import { TablesPage } from './pages/TablesPage';
 
@@ -248,10 +249,7 @@ test.describe('changing what is owed and paid', () => {
   }) => {
     const marketId = await alicePaidInFull(request);
     ensureVerifiedUser(EDITOR.email, EDITOR.password);
-    await call(request, 'post', `/markets/${marketId}/roles`, {
-      user_email: EDITOR.email,
-      role: 'editor',
-    });
+    await grantMarketRole(request, marketId, EDITOR, 'editor');
 
     await withUser(browser, EDITOR.email, EDITOR.password, async (page) => {
       const accountReads: string[] = [];

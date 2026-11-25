@@ -5,6 +5,7 @@ import {
   transitionMarket,
 } from './helpers/seedPhaseMarket';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { withUser } from './helpers/withUser';
 import { ApplicationMonitorPage } from './pages/ApplicationMonitorPage';
 import { ApplicationsAllPage } from './pages/ApplicationsAllPage';
@@ -38,11 +39,8 @@ test.beforeAll(async ({ request }) => {
   seedApplicationWithStatus(marketId, 'reviewer_approved', 'ben@ember.test');
   seedApplicationWithStatus(marketId, 'reviewer_rejected', 'cleo@fern.test');
   seedApplicationWithStatus(marketId, 'open', 'dina@moss.test');
-  for (const [role, person] of Object.entries(PEOPLE)) {
-    const res = await request.post(`${BACKEND_URL}/markets/${marketId}/roles`, {
-      data: { user_email: person.email, role },
-    });
-    expect(res.ok(), await res.text()).toBeTruthy();
+  for (const role of ['editor', 'admin'] as const) {
+    await grantMarketRole(request, marketId, PEOPLE[role], role);
   }
 });
 
@@ -136,10 +134,7 @@ test('an Admin is offered no change where the market keeps it to the owner', asy
   await transitionMarket(request, BACKEND_URL, TEST_USER.email, ownersOnly, 'applications');
   seedApplicationWithStatus(ownersOnly, 'reviewer_approved', 'ben@ember.test');
   seedApplicationWithStatus(ownersOnly, 'open', 'dina@moss.test');
-  const granted = await request.post(`${BACKEND_URL}/markets/${ownersOnly}/roles`, {
-    data: { user_email: PEOPLE.admin.email, role: 'admin' },
-  });
-  expect(granted.ok(), await granted.text()).toBeTruthy();
+  await grantMarketRole(request, ownersOnly, PEOPLE.admin, 'admin');
   const raised = await request.put(
     `${BACKEND_URL}/markets/${ownersOnly}/permissions/change-verdicts`,
     {

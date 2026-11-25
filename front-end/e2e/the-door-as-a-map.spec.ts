@@ -10,6 +10,7 @@ import {
 import { inTheWindow, PHONE_AND_DESK } from './helpers/phoneWindow';
 import { seedMarketDayMap, type SeededMarketDayMap } from './helpers/seedMarketDayMap';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { AttendanceStatusPage } from './pages/AttendanceStatusPage';
 import { LoginPage } from './pages/LoginPage';
 
@@ -349,10 +350,7 @@ test.describe('a Viewer', () => {
       TEST_USER.email,
       TEST_USER.password,
     );
-    const role = await request.post(`${BACKEND_URL}/markets/${seeded.marketId}/roles`, {
-      data: { user_email: VIEWER.email, role: 'viewer' },
-    });
-    expect(role.ok(), await role.text()).toBeTruthy();
+    await grantMarketRole(request, seeded.marketId, VIEWER, 'viewer');
 
     const login = new LoginPage(page);
     await login.login(VIEWER.email, VIEWER.password);

@@ -5,6 +5,7 @@ import { loginViaApi } from './helpers/seeds';
 import { seedDraftMarket } from './helpers/seedDraftMarket';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
 import { uniqueMarketName } from './helpers/uniqueName';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { withUser } from './helpers/withUser';
 import { PHONE_AND_DESK, inTheWindow } from './helpers/phoneWindow';
 
@@ -48,15 +49,8 @@ async function seed(
     TEST_USER.password,
     { name: uniqueMarketName('Spring Fair'), organizationId },
   );
-  for (const [email, role] of [
-    [ADMIN, 'admin'],
-    [EDITOR, 'editor'],
-  ]) {
-    const given = await request.post(`${BACKEND_URL}/markets/${marketId}/roles`, {
-      data: { user_email: email, role },
-    });
-    expect(given.ok(), await given.text()).toBeTruthy();
-  }
+  await grantMarketRole(request, marketId, { email: ADMIN, password: PASSWORD }, 'admin');
+  await grantMarketRole(request, marketId, { email: EDITOR, password: PASSWORD }, 'editor');
   return { marketName, organizationName };
 }
 

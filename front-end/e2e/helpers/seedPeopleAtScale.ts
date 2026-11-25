@@ -2,7 +2,7 @@ import { expect, type APIRequestContext } from '@playwright/test';
 import { BACKEND_URL, TEST_USER } from '../fixtures';
 import { runBackendScript } from './backendScript';
 import { loginViaApi } from './seeds';
-import { grantMarketRole } from './grantMarketRole';
+import { grantMarketRole, placeInOrganization } from './grantMarketRole';
 import { seedApplicationWithStatus, seedPhaseMarket, transitionMarket } from './seedPhaseMarket';
 import { uniqueMarketName } from './uniqueName';
 
@@ -54,6 +54,11 @@ export function personAtScale(n: number): string {
   return `person-${String(n).padStart(3, '0')}@${PEOPLE_AT_SCALE_DOMAIN}`;
 }
 
+/** `person` with the password every seeded person signs in with, to accept an invitation. */
+function signingIn(person: SeededPerson) {
+  return { email: person.email, password: PEOPLE_AT_SCALE_PASSWORD };
+}
+
 /**
  * Make the verified accounts with one run of `create_test_user.py --bulk`, the one maker of a
  * login-ready account, and answer each one's id from what it printed: "created <email> <id>" or
@@ -80,12 +85,12 @@ function ensureVerifiedPeople(emails: string[], password: string): SeededPerson[
  * hold, made under the signed-in seed owner, whose session `request` carries afterwards.
  *
  * 153 accounts at `people-at-scale.test`; an organization of its own, owned by the seed owner,
- * with persons 001 to 003 its admins and 004 to 153 its 150 members, added through its endpoints
- * as Manage organization adds them; a market in it in Applications, review open, with 5
- * applications; Editor on the market for the first 20 members; and the first 12 of those chosen
- * as its reviewers, through the endpoint Choose reviewers saves to, which deals the applications
- * among them. A spec asserts against the ids, addresses and counts this answers, never a number
- * typed twice.
+ * with persons 001 to 003 its admins and 004 to 153 its 150 members, each invited as Manage
+ * organization invites them, and accepting; a market in it in Applications, review open, with 5
+ * applications; Editor on the market for the first 20 members, invited and accepted alike; and the
+ * first 12 of those chosen as its reviewers, through the endpoint Choose reviewers saves to, which
+ * deals the applications among them. A spec asserts against the ids, addresses and counts this
+ * answers, never a number typed twice.
  */
 export async function seedPeopleAtScale(request: APIRequestContext): Promise<PeopleAtScaleSeed> {
   const people = ensureVerifiedPeople(
@@ -103,16 +108,15 @@ export async function seedPeopleAtScale(request: APIRequestContext): Promise<Peo
   const org = await request.post(`${BACKEND_URL}/organizations`, { data: { name: orgName } });
   expect(org.ok(), await org.text()).toBeTruthy();
   const orgId = (await org.json()).organization_id as string;
-  // One at a time, so the organization holds them in the order above.
+  // One at a time, never all at once: the organization holds them in the order above, and each
+  // accept takes back the owner's count before the next invitation is sent, so the seed's 173
+  // invitations never reach the owner's limit of 100 a quarter hour.
   for (const [place, placed] of [
-    ['admins', admins],
-    ['members', members],
+    ['admin', admins],
+    ['member', members],
   ] as const) {
     for (const person of placed) {
-      const added = await request.post(`${BACKEND_URL}/organizations/${orgId}/${place}`, {
-        data: { user_email: person.email },
-      });
-      expect(added.ok(), await added.text()).toBeTruthy();
+      await placeInOrganization(request, orgId, signingIn(person), place);
     }
   }
 
@@ -129,7 +133,7 @@ export async function seedPeopleAtScale(request: APIRequestContext): Promise<Peo
     );
   }
   for (const editor of editors) {
-    await grantMarketRole(request, market.marketId, editor, 'editor');
+    await grantMarketRole(request, market.marketId, signingIn(editor), 'editor');
   }
   const chosen = await request.put(`${BACKEND_URL}/markets/${market.marketId}/reviewers`, {
     data: { reviewers: reviewers.map((person) => person.email) },

@@ -7,6 +7,7 @@ import {
 } from './helpers/seedPhaseMarket';
 import { oneByOnePath } from './helpers/marketScreens';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { withUser } from './helpers/withUser';
 
 /**
@@ -39,10 +40,7 @@ test('an editor decides and is named; a viewer decides nothing; the phase stays 
     [EDITOR, 'editor'],
     [VIEWER, 'viewer'],
   ] as const) {
-    const granted = await request.post(`${BACKEND_URL}/markets/${marketId}/roles`, {
-      data: { user_email: person.email, role },
-    });
-    expect(granted.ok(), await granted.text()).toBeTruthy();
+    await grantMarketRole(request, marketId, person, role);
   }
 
   await withUser(browser, EDITOR.email, EDITOR.password, async (page) => {

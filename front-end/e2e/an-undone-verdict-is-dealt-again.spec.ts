@@ -6,6 +6,7 @@ import {
 } from './helpers/seedPhaseMarket';
 import { oneByOnePath } from './helpers/marketScreens';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { withUser } from './helpers/withUser';
 import { ApplicationMonitorPage } from './pages/ApplicationMonitorPage';
 
@@ -43,9 +44,8 @@ test('an undone verdict is handed to the reviewer whose turn it is', async ({
   for (const [email, role] of [
     [ANA, 'editor'],
     [BEN, 'viewer'],
-  ]) {
-    const res = await request.post(`${api}/roles`, { data: { user_email: email, role } });
-    expect(res.ok(), await res.text()).toBeTruthy();
+  ] as const) {
+    await grantMarketRole(request, marketId, { email, password: PASSWORD }, role);
   }
 
   await withUser(browser, ANA, PASSWORD, async (page) => {

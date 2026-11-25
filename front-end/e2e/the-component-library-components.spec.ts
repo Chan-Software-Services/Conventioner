@@ -32,6 +32,8 @@ const COMPONENTS = [
   'FileDropZone',
   'ScrollBox',
   'ListFreshness',
+  'InvitationsWaiting',
+  'InvitationSent',
 ];
 
 /**

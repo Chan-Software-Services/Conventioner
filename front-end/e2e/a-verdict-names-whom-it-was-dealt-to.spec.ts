@@ -6,6 +6,7 @@ import {
 } from './helpers/seedPhaseMarket';
 import { marketScreenPath } from './helpers/marketScreens';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { ApplicationsAllPage } from './pages/ApplicationsAllPage';
 import { VendorsPage } from './pages/VendorsPage';
 
@@ -38,8 +39,7 @@ test('a verdict on another reviewer’s application names both people', async ({
   seedApplicationWithStatus(marketId, 'open', VENDOR);
   seedApplicationWithStatus(marketId, 'open', 'for-ben@moss.test');
   for (const email of [ANA, BEN]) {
-    const res = await request.post(`${api}/roles`, { data: { user_email: email, role: 'editor' } });
-    expect(res.ok(), await res.text()).toBeTruthy();
+    await grantMarketRole(request, marketId, { email, password: PASSWORD }, 'editor');
   }
   const chosen = await request.put(`${api}/reviewers`, { data: { reviewers: [ANA, BEN] } });
   expect(chosen.ok(), await chosen.text()).toBeTruthy();

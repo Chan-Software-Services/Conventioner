@@ -192,7 +192,7 @@ const managing = (market: keyof TheScreensSeed) => async (page: Page, seed: TheS
 
 /**
  * Manage organization on the screens' own organization (T148), its admin's and member's long
- * addresses drawn and both its add rows open.
+ * addresses drawn and both its invite rows open.
  */
 const managingTheOrganization = async (page: Page, seed: TheScreensSeed) => {
   const orgs = new OrganizationsPage(page);
@@ -207,6 +207,23 @@ const managingTheOrganization = async (page: Page, seed: TheScreensSeed) => {
   await visible(page, 'manage-org-add-admin-input');
   await page.getByTestId('manage-org-add-member-button').click();
   await visible(page, 'manage-org-add-member-input');
+};
+
+/**
+ * Manage organization on the screens' own organization, its "Invited" in sight (T538): an admin's
+ * invitation to a long address and a member's, each its address over its place and when it ends,
+ * beside Withdraw, or above it on a phone.
+ */
+const invitedToTheOrganization = async (page: Page, seed: TheScreensSeed) => {
+  const orgs = new OrganizationsPage(page);
+  await orgs.goto();
+  await (
+    await orgs.findCard(seed.organization.name)
+  )
+    .getByTestId('organizations-manage-button')
+    .click();
+  await expect(orgs.invitedRows.nth(1)).toBeVisible({ timeout: 15000 });
+  await orgs.invited.scrollIntoViewIfNeeded();
 };
 
 /**
@@ -580,9 +597,9 @@ export const SCREEN_GROUPS = {
       ),
     },
     {
-      // Its "Add user" row open (T142): on a phone the row squeezed its email field and its role
-      // to 66px each beside Add and Cancel, and no state opened it.
-      name: 'the manage-market dialog, adding a user',
+      // Its "Invite someone" row open (T142): on a phone the row squeezed its email field and its
+      // role to 66px each beside Add and Cancel, and no state opened it.
+      name: 'the manage-market dialog, inviting someone',
       who: 'organizer',
       sizes: FITS_A_PHONE,
       open: at(
@@ -591,6 +608,19 @@ export const SCREEN_GROUPS = {
         ['market-card-manage-button', 'manage-market-window'],
         ['manage-market-add-user-button', 'manage-market-add-user-input'],
       ),
+    },
+    {
+      // Two invitations waiting under "Invited" (T538), one to a long address: each row its
+      // address over its role and when it ends, beside Withdraw, or above it on a phone.
+      name: 'the manage-market dialog, two invitations waiting',
+      who: 'organizer',
+      sizes: FITS_A_PHONE,
+      open: async (page: Page, seed: TheScreensSeed) => {
+        await managing('draft')(page, seed);
+        await expect(page.getByTestId('manage-market-invited-row')).toHaveCount(2, {
+          timeout: 15000,
+        });
+      },
     },
     {
       // A second member whose address is long (T142): the row gives it its own line rather than
@@ -768,11 +798,18 @@ export const SCREEN_GROUPS = {
       ),
     },
     {
-      // An admin and a member whose addresses are long (T148), and both add rows open.
-      name: 'the manage-organization dialog, its people and both add rows',
+      // An admin and a member whose addresses are long (T148), and both invite rows open.
+      name: 'the manage-organization dialog, its people and both invite rows',
       who: 'organizer',
       sizes: FITS_A_PHONE,
       open: managingTheOrganization,
+    },
+    {
+      // Its invitations waiting under "Invited" (T538), one to a long address.
+      name: 'the manage-organization dialog, invitations waiting',
+      who: 'organizer',
+      sizes: FITS_A_PHONE,
+      open: invitedToTheOrganization,
     },
     {
       // Its Remove asking first (E38/F15/S01), on the member with a long address.

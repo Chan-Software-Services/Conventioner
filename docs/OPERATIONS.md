@@ -34,8 +34,8 @@ sources:
   - T317
   - T335
   - T452
-  - T539
   - T583
+  - T539
 ---
 
 # Operations
@@ -120,8 +120,8 @@ What a person may do is decided per organization and per market:
 
 **An organization's owner and admins run every market it holds, and its members read them.**
 A role given on a market is held beside the organization's, and the higher one counts; only the market's owner deletes it.
-Anyone outside the organization who must change a market, including a volunteer at the door, needs a role on that market: Markets, the market's card, **Manage**, "Users with access", **Add user**, their email and a role.
-The person must already have an account.
+Anyone outside the organization who must change a market, including a volunteer at the door, needs a role on that market: Markets, the market's card, **Manage**, "Users with access", **Invite someone**, their email and a role; they accept it signed in with that address.
+Someone with no account makes one with that address first, as the invitation's email tells them.
 
 ### Making an account
 

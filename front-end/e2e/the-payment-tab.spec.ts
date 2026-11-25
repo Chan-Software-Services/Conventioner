@@ -3,6 +3,7 @@ import type { APIRequestContext, Page } from '@playwright/test';
 import { SEED_MARKET_DATE, seedMarketWithVendors } from './helpers/seeds';
 import { savePlan } from './helpers/savePlan';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { withUser } from './helpers/withUser';
 import { marketScreenPath } from './helpers/marketScreens';
 import { mongoEval } from './helpers/mongo';
@@ -66,11 +67,11 @@ async function aliceOnTwoGoldDays(request: APIRequestContext): Promise<string> {
       { $set: { 'form_data.essential_section_ranking': ['North Wing', 'Landing'] } })`,
   );
   await savePlan(request, BACKEND_URL, TEST_USER.email, marketId, PLAN);
-  for (const [user, role] of [
-    [EDITOR.email, 'editor'],
-    [VIEWER.email, 'viewer'],
-  ]) {
-    await call(request, 'post', `/markets/${marketId}/roles`, { user_email: user, role });
+  for (const [person, role] of [
+    [EDITOR, 'editor'],
+    [VIEWER, 'viewer'],
+  ] as const) {
+    await grantMarketRole(request, marketId, person, role);
   }
   for (const toPhase of ['applications', 'assignment']) {
     await call(request, 'post', `/markets/${marketId}/transition`, { toPhase });
