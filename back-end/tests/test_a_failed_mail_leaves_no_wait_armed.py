@@ -5,8 +5,9 @@ the mail names them. When the send failed, the next request works at once. A sec
 refused is unset (``account_secrets.refused``), so it leaves no wait and no live secret, and no
 earlier one is written back: for a verification link, the link mailed before the failed resend was
 replaced when the resend issued its own, so it no longer verifies, and the next resend mails one
-that does. A newer code or link another request stored meanwhile is left. The counts per caller and
-per address are not taken back: they count requests, whether or not a mail went.
+that does. A newer code or link another request stored meanwhile is left. The counts per caller,
+per caller and address, and per address are not taken back: they count requests, whether or not a
+mail went.
 
 Reproduced on dev through the routes, the send made to fail: a code request answered 500 and the
 next 429 for about an hour, and a reset request 500 and then 429.
@@ -55,12 +56,12 @@ def users(monkeypatch):
 class Mail:
     """One of the three mails, its route and what it answers once sent."""
 
-    def __init__(self, path, sender, sends_to, sent, per_address):
+    def __init__(self, path, sender, sends_to, sent, per_caller_and_address):
         self.path = path
         self.sender = sender
         self.sends_to = sends_to
         self.sent = sent
-        self.per_address = per_address
+        self.per_caller_and_address = per_caller_and_address
 
     def __repr__(self):
         return self.path
@@ -71,11 +72,11 @@ class Mail:
 
 
 CODE = Mail("/request-otp", "send_otp_email", ACCOUNT_EMAIL, SENT_CODE,
-            sign_in_limits.ORGANIZER_CODE_REQUEST_PER_ADDRESS)
+            sign_in_limits.ORGANIZER_CODE_REQUEST_PER_CALLER_AND_ADDRESS)
 RESET = Mail("/request-password-reset", "send_password_reset_email", ACCOUNT_EMAIL, SENT_RESET,
-             sign_in_limits.RESET_LINK_PER_ADDRESS)
+             sign_in_limits.RESET_LINK_PER_CALLER_AND_ADDRESS)
 VERIFICATION = Mail("/resend-verification", "send_verification_email", UNVERIFIED_EMAIL,
-                    SENT_VERIFICATION, sign_in_limits.VERIFICATION_LINK_PER_ADDRESS)
+                    SENT_VERIFICATION, sign_in_limits.VERIFICATION_LINK_PER_CALLER_AND_ADDRESS)
 MAILS = [CODE, RESET, VERIFICATION]
 
 
@@ -290,7 +291,7 @@ class TestARefusedVerificationLinkLeavesNoLink:
 def test_a_failed_send_keeps_its_count_so_the_sixth_request_waits(
     client, users, outbox, clock, mail,
 ):
-    for _ in range(mail.per_address.attempts):
+    for _ in range(mail.per_caller_and_address.attempts):
         _fail_once(client, outbox, mail)
     outbox.failing = True
     sixth = mail.ask(client)

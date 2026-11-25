@@ -26,7 +26,13 @@ async function signedInStore() {
   vi.mocked(api.post).mockResolvedValueOnce({
     data: { success: true, marketId: 'm-1', applicantEmail: 'vendor@example.com', token: 't' },
   });
-  await store.verifyCode('spring-market', 'vendor@example.com', '123456');
+  await store.verifyCode(
+    'spring-market',
+    'vendor@example.com',
+    '123456',
+    false,
+    'a-human-check-token',
+  );
   return store;
 }
 

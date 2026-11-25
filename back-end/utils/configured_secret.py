@@ -11,16 +11,17 @@ the same route - an operator who copied a template and did not finish filling it
   may not be.
 
 The placeholder is the worse of the two, because it is *truthy*: a check that asks only whether the
-variable is set passes, and the failure lands later and elsewhere - reCAPTCHA verifying every signup
-against a key Google never issued, Resend rejecting ``re_xxxxx`` while the new account rolls back
+variable is set passes, and the failure lands later and elsewhere - the human check asking Cloudflare
+about every sign-up against a key it never issued, Resend rejecting ``re_xxxxx`` while the new account rolls back
 behind a 500, and, for the signing key, no failure at all and every session forgeable. A check that
 can be satisfied with garbage is not a check. Neither shape counts as configured here, so the
 failure lands at boot with the variable named instead.
 
 The shape rules are there because the literal list cannot be complete: the placeholder somebody
 writes into a template tomorrow is one nobody has added here yet. A run of x's and a ``your-`` prefix
-are what every placeholder in this repository's history looks like, and a generated key looks like
-neither - four x's in a row is a one-in-a-million accident in a random 32-character key, and the
+are what every placeholder in this repository's history looks like, Cloudflare's published Turnstile
+test keys (which pass or fail every token) share one shape of their own, and a generated key looks
+like none of them - four x's in a row is a one-in-a-million accident in a random 32-character key, and the
 refusal tells its holder to generate another.
 """
 
@@ -45,6 +46,9 @@ _PLACEHOLDER_SHAPES = (
     re.compile(r"xxxx", re.IGNORECASE),
     re.compile(r"^your[-_ ]", re.IGNORECASE),
     re.compile(r"^<.*>$"),
+    # Cloudflare's published Turnstile test keys (``1x0000000000000000000000000000000AA`` and its
+    # kin): a digit, an ``x``, a run of zeros, two letters. Each passes or fails every token.
+    re.compile(r"^\dx0{20,}[A-Za-z]{2}$"),
 )
 
 

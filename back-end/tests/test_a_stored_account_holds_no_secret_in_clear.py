@@ -108,7 +108,6 @@ def test_no_mailed_reset_link_is_stored_in_clear(client, users, outbox, clock, e
 
 def test_no_mailed_verification_link_is_stored_in_clear(client, users, outbox, clock,
                                                          monkeypatch):
-    monkeypatch.setattr(UsersApi, "verify_recaptcha", lambda *_a: (True, 0.9))
     signed_up = _post(client, "/register", {"email": "fixture-new-organizer@example.com",
                                             "password": "fixture-password-1",
                                             "captcha_token": "fixture-captcha"})
@@ -126,7 +125,6 @@ def test_no_mailed_verification_link_is_stored_in_clear(client, users, outbox, c
 def test_no_secret_of_any_kind_is_stored_in_clear_together(client, users, outbox, clock,
                                                             monkeypatch):
     """Every mail an account can be sent, asked for in turn, leaves none of them readable."""
-    monkeypatch.setattr(UsersApi, "verify_recaptcha", lambda *_a: (True, 0.9))
     asked = [
         ("/register", {"email": "fixture-new-organizer@example.com",
                        "password": "fixture-password-1", "captcha_token": "fixture-captcha"}),

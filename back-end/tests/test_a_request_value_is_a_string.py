@@ -312,7 +312,6 @@ class TestRegistration:
         self, client, users, monkeypatch, field, value,
     ):
         collection = users()
-        monkeypatch.setattr(UsersApi, "verify_recaptcha", lambda *_a: (True, 0.9))
         monkeypatch.setattr(UsersApi, "send_verification_email", lambda *_a: True)
         body = {
             "email": "someone-new@example.com", "password": NEW_PASSWORD,
@@ -337,12 +336,27 @@ class TestApplicantSignIn:
     def test_a_code_asked_for_an_address_that_is_not_a_string_gets_the_one_answer(
         self, client, email,
     ):
-        missing = client.post(self.REQUEST_CODE, json={})
+        missing = client.post(self.REQUEST_CODE, json={"captcha_token": "test-human-check"})
 
-        response = client.post(self.REQUEST_CODE, json={"email": email})
+        response = client.post(
+            self.REQUEST_CODE, json={"email": email, "captcha_token": "test-human-check"})
 
         assert (response.status_code, response.get_json()) == (
             missing.status_code, missing.get_json())
+
+    @pytest.mark.parametrize("token", NOT_STRINGS)
+    def test_a_human_check_token_that_is_not_a_string_is_asked_for_as_a_missing_one(
+        self, client, human_check, token,
+    ):
+        missing = client.post(self.REQUEST_CODE, json={"email": FIXTURE_EMAIL})
+
+        response = client.post(
+            self.REQUEST_CODE, json={"email": FIXTURE_EMAIL, "captcha_token": token})
+
+        assert response.status_code == 403
+        assert (response.status_code, response.get_json()) == (
+            missing.status_code, missing.get_json())
+        assert human_check.actions == ["vendor-sign-in", "vendor-sign-in"]
 
     @pytest.mark.parametrize("field", ["email", "code"])
     @pytest.mark.parametrize("value", NOT_AN_ADDRESS)

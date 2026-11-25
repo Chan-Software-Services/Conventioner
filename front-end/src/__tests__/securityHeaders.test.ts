@@ -61,23 +61,14 @@ describe('the headers vercel.json sends on every path', () => {
   });
 
   it('list every source the app loads from', () => {
-    expect(policy().get('script-src')).toEqual([
-      "'self'",
-      'https://www.google.com/recaptcha/',
-      'https://www.gstatic.com/recaptcha/',
-    ]);
+    // The human check's script and frame, as Cloudflare's CSP reference lists them for Turnstile;
+    // it asks nothing of connect-src (T539).
+    expect(policy().get('script-src')).toEqual(["'self'", 'https://challenges.cloudflare.com']);
     expect(policy().get('style-src')).toEqual(["'self'"]);
     expect(policy().get('img-src')).toEqual(["'self'", 'blob:']);
     expect(policy().get('font-src')).toEqual(["'self'"]);
-    expect(policy().get('connect-src')).toEqual([
-      "'self'",
-      'https://api.conventioner.io',
-      'https://www.google.com/recaptcha/',
-    ]);
-    expect(policy().get('frame-src')).toEqual([
-      'https://www.google.com/recaptcha/',
-      'https://recaptcha.google.com/recaptcha/',
-    ]);
+    expect(policy().get('connect-src')).toEqual(["'self'", 'https://api.conventioner.io']);
+    expect(policy().get('frame-src')).toEqual(['https://challenges.cloudflare.com']);
   });
 
   it('let no inline code or eval run', () => {

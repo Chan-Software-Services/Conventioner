@@ -93,7 +93,7 @@ why it passes where a hand-run `pip install -r requirements-dev.txt` does not.
 The suite also uploads a real PDF floorplan, with an empty `PATH`, so it proves the Python requirements alone draw a PDF, as they must on production's Vercel function, which installs no system package.
 
 The suite covers the assignment algorithm, statistics, attendance,
-CSV import column mapping, schema generation, role validation, CAPTCHA verification/bypass, the
+CSV import column mapping, schema generation, role validation, the human check and its bypass, the
 Conventioner data model (market phases, `is_draft` computed strictly from `phase`, application
 form/status models, and backward compatibility with existing market documents), the `phase`
 backfill migration, the `applications` collection migration, the server-owned market fields
@@ -418,18 +418,28 @@ The page objects in `front-end/e2e/pages/` are these, one a line, sorted by clas
 
 ### Bypassing CAPTCHA and email in tests
 
-The registration flow is protected by reCAPTCHA v3. For local development and E2E
-runs, set `DISABLE_CAPTCHA=true` (or `1`) so `verify_recaptcha` skips verification
-and returns a passing result. The bypass defaults OFF and is honored only by a back
+The registration flow asks the human check (Cloudflare Turnstile). For local development and E2E
+runs, set `DISABLE_CAPTCHA=true` (or `1`) so `captcha_passes` passes any non-empty token
+without asking Cloudflare; a request with no token is still refused, so a screen that forgets the
+token fails on the local stack too. The bypass defaults OFF and is honored only by a back
 end that has also been told it is a local development one, with
 `ALLOW_INSECURE_LOCAL_DEV=true` (which `docker-compose.yml` sets); on anything else
 it does nothing, so a deployment that inherited it from a copied env file is not
 silently unprotected. The CI e2e job sets
 `DISABLE_CAPTCHA=true`, and `docker-compose.yml` forwards the variable to the
 back-end so `./scripts/seed_fixture.sh` and Playwright can register users without a
-real CAPTCHA token. On the front-end, `executeRecaptcha()` returns a placeholder
-token when `VITE_RECAPTCHA_SITE_KEY` is unset (as in test/dev builds), so the flow
+real Turnstile token. On the front-end, `HumanCheck` renders nothing and gives a placeholder
+token when `VITE_TURNSTILE_SITE_KEY` is unset (as in test/dev builds), so the flow
 still reaches the back-end where the `DISABLE_CAPTCHA` bypass applies.
+
+In the back-end suite, every test outside `tests/real_mongo/` runs with the autouse `human_check` fixture
+(`back-end/tests/conftest.py`) in place of `captcha_passes`: it passes any non-empty token and
+refuses an absent one, as the local stack does, records each check's action in `actions`, and
+refuses every token once a test sets `refuse = True`. A test whose request needs a token sends
+`"captcha_token": "test-human-check"`. Only a module marked `real_human_check`
+(`test_captcha.py`, `test_a_code_request_asks_the_human_check.py`) meets the real function, with Cloudflare stood in for by a fake
+`requests.post`.
+The real-MongoDB package names `human_check` again with no stand-in, since its harness refuses a test's object left in a back-end module and none of its tests reaches the check.
 
 Similarly, set `DISABLE_EMAIL=true` (or `1`) so the Resend-backed
 `send_verification_email`, `send_account_exists_email`, `send_password_reset_email`,

@@ -1,4 +1,5 @@
 import { test, expect, BACKEND_URL, TEST_USER, VendorPage } from './fixtures';
+import { HUMAN_CHECK_TOKEN } from './helpers/humanCheck';
 import { vendorPagePath } from './helpers/marketScreens';
 import {
   seedApplicantMarket,
@@ -78,7 +79,7 @@ test.describe('Public applicant login - anti-oracle', () => {
 
     const knownRes = await request.post(
       `${BACKEND_URL}/public/markets/${market.marketSlug}/applicant-login/request-code`,
-      { data: { email: applicantEmail } },
+      { data: { email: applicantEmail, captcha_token: HUMAN_CHECK_TOKEN } },
     );
     expect(knownRes.status()).toBe(200);
     const knownBody = await knownRes.json();
@@ -86,7 +87,7 @@ test.describe('Public applicant login - anti-oracle', () => {
     // Same call for an email that has never applied.
     const unknownRes = await request.post(
       `${BACKEND_URL}/public/markets/${market.marketSlug}/applicant-login/request-code`,
-      { data: { email: unknownEmail } },
+      { data: { email: unknownEmail, captcha_token: HUMAN_CHECK_TOKEN } },
     );
     expect(unknownRes.status()).toBe(200);
     const unknownBody = await unknownRes.json();

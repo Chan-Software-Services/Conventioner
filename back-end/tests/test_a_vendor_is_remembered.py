@@ -107,7 +107,8 @@ def client():
 
 def _sign_in(client, remember=None, slug=SLUG, email=VENDOR):
     assert client.post(
-        f"/public/markets/{slug}/applicant-login/request-code", json={"email": email},
+        f"/public/markets/{slug}/applicant-login/request-code",
+        json={"email": email, "captcha_token": "test-human-check"},
     ).status_code == 200
     body = {"email": email, "code": CODE}
     if remember is not None:
