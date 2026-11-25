@@ -14,6 +14,7 @@ import { FULL_NAME_KEY, PREFERRED_NAME_KEY } from '@/utils/essentialFields';
 import { MarketAction } from '@/utils/marketActions';
 import { answersRefusing } from './support/servedAnswers';
 import { toolsOf } from './support/reviewViewTools';
+import { servedReview } from './support/servedReview';
 
 const fetchMarketApplications = vi.fn();
 const reviewSelection = vi.fn();
@@ -58,6 +59,7 @@ function application(n: number, change: Partial<Application> = {}): Application 
     marketId: 'm1',
     applicantEmail: `vendor-${pad(n)}@market.test`,
     status: ApplicationStatus.Open,
+    ...servedReview('open'),
     formData: { [FULL_NAME_KEY]: `Person ${pad(n)}` },
     submittedAt: `2026-09-15T14:20:18.${pad(n)}Z`,
     ...change,
@@ -262,7 +264,10 @@ describe('the count line and the first page', () => {
     fetchMarketApplications.mockResolvedValue([
       ...many(110),
       ...many(249).map((app, at) =>
-        application(at + 111, { status: ApplicationStatus.ReviewerApproved }),
+        application(at + 111, {
+          status: ApplicationStatus.ReviewerApproved,
+          ...servedReview('approved'),
+        }),
       ),
     ]);
     route.query = { status: 'undecided' };
@@ -327,7 +332,7 @@ describe('the place in the list', () => {
   it('holds through a Refresh that changes a row', async () => {
     const wrapper = await onTheSecondPage();
     fetchMarketApplications.mockResolvedValue([
-      application(1, { status: ApplicationStatus.ReviewerApproved }),
+      application(1, { status: ApplicationStatus.ReviewerApproved, ...servedReview('approved') }),
       ...many(120).slice(1),
     ]);
     toolsOf(wrapper).refresh();

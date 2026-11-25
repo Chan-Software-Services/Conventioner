@@ -19,6 +19,7 @@ from typing import Any, Dict, Iterable, List, Optional
 from urllib.parse import quote
 
 import api.applications as ApplicationsApi
+import application_status as ReviewState
 import assignment.lifecycle as Lifecycle
 from assignment.utils import convert_keys_to_camel_case
 from datatypes import ApplicationStatus, IntakeMode, Market, MarketPhase
@@ -585,8 +586,10 @@ class ResultsNotPublishedGuard:
 class AllApplicationsReviewedGuard:
     """Every application must be approved or rejected before assignment can begin.
 
-    No application may still be ``open``, ``under_review`` or ``needs_follow_up`` -- the review
-    phase must have reached a verdict on every single one.
+    No application may still be open or need a follow-up, whatever spelling it is stored by (a
+    missing status and ``under_review`` are open): the review phase must have reached a verdict on
+    every single one. Counted by the review state's owner (``ReviewState.undecided_counts``), so no
+    stored spelling passes it.
     """
 
     id: str = "all_applications_reviewed"
@@ -594,13 +597,7 @@ class AllApplicationsReviewedGuard:
 
     def evaluate(self, market: Market, _db) -> PreconditionResult:
         total = ApplicationsApi.count_applications_for_market(market.id)
-        unreviewed_count = ApplicationsApi.count_applications_with_any_status(
-            market.id,
-            [ApplicationStatus.OPEN.value, ApplicationStatus.UNDER_REVIEW.value],
-        )
-        following_up = ApplicationsApi.count_applications_with_any_status(
-            market.id, [ApplicationStatus.NEEDS_FOLLOW_UP.value],
-        )
+        unreviewed_count, following_up = ReviewState.undecided_counts(market.id)
         if unreviewed_count > 0 or following_up > 0:
             waiting = []
             if unreviewed_count:

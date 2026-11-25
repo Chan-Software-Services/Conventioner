@@ -18,6 +18,7 @@ describes:
   - back-end/migrations/migrate_owed_day_state.py
   - back-end/host_limits.py
   - back-end/organizer_sessions.py#ensure_organizer_session_indexes
+  - back-end/migrations/migrate_application_status.py
 verified: 2026-11-17
 sources:
   - E32/F03/S03
@@ -36,6 +37,7 @@ sources:
   - T315
   - T317
   - T335
+  - T452
 ---
 
 # Operations
@@ -210,13 +212,20 @@ The release carrying T335 stores each owed table-day's state ([payments](impleme
 It also drops each amount an Admin set on a day the vendor no longer holds, which no line shows, and records an `owed_dropped` entry in the market's history for each, naming the amount and who set it (Daniel's choice, T335).
 Until it runs, that release reads each record from the fields the release before wrote, so nothing refuses to boot and nothing a vendor's Payment tab shows changes; until then a hidden amount is dropped, with its entry, only when its day is next seated, which is why it runs right after the deploy.
 A record that changed between the script's read and its write on three tries is listed as skipped, and running it again sets it; a record whose fields do not parse is left alone and listed by id.
+The release that serves each application's review state (T277 ticket 02) reads every stored application by the owner's rules ([the application document](implementation/data/application-document.md#the-migration)): right after it is deployed, before any organizer uses Begin assignment, and on Daniel's word, which their word to merge it gives, run `MONGODB_URI='<URI>' .venv/bin/python migrations/migrate_application_status.py --dry-run` ([`migrate_application_status.py`](../back-end/migrations/migrate_application_status.py)), then without `--dry-run`, and again after any roll-forward past a rollback.
+Its first lines count the applications of the live markets in each stored status, missing ones included: run with `--dry-run`, that is the read-only count of production decision 9.6 of T277's report asks for, before any write.
+It then names each application it would change by market id and application id, never an address, says what it would store (a status, an origin, a mark for the deal), and counts them.
+Until it runs, that release reads each application as the migration would store it, so nothing refuses to boot, and a screen shows one thing differently: an application stored with no status (missing, null or empty) counts as open for Begin assignment's guard and for the Stats tab's "open to review", while no list serves it, so the guard holds that market with "Finish deciding" and nobody can decide the application it counts.
+The migration stores `open` on it, which is why it runs before any organizer uses Begin assignment.
+What running it changes is that the next deal on each market deals the applications it found waiting for the deal, which the market's history reads as dealt ", having waited for the deal".
+An application that changed between the script's read and its write on three tries is listed as skipped, and running it again sets it; one whose status no state names, or whose old status would read as another state, is left alone and listed by id.
 
 ### Swapping the names of two locations
 
 A market past Draft whose sections were set up under each other's location name is put right by [`swap_location_names.py`](../back-end/migrations/swap_location_names.py), since the app refuses the rename once [the setup has settled](business/rules/the-setup-settles-on-leaving-draft.md).
 It trades the two locations' names in the plan, in each section's copy of its location and in each stored seat's copy, and keeps every id, so a layout stays on its location under the new name.
 It needs no deploy: it changes one market's document and adds one history entry, of a kind the running release already reads.
-Run it from `back-end/` in a checkout that holds the script and whose `back-end/` otherwise equals production's, so the plan's fingerprint is computed as that release computes it: `git diff <production's commit> HEAD -- back-end ':!back-end/tests'` lists the script alone, or it and [`rename_location.py`](../back-end/migrations/rename_location.py), the operator's script below, which the swap does not read.
+Run it from `back-end/` in a checkout that holds the script and whose `back-end/` otherwise equals production's, so the plan's fingerprint is computed as that release computes it: `git diff <production's commit> HEAD -- back-end ':!back-end/tests'` lists the script alone, or it beside [`rename_location.py`](../back-end/migrations/rename_location.py) and [`history_follows_location_swap.py`](../back-end/migrations/history_follows_location_swap.py), the operator's scripts below, which the swap does not read.
 **Run it while no organizer is working on the market**: a seat assigned, freed or swapped by hand from a read just before the swap is not refused, since the assignment's revision is left unmoved, and puts every seat back under the old names over the swapped plan.
 Take a `mongodump` first ([backups](#backups-and-restoring)), then:
 
@@ -245,8 +254,30 @@ That entry is a second write, after the swap: if it fails, the names stand swapp
 That line counts every Market Setup change with no actor, so it also counts each run of `rename_location.py` ([below](#giving-a-location-a-new-name)).
 Do not run again to repair it, since that swaps back.
 The market's history keeps the names as they were when each entry was recorded, in three kinds of entry: a layout's save (`floorplan`) and a layout removed with its location (`floorplan_removed`), whose sentence in Manage market names the location, and a change on Market Setup (`plan`), whose detail holds the locations and sections before and after.
-None is rewritten, by Daniel's choice, for a later fix: a layout's save recorded before the swap still names its location by the old name, and the script prints how many of the first two kinds name either location.
+The swap rewrites none of them, and prints how many of the first two kinds name either location: a layout's save recorded before the swap still names its location by the old name, which now means the other place, until the step [below](#renaming-the-older-layout-lines-after-a-swap) renames those lines.
 It prints the market's id, the two locations' names, their sections' names and counts, never a vendor's name or address and no other location's name; that is of what it prints, not of the history entry.
+
+### Renaming the older layout lines after a swap
+
+Right after each run of the swap above, [`history_follows_location_swap.py`](../back-end/migrations/history_follows_location_swap.py) renames the market's older layout lines, so that each names the place it was about: each layout's save (`floorplan`) of either location takes the name that location has now, and Manage market reads it so.
+It reads a line's place by id, from its layout: the line names its layout (`subject.floorplan_id`), and a layout stays on the location it was started on until it is removed with it.
+So a line is right after any number of swaps, of the two or with a third location, and a line of either location recorded before an ordinary rename of it, by [`rename_location.py`](#giving-a-location-a-new-name) or on Market Setup in draft, now shows the name it has now too.
+Left as written: a change on Market Setup (`plan`), the record of what the plan said when it was saved; a layout removed with its location (`floorplan_removed`), which is about a location no longer in the plan, so never either of the two; a line whose layout is no longer in the plan, or on another location; and every other kind of entry.
+It needs no deploy; of the market's document it reads the plan alone, and it writes the history alone, so an organizer working on the market meanwhile is not in its way.
+Run it from `back-end/` in the checkout the swap ran from:
+
+```bash
+MONGODB_URI='<URI>' .venv/bin/python migrations/history_follows_location_swap.py <market-id> '<location>' '<location>' --dry-run   # writes nothing
+MONGODB_URI='<URI>' .venv/bin/python migrations/history_follows_location_swap.py <market-id> '<location>' '<location>'
+```
+
+Each location is named by its id or its exact name as it is now.
+The dry run prints the market's id, the two locations' ids, how many trades of their names the history records, and how many of their layouts' lines it would rename and how many a run before renamed: counts only, never a name.
+**A second run changes nothing**: each line keeps the name it was recorded under beside it, as `subject.location_as_recorded`, and is given the name its location has now.
+So it is run again after any later swap, and after a swap back each line recorded before the first swap reads as it was recorded.
+It refuses, exiting 1 with nothing written: a market it does not find, a location it does not find or that has no stored id, one location named twice, and a history that records no trade of the two names, by the swap or on Market Setup; its docstring lists each.
+Each line is its own write, held to the name it was read under; if one changed between the read and the write, it says how many it renamed of how many it meant to and exits 1, and running it again renames the rest.
+It records nothing in the history: the name as recorded stays on the line.
 
 ### Giving a location a new name
 

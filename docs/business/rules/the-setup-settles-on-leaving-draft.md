@@ -15,6 +15,7 @@ describes:
   - back-end/layout.py#count_refusal
   - back-end/migrations/swap_location_names.py
   - back-end/migrations/rename_location.py
+  - back-end/migrations/history_follows_location_swap.py
 verified: 2026-11-19
 sources:
   - wayfinding/the-order-of-the-work/03
@@ -88,7 +89,8 @@ A Google Form market settles when its first import is written, which is when it 
 - `back-end/tests/test_the_setup_settles_on_leaving_draft.py` and `test_the_setup_is_complete_before_it_settles.py` pin both halves; `test_a_floorplan_save_keeps_the_market_readable.py` (`TestALayoutAfterDraft`) and `a-layout-after-draft.spec.ts` pin the layout's.
 - Past draft, two locations' names set up the wrong way round are traded only in the database, by an operator, with [`back-end/migrations/swap_location_names.py`](../../../back-end/migrations/swap_location_names.py) ([how it is run](../../OPERATIONS.md#swapping-the-names-of-two-locations)).
   It rewrites each copy of the names the market's pages read as the name now, all on the market's document: the plan's locations, each section's copy of its location, each stored seat's `location`, and the allocation's fingerprint of the plan (`madeFrom.plan`), carried over only where it matched the plan as read.
-  The market's history holds the names too, as they were when each entry was recorded (`floorplan`, `floorplan_removed` and `plan` entries), and is left as written, for a later fix: the script counts the first two kinds naming either location and rewrites none.
+  The market's history holds the names too, as they were when each entry was recorded (`floorplan`, `floorplan_removed` and `plan` entries), and the swap rewrites none of them: it counts the first two kinds naming either location.
+  Run after it, [`back-end/migrations/history_follows_location_swap.py`](../../../back-end/migrations/history_follows_location_swap.py) ([how](../../OPERATIONS.md#renaming-the-older-layout-lines-after-a-swap)) renames each layout's save of the two locations to the name its location has now, read by id from the layout the line names, keeping the name as recorded beside it, and leaves each `floorplan_removed` entry, about a location no longer in the plan, and each `plan` entry, the record of what the plan said, as written; `back-end/tests/test_history_follows_location_swap.py` pins it.
   A run records itself there as one `plan` entry with no actor ([the market's history](../../implementation/data/history.md#what-each-write-records)).
   It keeps every id, so a layout stays on its location, and it leaves the assignment's `revision`, so published results do not read as changed, while it counts the plan's; `back-end/tests/test_swap_location_names.py` pins it.
 - Past draft, one location is given a new name only in the database, by an operator, with [`back-end/migrations/rename_location.py`](../../../back-end/migrations/rename_location.py) ([how it is run](../../OPERATIONS.md#giving-a-location-a-new-name)).

@@ -7,7 +7,7 @@ describes:
   - front-end/src/components/UpdateInfoTheirs.vue
   - front-end/src/components/AnswerUpdateNote.vue
   - front-end/src/utils/answerUpdates.ts
-verified: 2026-11-17
+verified: 2026-11-18
 sources:
   - E41/F01/S01
   - E41/F01/S02
@@ -65,7 +65,7 @@ The names and the request are [essential questions](../concepts/essential-questi
 
 ## Where it is kept
 
-The write is [`back-end/api/vendor_info.py`](../../../back-end/api/vendor_info.py), sent by the drawer through `updateVendorInfo` in [`answerUpdates.ts`](../../../front-end/src/utils/answerUpdates.ts), which also holds the words above.
+The write is [`back-end/api/vendor_info.py`](../../../back-end/api/vendor_info.py), which answers the application as the organizer reads it, its [review state](../../implementation/data/application-document.md#the-served-review-state) included, sent by the drawer through `updateVendorInfo` in [`answerUpdates.ts`](../../../front-end/src/utils/answerUpdates.ts), which also holds the words above.
 How an update is stored and the one reader of the answers: [the application document](../../implementation/data/application-document.md#an-organizers-update-of-an-answer).
 What it records: [the market's history](../../implementation/data/history.md#what-each-write-records).
 `back-end/tests/test_updating_vendor_info.py`, `back-end/tests/test_updating_answers_the_assignment_reads.py`, `back-end/tests/test_the_price_answers.py`, `front-end/src/__tests__/updatingVendorInfo.test.ts`, `front-end/src/__tests__/aVerdictAfterAnUpdateInTheDrawer.test.ts`, `front-end/e2e/updating-vendor-info.spec.ts`, `front-end/e2e/an-answer-update-moves-the-answers-version.spec.ts`, `front-end/e2e/updating-answers-the-assignment-reads.spec.ts` and `front-end/e2e/the-price-answers.spec.ts` pin it.

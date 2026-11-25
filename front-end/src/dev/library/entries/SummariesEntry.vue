@@ -71,7 +71,7 @@ const OUTCOME_OF: Record<DiscordShown, RoleOutcome> = {
   no_username: 'no_username',
   check_again: 'not_yet',
 };
-const approved = applications.filter(({ status }) => status === 'reviewer_approved');
+const approved = applications.filter(({ review }) => review.state === 'approved');
 const RAN_AT = '2026-10-31T12:00:00+00:00';
 const NOW = Date.parse('2026-10-31T12:05:00+00:00');
 function runOver(vendors: typeof applications): DiscordRoleRun {

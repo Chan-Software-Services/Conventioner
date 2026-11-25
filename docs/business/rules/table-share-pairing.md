@@ -7,7 +7,7 @@ describes:
   - back-end/essential_fields.py#partner_addresses
   - back-end/migrations/migrate_table_share_answer.py
   - back-end/api/applicants.py#list_market_applications
-verified: 2026-10-30
+verified: 2026-11-18
 sources:
   - wayfinding/v0-1-0/01
   - wayfinding/november-2026-dry-run/08
@@ -28,7 +28,7 @@ One-way is enough, a person's own request outranks one about them, and an answer
 ## The rule
 
 - **Both must exist**, identified by address, and both must accept a half table: half or either, never a whole table only.
-  A rejected or withdrawn applicant takes no part, so a request naming them pairs nobody.
+  A rejected or withdrawn applicant takes no part, so a request naming them pairs nobody: a rejection of either kind, a person's or an automatic one, read by the review state's one rule, so no stored spelling of one takes part.
 - **Naming nobody is normal**: the question is optional, and an applicant who names nobody and takes a half table shares it with whoever else takes one.
 - **One-way is enough**: A naming B pairs them whether or not B named anyone, and from either end, so the one named may be reached first.
 - **A person's own request outranks a request about them**: if A names B and B names C, B's stands, and A's gives way; along a chain the requests alternate from its end.

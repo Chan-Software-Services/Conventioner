@@ -508,7 +508,8 @@ test.describe('the Payments page', () => {
   /**
    * What stays pinned as the page scrolls, in px from the window's top: the app bar's bottom, the
    * market bar's top and bottom, the rail's bottom, the toolbar's top and bottom, the frame's
-   * measured `--market-frame-h` and how far the page scrolled.
+   * measured `--market-frame-h` and how far the page scrolled. The frame's height is published
+   * unrounded, so it is compared with the bar's and the whole block's unrounded heights.
    */
   async function pinnedParts(page: Page) {
     return page.evaluate(() => {
@@ -524,6 +525,11 @@ test.describe('the Payments page', () => {
         rail: edges('[data-testid="phase-rail"]').bottom,
         toolbar: edges('.payments-toolbar'),
         frameHeight: parseFloat(card.style.getPropertyValue('--market-frame-h')),
+        barHeight: document.querySelector('[data-testid="market-bar"]')!.getBoundingClientRect()
+          .height,
+        blockHeight:
+          document.querySelector('.payments-toolbar')!.getBoundingClientRect().bottom -
+          document.querySelector('.app-container > header')!.getBoundingClientRect().bottom,
         scrolled: Math.round(window.scrollY),
       };
     });
@@ -567,8 +573,9 @@ test.describe('the Payments page', () => {
           );
         }
         expect(pinned.bottom, `${at}: pinned to the bottom of ${pinned.el}`).toBe(parts.bar.bottom);
-        expect(parts.frameHeight, `${at}: the measured frame is the bar`).toBe(
-          parts.bar.bottom - parts.bar.top,
+        expect(parts.frameHeight, `${at}: the measured frame is the bar`).toBeCloseTo(
+          parts.barHeight,
+          2,
         );
       } else {
         expect(parts.rail, `${at}: the rail stays`).toBe(top.rail);
@@ -577,8 +584,9 @@ test.describe('the Payments page', () => {
         expect(pinned.bottom, `${at}: pinned to the bottom of ${pinned.el}`).toBe(
           parts.toolbar.bottom,
         );
-        expect(parts.frameHeight, `${at}: the measured frame is the whole block`).toBe(
-          parts.toolbar.bottom - parts.appBar,
+        expect(parts.frameHeight, `${at}: the measured frame is the whole block`).toBeCloseTo(
+          parts.blockHeight,
+          2,
         );
       }
     }

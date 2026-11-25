@@ -6,19 +6,78 @@ import {
   type Application,
   type ApplicationForm,
 } from '@/assets/types/datatypes';
-import { asksNothingDistinguishing, inArrivalOrder, reviewAnswers } from '@/utils/reviewQueue';
+import {
+  ALL_VIEW_FILTERS,
+  allViewLists,
+  asksNothingDistinguishing,
+  followUps,
+  inArrivalOrder,
+  queueCountWord,
+  reviewAnswers,
+  reviewed,
+  reviewQueue,
+} from '@/utils/reviewQueue';
+import { servedReview } from './support/servedReview';
 
-function application(formData: Record<string, unknown>): Application {
+function application(
+  formData: Record<string, unknown>,
+  status: string = ApplicationStatus.Open,
+  served = servedReview('open'),
+  id = 'app-1',
+): Application {
   return {
-    id: 'app-1',
+    id,
     marketId: 'market-1',
     applicantEmail: 'vendor@example.com',
     formData,
-    status: ApplicationStatus.Open,
+    status: status as ApplicationStatus,
     applicationType: ApplicationType.Main,
     updatedAt: '2026-01-01T00:00:00Z',
+    ...served,
   };
 }
+
+/**
+ * The review reads the state the server serves (ADR 0037), never the stored status: each of these
+ * is stored at a status the old readers took for another state, or for none.
+ */
+describe('the queue, the follow-ups and the reviewed list read the served state', () => {
+  const stored = [
+    // Stored with no status before the migration: the server serves it as open.
+    application({}, '', servedReview('open'), 'no-status'),
+    application({}, ApplicationStatus.Open, servedReview('open'), 'open'),
+    application({}, ApplicationStatus.NeedsFollowUp, servedReview('follow_up'), 'follow-up'),
+    // The old offers flow's statuses: the approval and the rejection they carried.
+    application({}, ApplicationStatus.AssignmentSent, servedReview('approved'), 'sent'),
+    application({}, ApplicationStatus.Cancelled, servedReview('rejected'), 'cancelled'),
+  ];
+  const ids = (apps: Application[]) => apps.map((a) => a.id);
+
+  it('walks every open one, whatever its stored spelling, and the follow-ups when asked', () => {
+    expect(ids(reviewQueue(stored, false))).toEqual(['no-status', 'open']);
+    expect(ids(reviewQueue(stored, true))).toEqual(['no-status', 'open', 'follow-up']);
+    expect(ids(followUps(stored))).toEqual(['follow-up']);
+  });
+
+  it('lists exactly the decided as reviewed', () => {
+    expect(ids(reviewed(stored))).toEqual(['sent', 'cancelled']);
+  });
+
+  it('counts a stretch in the words of the states it holds', () => {
+    expect(queueCountWord(reviewQueue(stored, false))).toBe('open');
+    expect(queueCountWord(followUps(stored))).toBe('needing a follow-up');
+    expect(queueCountWord(reviewQueue(stored, true))).toBe('open or needing a follow-up');
+  });
+
+  it('lists each state under the one All view filter of its name, and every state under Any', () => {
+    const listing = (state: Application['review']['state']) =>
+      ALL_VIEW_FILTERS.filter(({ id }) => allViewLists(id, state)).map(({ label }) => label);
+    expect(listing('open')).toEqual(['Any status', 'Open']);
+    expect(listing('follow_up')).toEqual(['Any status', 'Needs follow-up']);
+    expect(listing('approved')).toEqual(['Any status', 'Approved']);
+    expect(listing('rejected')).toEqual(['Any status', 'Rejected']);
+  });
+});
 
 function form(fields: Array<{ key: string; label: string }>): ApplicationForm {
   return {
