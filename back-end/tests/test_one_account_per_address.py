@@ -116,7 +116,6 @@ class TestRegistering:
     def register(self, monkeypatch):
         sent = SimpleNamespace(verification=[], account_exists=[])
         hashed = []
-        monkeypatch.setattr(UsersApi, "verify_recaptcha", lambda *_a: (True, 0.9))
         monkeypatch.setattr(UsersApi, "send_verification_email",
                             lambda email, _t: sent.verification.append(email) or True)
         monkeypatch.setattr(UsersApi, "send_account_exists_email",

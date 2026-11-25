@@ -98,8 +98,7 @@ def signed_in(monkeypatch):
 
 
 @pytest.fixture
-def captcha_passes(monkeypatch):
-    monkeypatch.setattr(UsersApi, "verify_recaptcha", lambda *_a: (True, 0.9))
+def mail_sends(monkeypatch):
     monkeypatch.setattr(UsersApi, "send_verification_email", lambda *_a: True)
 
 
@@ -117,7 +116,7 @@ class TestANewAccount:
         assert not hasattr(UsersApi, "register_user")
 
     def test_registering_with_a_captcha_starts_the_account_in_no_organization(
-        self, client, users, captcha_passes,
+        self, client, users, mail_sends,
     ):
         response = client.post("/register", json={
             "email": FIXTURE_EMAIL, "password": FIXTURE_PASSWORD, "captcha_token": "t",
@@ -129,7 +128,7 @@ class TestANewAccount:
         assert stored["organizations"] == []
 
     def test_signing_in_reads_back_no_organization_the_registration_named(
-        self, client, users, captcha_passes,
+        self, client, users, mail_sends,
     ):
         client.post("/register", json={
             "email": FIXTURE_EMAIL, "password": FIXTURE_PASSWORD, "captcha_token": "t",
@@ -142,10 +141,11 @@ class TestANewAccount:
         )
 
         assert response.status_code == 200
-        assert response.get_json()["user_data"]["organizations"] == []
+        # The account's copy of its organizations is read by nothing, the sign-in included (T583).
+        assert set(response.get_json()["user_data"]) == {"id", "email"}
 
     @pytest.mark.parametrize("body", NOT_OBJECTS)
-    def test_a_body_that_is_not_an_object_is_refused(self, client, users, captcha_passes, body):
+    def test_a_body_that_is_not_an_object_is_refused(self, client, users, mail_sends, body):
         response = send_json(client, "post", "/register", body)
 
         assert response.status_code == 400

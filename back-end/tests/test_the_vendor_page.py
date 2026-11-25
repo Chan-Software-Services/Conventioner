@@ -397,7 +397,7 @@ def auth_markets(monkeypatch):
 class TestTheSignInUsesTheGate:
     def _request_code(self, slug):
         with Flask(__name__).test_request_context(
-            "/", method="POST", json={"email": VENDOR},
+            "/", method="POST", json={"email": VENDOR, "captcha_token": "test-human-check"},
         ):
             body, status = ApplicantAuthApi.request_login_code(slug)
         return body.get_json(), status

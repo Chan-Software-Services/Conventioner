@@ -8,6 +8,7 @@ describes:
 verified: 2026-11-13
 sources:
   - T311
+  - T539
 status: accepted
 ---
 
@@ -47,3 +48,4 @@ The kinds, their life and their waits, and the table, are in [users, and the one
 - A code request costs one write before the mail and one after it; the code sign-in costs one more read for the release, the read that finds legacy fields.
 - A state no row of the table names cannot be written, so a later change to how a secret lives is a change to the table and its test.
 - An E2E spec cannot read a secret out of MongoDB: it plants one it knows, as the mail would carry it (`front-end/e2e/helpers/accountSecrets.ts`).
+- A code's wait holds whoever spent its tries: anyone may ask for an organizer's code, which mails it to the organizer, and use up its five tries, and the code sign-in then waits out the hour, while the password and the reset link stay open; kept so, since the wait bounds guesses at a six-digit code to five an hour ([ADR 0046](0046-a-sign-in-limit-never-shuts-out-the-person-it-protects.md)).

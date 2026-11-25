@@ -324,7 +324,7 @@ def _account(email):
         return None
     return SimpleNamespace(
         id=ACCOUNTS[email], email=email, is_active=True, is_authenticated=True,
-        is_anonymous=False, organizations=[], get_id=lambda e=email: e,
+        is_anonymous=False, get_id=lambda e=email: e,
     )
 
 

@@ -330,16 +330,16 @@ def check_public_endpoint_defenses() -> PublicEndpointDefenses:
     """Refuse to boot without the configuration this app's public surface rests on.
 
     The signup, verification, password-reset and OTP endpoints are unauthenticated, they write to
-    the database, and they send mail from this domain. What keeps a script off them is a reCAPTCHA
-    secret; what makes the session cookie they hand back mean anything is a signing secret; what
+    the database, and they send mail from this domain. What keeps a script off them is the human
+    check's Turnstile secret; what makes the session cookie they hand back mean anything is a signing secret; what
     decides which websites may spend that cookie against the organizer API is the browser origin
     list; what carries every mail by which an organizer account is ever reached is a mail key, sent
     from ``FROM_EMAIL`` with links to ``FRONTEND_URL``; what says where that session is kept at all,
     which has no answer that is right for both a container and a serverless function, is
-    ``SESSION_TYPE``; and what decides whose address the captcha is actually scored against, when
+    ``SESSION_TYPE``; and what decides whose address the sign-in limits count each caller by, when
     something the deployment owns sits in front of Flask, is ``TRUSTED_PROXY_HOPS``.
 
-    Some fail *silently* when unset: the captcha passes everybody, a session cookie signed with a
+    Some fail *silently* when unset: the human check passes everybody, a session cookie signed with a
     key the repository publishes is a session anyone can forge, and a credentialed CORS policy with
     no origin list hands the organizer API to every website an organizer visits. The mail key, the
     two mail addresses and the session backend are here for the mirror-image reason - unset, the key
@@ -348,8 +348,8 @@ def check_public_endpoint_defenses() -> PublicEndpointDefenses:
     serverless deployment looking for a disk it does not have, failing at import and naming nothing
     either - and a variable whose absence has to be diagnosed one broken deployment at a time
     belongs in the same refusal as the ones whose absence is never diagnosed at all. The hop count
-    is the quietest of all: unset behind a proxy, every signup in the world is reported to Google as
-    coming from one address, and a reCAPTCHA score is the only place it ever shows. As with the
+    is the quietest of all: unset behind a proxy, every caller in the world is counted as one
+    address, and one caller's limit is the only place it ever shows. As with the
     market-key migration above, an unknown state is never taken for a safe one: it fails at boot,
     naming the variables, rather than in production, naming nothing.
 

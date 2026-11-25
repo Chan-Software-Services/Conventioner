@@ -11,7 +11,7 @@ applications collection, as whoever is signed in.
 So the origin list is configuration, not a default, and there is no wildcard: a credentialed wildcard
 is not a permissive setting, it is the absence of the control. ``CORS_ALLOWED_ORIGINS`` is the
 comma-separated list of origins that may do it, and a process that has not been told refuses to boot,
-naming the variable - the same shape as the reCAPTCHA secret and the signing secret, and for the same
+naming the variable - the same shape as the Turnstile secret and the signing secret, and for the same
 reason: this used to be keyed on ``FLASK_ENV != "production"``,
 and the repo's own image exported ``FLASK_ENV=development``, so every deployment built from it served
 the reflect-any-origin branch. A security control keyed on a variable whose default is the insecure value

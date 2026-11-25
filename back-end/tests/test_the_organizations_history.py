@@ -54,8 +54,7 @@ def history(monkeypatch):
 @pytest.fixture
 def org(monkeypatch, history):
     organizations = install_organizations(monkeypatch, FakeOrganizations({
-        "_id": "org-object-id", "id": ORG, "name": "Ember Markets", "owner": OWNER.id, "admins": [ADMIN.id],
-        "members": [MEMBER.id],
+        "_id": "org-object-id", "id": ORG, "name": "Ember Markets",
         "people": {OWNER.id: "owner", ADMIN.id: "admin", MEMBER.id: "member"},
         "markets": [], "theme": None,
     }))
@@ -195,7 +194,7 @@ class TestWhatIsRecorded:
 
         assert refused.value.message == (
             "Transfer ownership only to one of the organization's admins or members.")
-        assert org.doc["owner"] == OWNER.id and org.writes == []
+        assert org.doc["people"][OWNER.id] == "owner" and org.writes == []
         assert entries(history) == []
 
     def test_ownership_handed_to_its_own_owner_is_refused_before_anything_changes(
@@ -206,9 +205,8 @@ class TestWhatIsRecorded:
         with pytest.raises(BadRequestError):
             OrgsApi.transfer_org_ownership(ORG, OWNER.email, OWNER.email)
 
-        assert org.doc["people"] == {OWNER.id: "owner", ADMIN.id: "admin", MEMBER.id: "member"}
-        assert org.doc["owner"] == OWNER.id
-        assert org.doc["admins"] == [ADMIN.id], "the owner was added to its own admins"
+        assert org.doc["people"] == {OWNER.id: "owner", ADMIN.id: "admin", MEMBER.id: "member"}, (
+            "the owner was made an admin of its own organization")
         assert entries(history) == []
 
     def test_a_market_created_in_it_is_recorded_with_its_name(self, org, history, monkeypatch):

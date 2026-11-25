@@ -304,7 +304,15 @@ describe('a request answering after the vendor signed out', () => {
     const saving = store.saveApplication({ business_name: 'Fixture Goods' });
     await anaSignsOut(store);
     applicantApi.verifyLoginCode.mockResolvedValue({ ...BEN, token: 'ben-token' });
-    expect(await store.verifyCode('spring-market', BEN.applicantEmail, '123456')).toEqual({
+    expect(
+      await store.verifyCode(
+        'spring-market',
+        BEN.applicantEmail,
+        '123456',
+        false,
+        'a-human-check-token',
+      ),
+    ).toEqual({
       ok: true,
     });
     anasRead.refuse(unauthorized());
@@ -330,7 +338,13 @@ describe('a request answering after the vendor signed out', () => {
     const saving = store.saveApplication({ business_name: "Ana's answers" });
     await anaSignsOut(store);
     applicantApi.verifyLoginCode.mockResolvedValue({ ...BEN, token: 'ben-token' });
-    await store.verifyCode('spring-market', BEN.applicantEmail, '123456', true);
+    await store.verifyCode(
+      'spring-market',
+      BEN.applicantEmail,
+      '123456',
+      true,
+      'a-human-check-token',
+    );
     // The device remembers Ben now; Ana's ended save is not renewed at all.
     applicantApi.resumeSignIn.mockResolvedValue({ ...BEN, token: 'ben-renewed' });
     anasSave.refuse(unauthorized());
@@ -426,7 +440,13 @@ describe('a sign-in that replaces another vendor in this tab', () => {
       marketId: 'market-2',
       token: 'ben-token',
     });
-    await store.verifyCode('autumn-market', BEN.applicantEmail, '123456');
+    await store.verifyCode(
+      'autumn-market',
+      BEN.applicantEmail,
+      '123456',
+      false,
+      'a-human-check-token',
+    );
     anasSave.settle(application(ANA.applicantEmail));
 
     expect(await saving).toBeNull();

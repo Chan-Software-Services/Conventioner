@@ -35,7 +35,7 @@ describes:
   - back-end/tests/real_mongo/test_answering_an_invitation_on_the_server.py
   - back-end/tests/test_inviting_someone_to_an_organization.py
   - back-end/tests/test_answering_an_organization_invitation.py
-verified: 2026-11-24
+verified: 2026-11-25
 sources:
   - T538
 ---
@@ -197,7 +197,7 @@ A send that fails keeps the invitation and answers `"emailed": false`.
 
 ## The limits
 
-`INVITATION_PER_INVITER` (100 in 15 minutes, by the inviter's user id) and `INVITATION_PER_ADDRESS` (5 in 15 minutes, by the address), in [`back-end/sign_in_limits.py`](../../../back-end/sign_in_limits.py) and its `LIMITS`, are counted together at step 5 by `count`, before the account is looked up, so a refusal is the same for every address.
+`INVITATION_PER_INVITER` (by the inviter's user id) and `INVITATION_PER_ADDRESS` (by the address), in [`back-end/sign_in_limits.py`](../../../back-end/sign_in_limits.py) and its `LIMITS`, with their numbers in [the one table of limits](../data/users-and-email.md#the-sign-in-is-bounded), are counted together at step 5 by `count`, before the account is looked up, so a refusal is the same for every address.
 `counted_at` keeps the instant they were counted at.
 
 ## How it is tested

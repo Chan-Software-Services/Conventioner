@@ -79,6 +79,9 @@ ENTRY_HUB = "docs/README.md"
 HUBS = {ENTRY_HUB, "CONTEXT.md", "docs/USER_FLOWS.md"} | {f"{d}/README.md" for d in GRAPH_FOLDERS}
 STARTS = ("README.md", "AGENTS.md")
 SKIPPED_FILES = {"CHANGELOG.md"}
+# Files whose front matter is another format's (DESIGN.md's tokens): their links are checked, their
+# front matter never read as a node's.
+FOREIGN_FRONTMATTER = {"DESIGN.md"}
 SCRATCH = ".scratch/"
 
 KEBAB = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*\.md$")
@@ -178,15 +181,30 @@ def _unquote(value):
     return value
 
 
-def parse_frontmatter(doc):
+def _frontmatter_end(doc):
+    """The index of the line closing the front matter, else None (and an error if it never closes)."""
     lines = doc.text.split("\n")
     if not lines or lines[0].rstrip() != "---":
-        return
+        return None
     try:
-        end = next(i for i in range(1, len(lines)) if lines[i].rstrip() == "---")
+        return next(i for i in range(1, len(lines)) if lines[i].rstrip() == "---")
     except StopIteration:
         doc.meta_errors.append((1, "frontmatter has no closing ---"))
+        return None
+
+
+def skip_frontmatter(doc):
+    """Start the body after another format's front matter, which is not read: its lines are no links."""
+    end = _frontmatter_end(doc)
+    if end is not None:
+        doc.body_start = end + 2
+
+
+def parse_frontmatter(doc):
+    end = _frontmatter_end(doc)
+    if end is None:
         return
+    lines = doc.text.split("\n")
     doc.has_frontmatter = True
     doc.body_start = end + 2
     current = None
@@ -372,7 +390,10 @@ class Repo:
             if text is None:
                 continue
             doc = Doc(path, text)
-            parse_frontmatter(doc)
+            if path in FOREIGN_FRONTMATTER:
+                skip_frontmatter(doc)
+            else:
+                parse_frontmatter(doc)
             parse_markdown(doc)
             self.docs[path] = doc
 

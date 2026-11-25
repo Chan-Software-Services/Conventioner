@@ -7,7 +7,7 @@ describes:
   - back-end/api/users.py#_sign_in
   - back-end/app.py#a_legacy_remembered_account
   - back-end/tests/test_the_remember_cookie.py
-verified: 2026-11-14
+verified: 2026-11-25
 sources:
   - T311
   - T318

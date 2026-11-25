@@ -20,6 +20,7 @@ sources:
   - T251
   - T273
   - T318
+  - T539
 ---
 
 # A vendor signs in before they have applied
@@ -44,6 +45,10 @@ Telling the person who just read the code whether they have applied leaks nothin
   A failed send, a send Resend has not answered within 10 seconds among them, is logged and answered as a sent one.
   The code is six digits, kept hashed in `applicant_login_challenges` keyed by market and address, and lasts ten minutes.
   Asking again replaces it, so only the newest code works, and its count of tries starts again.
+- **Every code request asks the human check** ([ADR 0045](../../adr/0045-turnstile-is-the-one-human-check.md)), right after the caller's limit and before anything else is counted, stored or sent: the caller's limit, then the check, then the count per caller and address and the address's count by the hour ([sign-in is bounded](#sign-in-is-bounded)), then the market.
+  A request whose token is absent, refused or made for another action than `vendor-sign-in` answers one 403, `{"message": "Confirm you're a person, then try again.", "captcha": "required"}`, the same for every address and every market, real or not, and counts against the caller alone: no code is stored or sent and the address is not counted.
+  The sign-in holds one check for both its steps and sends its token as `captcha_token` with Send code and with Sign in, resetting it after each answer; asked for the check, it sends the request once more with a new token, and asked again it says "We couldn't confirm you're a person. Try again.", keeping the step.
+  Cloudflare shows its tick box only when it is unsure of the browser, so a vendor at the door usually meets no new step; a check that cannot load says so in the sign-in's error line, and a remembered vendor resumes with no check at all.
 - **Each code email's subject carries its own number**, "Your sign-in code for <market> (#<n>)", and never the code; its body says only the newest code works.
   With one subject for all, a mail client threaded the emails and buried the newest code under an older one, which a vendor then typed (T191 F22).
   The number is the challenge's `sequence`, counted by the request's upsert; it starts again once the TTL index removes an expired challenge.
@@ -75,20 +80,34 @@ Telling the person who just read the code whether they have applied leaks nothin
 ## Sign-in is bounded
 
 Each code request sends an email and each verify is a guess at a six-digit code, so an unbounded caller could use the product to flood any address with mail or keep guessing.
-**Both endpoints are rate limited per address and per caller**, every limit in one table in [`back-end/sign_in_limits.py`](../../../back-end/sign_in_limits.py): 5 code requests per address and 300 per caller, 10 verifies per address and 300 per caller, each per 15 minutes, since vendors on one venue's wifi share a caller.
+**Both endpoints are rate limited**: a code request per caller, per caller and address, and per address alone by the hour (`request-code:*`); a verify per caller, per caller and address, and per address alone, past whose count it asks the human check (`verify-code:*`).
+Every limit is in [`back-end/sign_in_limits.py`](../../../back-end/sign_in_limits.py), and its number in [the one table of limits](../../implementation/data/users-and-email.md#the-sign-in-is-bounded), never copied here.
+A caller is allowed far more than an address, since vendors on one venue's wifi share a caller.
 A refused attempt still counts.
-So at most 10 guesses per address per 15 minutes reach a six-digit code, however many codes are asked for, and each code takes at most five of them.
-A resume is counted per caller only, 300 per 15 minutes (`resume:caller`), before the cookie is read: its secret is 32 random bytes, so the limit bounds the work a caller asks of the database, not a guess.
+A code request is counted per caller and address, so in a quarter hour one caller's requests for an address leave every other caller's requests for it as they were; the address's own count by the hour, which a few callers together fill, bounds the codes one inbox is sent, whoever asks, so a vendor who asks again from a second network is never near it.
+A request the pair refused is not counted on the address, so one caller adds to it at most the pair's count in each quarter hour.
+A verify is counted the same two ways (`SecretBounds` in `sign_in_limits.py`), so no one else's wrong codes refuse a vendor's right one ([ADR 0046](../../adr/0046-a-sign-in-limit-never-shuts-out-the-person-it-protects.md)).
+The pair's count bounds one caller's guesses at an address and is the only count that says to wait; the address's own count, which only many callers together reach, asks the human check instead, which the vendor's sign-in already sends with every Sign in, so a vendor sees nothing new.
+A try refused for want of the check is taken back from the pair and the address, a try the pair refused is not counted on the address, and a right code is taken back from all three, so only wrong codes pile up.
+So one caller's guesses at an address's six-digit code are at most the pair's count in a window, and past the address's count from every caller only tries that pass the human check reach it, however many codes are asked for; each code takes at most five of them.
+A resume is counted per caller only (`resume:caller`), before the cookie is read: its secret is 32 random bytes, so the limit bounds the work a caller asks of the database, not a guess.
 Past it the page asks for a code, as it does for no cookie.
-A vendor's check-in or check-out with the door code is bounded differently: 10 tries per signed-in address per 15 minutes (`check-in:address`), right code or wrong, and nothing per caller, and the undo of either counts nothing ([attendance and the door](../../implementation/modules/attendance-and-door.md#sharp-edges)).
+A vendor's check-in or check-out with the door code is bounded differently: per signed-in address (`check-in:address`), right code or wrong, and nothing per caller, and the undo of either counts nothing ([attendance and the door](../../implementation/modules/attendance-and-door.md#sharp-edges)).
 A venue's wifi is one caller for every vendor on it, so a per-caller count of wrong door codes, which this rule had until T318, refused a right code after strangers' wrong ones; with it gone, nothing one vendor types stops another, and a guess at the code is bounded by that vendor's own count, their sign-in for the market and a seat on a day in reach ([ADR 0022](../../adr/0022-the-vendor-page-is-signed-in.md)).
 
 - **The counters live in the database, never in a process**: a serverless deployment forgets memory.
   One document per limit, subject and fixed clock-aligned window in `sign_in_attempts`, counted by an atomic `$inc` upsert and removed by a TTL index ([lookup indexes](../../implementation/data/lookup-indexes.md)).
   Its key is a hash, so the collection names no address and no caller.
-- **The caller is counted before the body or the slug is read**, then the address, so a refusal is the same for every address and every market, real or not.
+- **The caller is counted before the body or the slug is read**, then, for a code request, the human check is asked, then the caller and address together, then the address alone in the hour (`MailBounds` in `sign_in_limits.py`); for a verify, the caller and address together, then the address alone, past whose count the human check is asked (`SecretBounds`); so a refusal, and the check's 403, are the same for every address and every market, real or not.
   A limit is the same for every address, applicant or not, so it is not the attempt counter the login ruling forbids: that one existed only for addresses that had applied, and so answered whether they had.
-  The caller is `request.remote_addr` as [`TRUSTED_PROXY_HOPS`](../../implementation/conventions/security-invariants.md#the-boot-check) resolves it.
-- **Past a limit the answer is a 429** with `Retry-After` and "Too many sign-in attempts. Please try again in N minutes.", which the sign-in screen shows as it stands, the code field left as it was; nothing is stored, sent or counted against the code.
-- The organizer's password and code sign-ins, and the requests that mail an organizer a code or a link, the sign-up among them, are bounded in the same list, by limits of their own; a sign-in takes back a try that signs in, and a request that sends a mail takes nothing back ([the sign-in is bounded](../../implementation/data/users-and-email.md#the-sign-in-is-bounded)).
+  The caller is `request.remote_addr` as [`TRUSTED_PROXY_HOPS`](../../implementation/conventions/security-invariants.md#the-boot-check) resolves it, counted as a network (`sign_in_limits.caller()`): an IPv4 address as it is, an IPv6 address as its /64 network, and an IPv4-mapped IPv6 address as its IPv4 address.
+  A line or a machine is handed a whole /64, so one machine is one caller on IPv6 as on IPv4, and vendors on a venue's IPv6 wifi share a caller as they do on IPv4.
+  What is not an address is counted as given.
+- **Past a limit the answer is a 429** with `Retry-After` and "Too many sign-in attempts. Please try again in N minutes.", N being what is left of the limit's window, up to 60 minutes for the hour's count, which the sign-in screen shows as it stands, the code field left as it was; nothing is stored, sent or counted against the code.
+- **Past the address's own count a verify without a passing check is a 403** with "Confirm you're a person, then try again." and `captcha: required`, one answer for every address and market; the code is not tried, so it is left for the next try, and the sign-in screen gets a new token and sends the same try once more.
+- The organizer's password and code sign-ins, and the requests that mail an organizer a code or a link, the sign-up among them, are bounded in the same list, by limits of their own ([the sign-in is bounded](../../implementation/data/users-and-email.md#the-sign-in-is-bounded)).
+  Each sign-in is counted as the vendor's verify is: per caller, per caller and address, and past the address's own count of wrong tries the human check (`password:*`, `organizer-code:*`, action `sign-in`), so no one else's wrong tries refuse an organizer's right password or code; a right one, or one that answers that the address needs verifying, takes its try back from all three.
+  The organizer's forms send no token until the server asks, then show the check and send once more, so an everyday sign-in loads no script of Cloudflare's.
+  A request that mails is counted per caller, per caller and address and per address in the hour, as the vendor's code request is, and takes nothing back.
+  The organizer's one code an hour stays: anyone may ask for an organizer's code, which mails it to the organizer, and use up its five tries; the code sign-in then waits out the hour, while the password and the reset link stay open, and the wait bounds guesses at a six-digit code to five an hour ([ADR 0046](../../adr/0046-a-sign-in-limit-never-shuts-out-the-person-it-protects.md)).
 - The E2E suite clears the counters at the start of every run ([E2E patterns](../../implementation/testing/e2e-patterns.md#sharp-edges)).

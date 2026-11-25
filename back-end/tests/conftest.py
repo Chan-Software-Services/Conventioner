@@ -1479,6 +1479,33 @@ def sign_in_attempts(monkeypatch):
     return fake
 
 
+class HumanCheck:
+    """The human check as the local stack runs it: any non-empty token passes, an absent one is
+    refused. ``actions`` is every check asked, by its action, in order; ``refuse`` set True makes
+    every token fail, as a token Cloudflare refused does."""
+
+    def __init__(self):
+        self.actions: list = []
+        self.refuse = False
+
+    def __call__(self, token, action):
+        self.actions.append(action)
+        return bool(token) and not self.refuse
+
+
+@pytest.fixture(autouse=True)
+def human_check(request, monkeypatch):
+    """The human check (``utils.captcha.captcha_passes``), stood in for in every test but those of a
+    module marked ``real_human_check``, which meet the real one."""
+    if STUBBED_MODULES or request.node.get_closest_marker("real_human_check"):
+        return None
+    import utils.captcha
+
+    stand_in = HumanCheck()
+    monkeypatch.setattr(utils.captcha, "captcha_passes", stand_in)
+    return stand_in
+
+
 @pytest.fixture(autouse=True)
 def organizer_sessions(monkeypatch):
     """Every organizer's sign-ins kept on the server (``organizer_sessions``), empty for every test,
@@ -1656,35 +1683,14 @@ class FakeOrganizations:
         return SimpleNamespace(deleted_count=0)
 
 
-class FakeAccountCopies:
-    """The users collection as the organization writers touch it: each account's own copy of its
-    organizations, written best effort. Records every write; stores nothing."""
-
-    def __init__(self):
-        self.writes = []
-
-    def update_one(self, query, update, **_kwargs):
-        reject_malformed_update(update)
-        self.writes.append((query, update))
-        return SimpleNamespace(matched_count=1, modified_count=1, upserted_id=None)
-
-    def update_many(self, query, update, **_kwargs):
-        return self.update_one(query, update)
-
-
-def install_organizations(monkeypatch, organizations, accounts=None):
+def install_organizations(monkeypatch, organizations):
     """Make ``organizations`` (a ``FakeOrganizations``) the organizations collection for every
-    reader and for ``organization_people``, the one writer, and ``accounts`` (by default a new
-    ``FakeAccountCopies``) the users collection both write the account's copy to. Answers
-    ``organizations``, with ``organizations.accounts`` set."""
+    reader and for ``organization_people``, the one writer. Answers ``organizations``."""
     import api.organizations as OrgsApi
     import organization_people as OrganizationPeople
 
-    accounts = FakeAccountCopies() if accounts is None else accounts
     for module in (OrgsApi, OrganizationPeople):
         monkeypatch.setattr(module, "organizations_collection", organizations)
-        monkeypatch.setattr(module, "users_collection", accounts)
-    organizations.accounts = accounts
     return organizations
 
 # app.py refuses to boot unless the market-key migration is recorded as applied, and it fails

@@ -33,7 +33,6 @@ import utils.email as Email
 
 db = get_database()
 organizations_collection = db["organizations"]
-users_collection = db["users"]
 markets_collection = db["markets"]
 
 
@@ -66,24 +65,13 @@ def create_organization(owner_email: str, name: str) -> str:
     org_dict = {
         "id": org_id,
         "name": name,
-        # Its people as one map (T283, ADR 0025), the lists beside it its mirror for one release.
+        # Its people as one map (T283, ADR 0025), and no list beside it (T583).
         "people": {owner_id: OrganizationRole.OWNER.value},
-        "owner": owner_id,
-        "admins": [],
-        "members": [],
         "markets": [],
         "theme": None
     }
     
     organizations_collection.insert_one(org_dict)
-    
-    # Add organization id to user's organizations list
-    # By id: the account just loaded, however its owner's address was typed (E32/F03/S04).
-    users_collection.update_one(
-        {"id": owner_id},
-        {"$addToSet": {"organizations": org_id}}
-    )
-    
     return org_id
 
 
@@ -149,8 +137,9 @@ def get_organizations_for_user(user_email: str) -> List[Dict[str, Any]]:
     Every owner, admin and member of all of them is read in one ``get_users_by_ids`` (T204), never
     one account at a time: the Organizations page and Manage organization make this read on open.
 
-    Each is served with ``owner``, ``admins`` and ``members`` derived from its people map, in the
-    map's order, whatever its stored lists hold (T283): a member made an admin is listed once.
+    Each is served with its people read from its people map alone, in the map's order: its owner's
+    address, ``adminPeople`` and ``memberPeople``, whatever lists it still stores until the lists
+    migration runs (T283, T583), which no screen reads.
     """
     user = UsersApi.get_user(user_email)
     if not user:
@@ -165,19 +154,12 @@ def get_organizations_for_user(user_email: str) -> List[Dict[str, Any]]:
     for org in orgs:
         people = people_of[org["id"]]
         owners = _placed(people, OrganizationRole.OWNER)
-        org["owner"] = owners[0] if owners else None
-        org["admins"] = _placed(people, OrganizationRole.ADMIN)
-        org["members"] = _placed(people, OrganizationRole.MEMBER)
-        owner = accounts.get(org.get("owner"))
+        owner = accounts.get(owners[0]) if owners else None
         if owner:
             org["ownerEmail"] = owner.email
             org["owner_email"] = owner.email
-        org["adminPeople"] = _people(org.get("admins", []), accounts)
-        org["memberPeople"] = _people(org.get("members", []), accounts)
-        # Deprecated (T204): the same people by address alone, for a tab still on the old bundle,
-        # which pairs them with ``admins`` and ``members`` by position. The next release removes them.
-        org["adminEmails"] = org["admin_emails"] = [p["email"] for p in org["adminPeople"]]
-        org["memberEmails"] = org["member_emails"] = [p["email"] for p in org["memberPeople"]]
+        org["adminPeople"] = _people(_placed(people, OrganizationRole.ADMIN), accounts)
+        org["memberPeople"] = _people(_placed(people, OrganizationRole.MEMBER), accounts)
         # The rows it sets for the markets it will hold, each read as the markets copy it.
         org["defaultPermissionTable"] = Actions.default_table(org.get(DEFAULT_PERMISSIONS))
         org.update(_what_removing_takes(org))
@@ -192,8 +174,8 @@ def update_organization(org_id: str, requesting_user_email: str, name: str) -> U
     """Rename an organization. Only owner can update, and never onto the name of another
     organization the owner belongs to (``_refuse_a_name_you_already_hold``).
 
-    The name is the one field an owner edits: its owner, admins, members and markets change only
-    through their own endpoints, which keep each user's ``organizations`` in step with them.
+    The name is the one field an owner edits: its people and markets change only through their own
+    endpoints.
     """
     org = organizations_collection.find_one(live({"id": org_id}))
     if not org:
@@ -224,7 +206,7 @@ def update_organization(org_id: str, requesting_user_email: str, name: str) -> U
 
 def _role_in(org: Dict[str, Any], user_id: str) -> Optional[str]:
     """The person's place in the organization: ``owner``, ``admin``, ``member``, or None, read
-    from its people map, or its old lists folded when it has none (T283)."""
+    from its people map alone (T283, T583)."""
     place = organization_people_of(org).get(user_id)
     return place if place in (OrganizationRole.OWNER, OrganizationRole.ADMIN,
                               OrganizationRole.MEMBER) else None
@@ -555,11 +537,6 @@ def delete_organization(org_id: str, requesting_user_email: str) -> DeleteResult
     # trail above is what outlives it.
     History.delete_for_organization(org_id)
     Invitations.delete_for_organization(org_id)
-
-    users_collection.update_many(
-        {},
-        {"$pull": {"organizations": org_id}}
-    )
 
     return organizations_collection.delete_one({"id": org_id})
 
