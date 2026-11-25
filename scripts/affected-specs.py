@@ -1065,18 +1065,19 @@ class Wording(NamedTuple):
     """What an audit's report says: the pull request's, or the merge queue's."""
 
     title: str
-    # The verdict the summary shows bold, and `--github` annotates under `warning`, saying `unrun`.
+    # The verdict the summary shows bold and `--github` annotates, with the annotation's title and
+    # what it says of the run that did not run the spec.
     flagged: str
-    warning: str
-    unrun: str
+    warning_title: str
+    warning_clause: str
     closing: str
 
 
 PULL_REQUEST_AUDIT = Wording(
     title="### E2E selection audit",
     flagged="missed",
-    warning="A miss of the selection",
-    unrun="affected-specs.py would not have chosen it",
+    warning_title="A miss of the selection",
+    warning_clause="affected-specs.py would not have chosen it",
     closing="A spec that ran is one `affected-specs.py --run` runs for this change, so its "
     "builder could have seen it fail; one left to CI was chosen past the cap; a miss "
     "is one it would not have chosen at all, from a map that drifted or a dependency "
@@ -1085,11 +1086,12 @@ PULL_REQUEST_AUDIT = Wording(
 QUEUE_AUDIT = Wording(
     title="### E2E selection audit (merge queue)",
     flagged=LEFT_OUT,
-    warning="A spec the pull request's run left out",
-    unrun="the pull request's own E2E run would not have run it",
+    warning_title="A spec the pull request's run left out",
+    warning_clause="the pull request's own E2E run would not have run it",
     closing="A spec left out is one the pull request's run did not run, so a failure there met "
-    "the queue first. This audit decides again what that run ran, by the newest test map, so a "
-    "map made since then can change a verdict (`docs/implementation/testing/the-test-map.md`).",
+    "the queue first. This audit decides again what that run ran, by the test map as it reads it "
+    "now, so a map made since, grown too old or not read can give a verdict that run did not "
+    "(`docs/implementation/testing/the-test-map.md`).",
 )
 
 
@@ -1146,19 +1148,15 @@ def audit(argv: Sequence[str]) -> int:
             if args.queue:
                 decision = ci_decision(chosen, datetime.now(timezone.utc))
                 found = queue_verdicts(failed, chosen, decision)
-                basis = [
-                    chosen.describe_ci_basis(),
-                    "",
-                    f"The decision for this diff: {decision['why']}.",
-                ]
+                source = chosen.describe_ci_basis()
+                print(f"affected-specs audit: {source}")
+                basis = [source, "", f"The decision for this diff: {decision['why']}."]
             else:
                 found = verdicts(failed, chosen)
                 basis = [chosen.describe_basis()]
-            changed = sorted(chosen.changes)
-            # As `describe_ci_basis`: with no map, CI's run makes no choice to describe.
-            if chosen.source or not args.queue:
                 print(describe_source(chosen.source))
-            print(f"affected-specs: {chosen.describe_diff()}")
+                print(f"affected-specs: {chosen.describe_diff()}")
+            changed = sorted(chosen.changes)
             print(
                 f"affected-specs audit: {counted(len(found), 'failed spec')}, "
                 f"in {counted(read, 'report')}:"
@@ -1168,9 +1166,9 @@ def audit(argv: Sequence[str]) -> int:
                 # With no map there is no map to have drifted: the summary lists the spec alone.
                 if verdict == wording.flagged and args.github and chosen.source is not None:
                     print(
-                        f"::warning title={wording.warning}::"
+                        f"::warning title={wording.warning_title}::"
                         + annotation(
-                            f"{spec} failed, and {wording.unrun} for this change of "
+                            f"{spec} failed, and {wording.warning_clause} for this change of "
                             f"{counted(len(changed), 'file')}: {some(changed)}"
                         )
                     )
