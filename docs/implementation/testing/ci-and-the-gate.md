@@ -21,6 +21,7 @@ describes:
   - .github/actions/front-end-deps/action.yml
   - front-end/scripts/e2e-repeat.ts
   - scripts/chromium-packages.sh
+  - scripts/nm-lint.sh
 verified: 2026-11-25
 sources:
   - T47
@@ -44,11 +45,12 @@ sources:
   - T528
   - T527
   - T582
+  - T565
 ---
 
 # CI and the gate
 
-GitHub Actions runs the suites before code reaches `dev`, on every push, pull request and merge queue trial commit; the no-mistakes gate, on a branch pushed through it, checks it for real data before it pushes and [leaves the suites to CI](#the-no-mistakes-gate).
+GitHub Actions runs the suites before code reaches `dev`, on every push, pull request and merge queue trial commit; the no-mistakes gate, on a branch pushed through it, checks it for real data before it pushes, [lints the front-end, docs and root Markdown files it changes](#the-gates-lint-step) and [leaves the suites to CI](#the-no-mistakes-gate).
 [Dependabot's pull requests](#dependabot) meet only the first.
 What each suite covers is [TESTING.md](../../TESTING.md); how a commit reaches production is [RELEASING.md](../../RELEASING.md).
 
@@ -348,12 +350,12 @@ That holds the pull request until someone re-reads each affected node and pushes
 
 ## The no-mistakes gate
 
-[`.no-mistakes.yaml`](../../../.no-mistakes.yaml) sets `allow_repo_commands: true` and one command, `test: ./scripts/nm-test.sh --real-data-only`.
+[`.no-mistakes.yaml`](../../../.no-mistakes.yaml) sets `allow_repo_commands: true` and three commands: `prepare: ./scripts/nm-lint.sh --prepare`, `test: ./scripts/nm-test.sh --real-data-only` and `lint: ./scripts/nm-lint.sh` ([the lint step](#the-gates-lint-step)).
 **The gate reads `allow_repo_commands` only from the repository's default branch, `dev`**, so a pushed branch cannot turn it on for itself; with it on, as `dev` has it, the gate runs the pushed branch's own `commands`, not `dev`'s.
 That is safe here only because every branch pushed through the gate is the team's own: the no-mistakes [repo config reference](https://kunchenguid.github.io/no-mistakes/reference/repo-config/) says to leave it `false` for a repository that accepts contributions.
 
-**The gate leaves every suite to CI, and runs only the real-data checks.**
-Its test step runs that command first as a baseline, and its agent then tests the change from a user's side as before; the baseline runs the [real-data check](../conventions/security-invariants.md#real-data-never-leaves-the-pc) on the branch's commits since `origin/dev` and on every file of the tree at `HEAD`, and fails the step on a finding.
+**The gate leaves every suite to CI: its test step runs only the real-data checks.**
+The test step runs its command first as a baseline, and its agent then tests the change from a user's side as before; the baseline runs the [real-data check](../conventions/security-invariants.md#real-data-never-leaves-the-pc) on the branch's commits since `origin/dev` and on every file of the tree at `HEAD`, and fails the step on a finding.
 That check stays because the gate pushes the branch to a public repository, and the real-data steps of CI's `real-data-and-workflows` read it only once it is published.
 The suites went: until T294 the baseline was `--skip-e2e`, every suite but Playwright, the same suites CI's required jobs run, part of a test step whose median was 8.1 minutes, and it failed none of 241 gate runs from 2026-10-26 to 11-11; a failing unit test now shows in CI a few minutes after the push instead of in the gate.
 Playwright had left the gate before (T47): on the laptop it was about 90% of the test step (22 minutes on a quiet machine, 46 to 65 under the team's load, and red on load alone in 3 of 8 runs), and CI then ran the same specs again.
@@ -400,6 +402,20 @@ The lock is the one place T19's `team-capacity run --kind gate:conventioner` is 
 `nm-test.sh` never calls `sudo`: it installs Chromium with `npx playwright install chromium`, never `--with-deps` or `install-deps`, because those run `sudo` with no terminal and each failed attempt counts toward the account's `pam_faillock` lockout; the machine's own package manager provides the system libraries.
 CI's [e2e action](#chromiums-system-packages) installs them with `sudo` through `scripts/chromium-packages.sh`, which is correct on GitHub's Ubuntu runners.
 What it does not run is CI's alone: `docker compose build`, gitleaks, pip-audit, zizmor, actionlint, the knowledge graph's drift check and CodeQL.
+
+### The gate's lint step
+
+**The lint step runs Prettier, ESLint and Stylelint, as the front end pins them, on the files the branch changes.**
+The gate's run worktree holds tracked files only, so it has no `front-end/node_modules`; with no `lint` command its agent linted in the document step and, finding no ESLint or Prettier there, parked ask-user on every branch that changed a front-end or docs file, or took an ESLint from an uncached `npx` download, which failed to load the config.
+So the gate runs `prepare` once a run, before the first of its commands it reaches (the test step's, unless that step is skipped), and keeps the ignored files it makes: [`scripts/nm-lint.sh`](../../../scripts/nm-lint.sh) `--prepare` runs `npm ci --engine-strict --prefer-offline` in `front-end/`, from the machine's npm cache, in about 2 seconds when the cache already holds the lockfile's packages.
+Both modes run on the `.nvmrc` Node: the one on `PATH`, else nvm's (`$NVM_DIR/versions/node/v<pinned>/bin`, printing `nm-lint: Node on PATH is <found>; using nvm's <pinned>`), else they fail with `nm-lint: ERROR: Node is <found>, not <pinned> (.nvmrc), and nvm has no <pinned>; run nvm install`.
+A failed `prepare` fails the step that ran it, the test step as a rule, before its real-data checks.
+
+Without a switch the script takes every file changed since the merge base with `origin/dev` that is still there (committed, staged, edited, or new and not ignored) and is not a symlink, which Prettier refuses when it is named and `format:check` passes over, and from `front-end/` runs Prettier's check on those under `front-end/` and `docs/` and the Markdown files at the root, as `format:check` reads them (skipping a file it has no parser for or `.prettierignore` names), ESLint with `--max-warnings 0` on those under `front-end/` ending `.js`, `.mjs`, `.cjs`, `.ts`, `.mts`, `.cts`, `.tsx` or `.vue` (skipping a file its config ignores), and Stylelint with `--max-warnings 0` on the `.css` and `.vue` files under `front-end/src/`, each the binary in `front-end/node_modules/.bin`, never an `npx` download.
+A tool whose config the branch changes (`.prettierrc.json` or `.prettierignore`, `eslint.config.ts`, `stylelint.config.js`), or every tool when it changes `front-end/package.json` or its lockfile, runs its whole npm script instead (`format:check`, `lint:check`, `lint:css`), as [`frontend-lint-and-types`](#ci) does, since such a change may reach any file.
+Each tool with files to check runs even after another fails, the run ends `nm-lint: OK` or `nm-lint: FAILED: <the tools that failed>`, and a branch that changes no front-end, docs or root Markdown file lints nothing (`nm-lint: no changed front-end, docs or root Markdown file to lint`).
+A failure parks the lint step as auto-fixable, and a fix round has the gate's agent fix the files and run the command again.
+The gate's lint step runs no type-check; CI runs it and every one of these checks again on the whole front end, as `nm-test.sh` does without `--real-data-only`.
 
 ## Stack identity
 

@@ -8,44 +8,25 @@
  * that carry an address come back as parts (`addressParts.ts`), so the screen draws the address
  * through `EmailAddress.vue` and a narrow line breaks it only before its "@" or a dot (T181).
  */
-import { ApplicationStatus, type Application, type Market } from '@/assets/types/datatypes';
+import type { Application, Market } from '@/assets/types/datatypes';
 import type { PickerGroup, PickerOption } from '@/components/SearchPicker.vue';
 import { addressParts, type AddressPart } from '@/utils/addressParts';
 import { findsPerson } from '@/utils/personChoice';
 import { reviewerAddresses } from '@/utils/reviewTeam';
 
-/** Not decided yet, so whose share it is still matters: open, or waiting on a follow-up. */
-const UNDECIDED: readonly string[] = [
-  ApplicationStatus.Open,
-  ApplicationStatus.UnderReview,
-  ApplicationStatus.NeedsFollowUp,
-];
-
-type Dealt = Pick<Application, 'status' | 'reviewer'> & Partial<Pick<Application, 'followUpOwner'>>;
 type Team = Pick<Market, 'reviewTeam'> | null | undefined;
 
 const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
 /**
- * Whether an application is in this address's share: dealt to them, or a follow-up they own,
- * wherever it was dealt. Marking a follow-up never moves its reviewer, and a follow-up stays with
- * whoever holds it, so reaching out is its owner's work; it is then in both shares.
+ * Whether an application is in this address's share, as the server serves it (`review.share`,
+ * ADR 0037): dealt to them while they are one of the chosen reviewers, or a follow-up they own
+ * while they hold a role on the market, wherever it was dealt. Marking a follow-up never moves its
+ * reviewer, so reaching out is its owner's work; it is then in both shares. A decided one stays the
+ * share of the reviewer it was dealt to.
  */
-export function inShareOf(application: Dealt, address: string): boolean {
-  if (same(application.reviewer?.email ?? '', address)) return true;
-  return (
-    application.status === ApplicationStatus.NeedsFollowUp &&
-    same(application.followUpOwner?.email ?? '', address)
-  );
-}
-
-/**
- * Whom the application was dealt to, while reviewers are chosen: with none, it is first come,
- * first served again, and a follow-up's reviewer kept from before names nobody's share.
- */
-function dealtTo(application: Dealt, market: Team): string | null {
-  if (!reviewerAddresses(market).length) return null;
-  return application.reviewer?.email || null;
+export function inShareOf(application: Pick<Application, 'review'>, address: string): boolean {
+  return application.review.share.some((holder) => same(holder, address));
 }
 
 /** Whether the reader is one of the chosen reviewers, able or not. */
@@ -53,27 +34,43 @@ export function isChosen(reader: string, market: Team): boolean {
   return reviewerAddresses(market).some((address) => same(address, reader));
 }
 
-/** "Reviewer: sam@example.com", or "Reviewer: you" for the reader's own; null when not dealt. */
+/**
+ * Whose share the application is in, first of the served share (`review.share`), as the warning
+ * `dealtElsewhere` names it: "Reviewer: sam@example.com", or "Reviewer: you" for the reader's own.
+ * "Reviewer: not dealt yet" for one waiting for the deal (`review.waiting`) in nobody's share,
+ * though it may still carry a removed reviewer's address; null with no reviewers chosen, or for
+ * one in nobody's share that does not wait. A waiting follow-up whose owner holds no role on the
+ * market is still its chosen reviewer's share while it waits, so it names them, and a follow-up
+ * whose reviewer was removed names the owner it stays with, never the stored reviewer.
+ */
 export function reviewerLine(
-  application: Dealt,
+  application: Pick<Application, 'review'>,
   reader: string,
   market: Team,
 ): AddressPart[] | null {
-  const reviewer = dealtTo(application, market);
+  const { waiting, share } = application.review;
+  if (!reviewerAddresses(market).length) return null;
+  if (waiting && !share.length) return [{ kind: 'text', text: 'Reviewer: not dealt yet' }];
+  const reviewer = share[0];
   if (!reviewer) return null;
   if (same(reviewer, reader)) return [{ kind: 'text', text: 'Reviewer: you' }];
   return [{ kind: 'text', text: 'Reviewer: ' }, ...addressParts(reviewer)];
 }
 
 /**
- * The address of the reviewer an undecided application is dealt to, when it is not in the reader's
- * share; null for the reader's own (a follow-up they own included), a decided application
- * (deciding it again is a change, not a share) and one never dealt.
+ * The address first in an undecided application's share (its reviewer, or the follow-up's owner),
+ * when the reader is not in it; null for the reader's own (a follow-up they own included), a
+ * decided application (deciding it again is a change, not a share), and one in nobody's share,
+ * which the deal has yet to take.
  */
-export function dealtElsewhere(application: Dealt, reader: string, market: Team): string | null {
-  const reviewer = dealtTo(application, market);
-  if (!reviewer || !UNDECIDED.includes(application.status)) return null;
-  return inShareOf(application, reader) ? null : reviewer;
+export function dealtElsewhere(
+  application: Pick<Application, 'review'>,
+  reader: string,
+  market: Team,
+): string | null {
+  const { undecided, share } = application.review;
+  if (!undecided || !reviewerAddresses(market).length || !share.length) return null;
+  return inShareOf(application, reader) ? null : share[0];
 }
 
 /** The warning above the verdict buttons of an application dealt to someone else. */
@@ -164,7 +161,11 @@ export function assignedAddress(choice: AssignedTo | null, reader: string): stri
  * the follow-ups they own (`inShareOf`), while they are one of the chosen reviewers; none for
  * anyone else, or with nobody chosen.
  */
-export function myShare<T extends Dealt>(queue: T[], reader: string, market: Team): T[] {
+export function myShare<T extends Pick<Application, 'review'>>(
+  queue: T[],
+  reader: string,
+  market: Team,
+): T[] {
   if (!isChosen(reader, market)) return [];
   return queue.filter((app) => inShareOf(app, reader));
 }

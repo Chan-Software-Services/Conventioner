@@ -23,6 +23,7 @@ import { hasAssignment } from '@/utils/marketPage';
 import { answersRefusing } from './support/servedAnswers';
 import { MARKET_ID, serveMarket } from './support/marketScreen';
 import { tryEveryClose } from './support/dialogCloses';
+import { servedReview } from './support/servedReview';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() }));
 const route = vi.hoisted(() => ({
@@ -50,6 +51,7 @@ vi.mock('@/utils/applicantApi', async (importOriginal) => {
           id: `app-${name}`,
           applicantEmail: `${name}@thistle.test`,
           status: 'reviewer_approved',
+          ...servedReview('approved'),
           formData: {},
         })),
       ),

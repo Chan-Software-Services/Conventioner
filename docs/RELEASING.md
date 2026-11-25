@@ -392,6 +392,7 @@ python migrations/migrate_organization_people.py      # AFTER the deploy, whenev
 python migrations/migrate_organization_people.py --reconcile  # ONLY after a roll forward over a rollback past the map's release, `--dry-run` first: rebuilds each map from its lists
 python migrations/migrate_assignment_state.py         # AFTER the deploy, `--dry-run` first, and again after any roll forward past a rollback: stores each market's assignment state and its published revision
 python migrations/migrate_owed_day_state.py           # Right AFTER the deploy, `--dry-run` first, and again after any roll forward past a rollback: stores each owed table-day's state, and drops an Admin's amount on a day not held, recording it
+python migrations/migrate_application_status.py       # Right AFTER the deploy, before any organizer uses Begin assignment, `--dry-run` first, and again after any roll forward past a rollback: stores each application's status and origin the review reads, and marks those waiting for the deal
 python migrations/migrate_business_name.py --list    # AFTER the deploy, once per market whose form asks a business name question, past its applications stage where vendors apply on its page, `--list` and `--dry-run` first: moves that question to the built-in field (`--market <id> --question <key>`)
 ```
 

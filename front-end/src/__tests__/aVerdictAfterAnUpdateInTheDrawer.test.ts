@@ -11,6 +11,7 @@ import ApplicationsAll from '@/components/application/ApplicationsAll.vue';
 import { ApplicationStatus, type Application, type Market } from '@/assets/types/datatypes';
 import { MarketAction } from '@/utils/marketActions';
 import { answersRefusing } from './support/servedAnswers';
+import { answeredWith, servedReview } from './support/servedReview';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() }));
 const route = vi.hoisted(() => ({ query: {} as Record<string, string> }));
@@ -38,6 +39,7 @@ const JO = {
   marketId: 'm1',
   applicantEmail: 'jo@vendor.test',
   status: ApplicationStatus.Open,
+  ...servedReview('open'),
   formData: { business_name: 'Ember Ceramcs' },
   submittedAt: OPENED,
   updatedAt: OPENED,
@@ -88,7 +90,7 @@ it('a verdict given before the list is read again carries the version the update
   wrapper.findComponent({ name: 'VendorDrawer' }).vm.$emit('infoUpdated', saved);
   await flushPromises();
   api.put.mockResolvedValue({
-    data: { application: { ...saved, status: ApplicationStatus.ReviewerApproved } },
+    data: { application: answeredWith(saved, ApplicationStatus.ReviewerApproved) },
   });
   await wrapper.get('[data-testid="applications-all-approve"]').trigger('click');
   await flushPromises();

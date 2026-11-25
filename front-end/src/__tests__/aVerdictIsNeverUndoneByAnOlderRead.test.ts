@@ -18,6 +18,7 @@ import { MarketAction } from '@/utils/marketActions';
 import { statusLabel } from '@/utils/verdicts';
 import { answersRefusing } from './support/servedAnswers';
 import { pressRefresh, toolsOf } from './support/reviewViewTools';
+import { answeredWith, servedReview } from './support/servedReview';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() }));
 const route = await vi.hoisted(async () => {
@@ -42,8 +43,14 @@ vi.mock('@/utils/signedIn', () => ({ signedInEmail: () => 'ana@example.com' }));
 
 const VERDICT_AT = '2026-11-01T10:00:00+00:00';
 
-function application(id: string, marketId: string, status = ApplicationStatus.Open): Application {
+function application(
+  id: string,
+  marketId: string,
+  status = ApplicationStatus.Open,
+  served = servedReview('open'),
+): Application {
   return {
+    ...served,
     id,
     marketId,
     applicantEmail: `${id}@vendor.test`,
@@ -102,7 +109,7 @@ beforeEach(() => {
   api.put.mockImplementation(async (url: string, body: { status: ApplicationStatus }) => {
     const [, marketId, id] = /\/markets\/([^/]+)\/applications\/([^/]+)\/review/.exec(url)!;
     stored[marketId!] = stored[marketId!]!.map((app) =>
-      app.id === id ? { ...app, status: body.status, verdictAt: VERDICT_AT } : app,
+      app.id === id ? { ...answeredWith(app, body.status), verdictAt: VERDICT_AT } : app,
     );
     return {
       data: { application: stored[marketId!]!.find((app) => app.id === id), undoSeconds: 120 },
@@ -170,7 +177,9 @@ describe('a verdict', () => {
     fetchMarketApplications.mockClear();
     // Another reviewer approved al meanwhile: only a re-read of the list shows it.
     stored.m1 = stored.m1!.map((app) =>
-      app.id === 'al' ? { ...app, status: ApplicationStatus.ReviewerApproved } : app,
+      app.id === 'al'
+        ? { ...app, status: ApplicationStatus.ReviewerApproved, ...servedReview('approved') }
+        : app,
     );
 
     await wrapper.get('[data-testid="applications-all-reject"]').trigger('click');
