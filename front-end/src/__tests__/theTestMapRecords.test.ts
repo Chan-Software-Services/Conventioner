@@ -14,10 +14,12 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import {
   coveredRanges,
+  endBetween,
   endRecording,
   recordApiCalls,
   recordsFile,
   requestKey,
+  startBetween,
   startRecording,
 } from '../../e2e/helpers/testMap';
 
@@ -117,6 +119,7 @@ describe("a Node helper's API calls", () => {
 
   afterAll(async () => {
     endRecording();
+    endBetween();
     await context?.dispose();
     await new Promise((resolve) => server?.close(resolve));
   });
@@ -151,6 +154,18 @@ describe("a Node helper's API calls", () => {
     const next = startRecording();
     endRecording();
     expect([...next.requests]).toEqual([]);
+  });
+
+  it('counts a call between tests for the stretch between them, never for a test', async () => {
+    endRecording();
+    const gap = startBetween();
+    await context.put(`${origin}/markets/m-1`);
+    expect(endBetween()).toBe(gap);
+    const next = startRecording();
+    await context.get(`${origin}/markets`);
+    endRecording();
+    expect([...gap.requests]).toEqual(['PUT /api/markets/m-1']);
+    expect([...next.requests]).toEqual(['GET /api/markets']);
   });
 
   it('counts a call that throws for none, and throws as it would', async () => {

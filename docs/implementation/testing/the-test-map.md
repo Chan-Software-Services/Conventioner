@@ -56,7 +56,8 @@ Each push to `dev` records three things and builds the map from them, the last t
    The Node calls are counted by wrapping, once a worker, the `fetch` of Playwright's API request context class, which its `get`, `post`, `put`, `patch`, `delete` and `head` all call, so the `request` fixture, `page.request`, `context.request` and each `playwright.request.newContext()` count alike.
    A call counts for the test running when it started, even when it is answered after that test ended, and a call that throws counts for none.
    A call straight to the back end's address (`BACKEND_URL`) is keyed `METHOD /api<path>`, as the dev server's proxy keys a page's call to the same endpoint.
-   A retry is a line of its own; a context a `beforeAll` opens, and a call made then, record nothing, since no test is running then.
+   A retry is a line of its own.
+   What a worker's contexts and calls reach between two of its tests, such as a `beforeAll` seeding a market, counts for no test: the worker writes it as a `"between"` line of its own, with its window, for the build's audit alone.
    The recording makes each test slower, and only a push to `dev` records, so a test near its timeout can pass on every pull request and fail only on that push.
    It takes no script's source: Playwright's `page.coverage` fetched the source of every module Vite serves, and a run recorded through it took some 40% longer in CI than one that recorded nothing.
    The build reads the requests and the window; the stretches are in the shard's records for a reader who wants more than the map holds, as T349's pruning did.
@@ -70,8 +71,9 @@ Each push to `dev` records three things and builds the map from them, the last t
 4. **The build makes each spec's endpoints from its tests' records, and audits the logs.**
    `test_map.py build` reads every `*.jsonl` of each shard's directory, so a shard recorded before records were a file a worker, with one `records.jsonl`, still builds.
    Each spec's endpoints are the `/api/` calls its tests recorded, each path matched to its rule, so what a `beforeAll`, the global setup or the seed does counts for no spec.
-   It then audits each shard's log: a request line inside some test's window whose endpoint no test whose window holds it recorded is unclaimed, the mark of a way of reaching the back end the recorder does not see, such as Node's own `fetch`.
-   A line outside every window is left out, as is a line whose path no rule has.
+   It then audits each shard's log: a request line inside some test's window whose endpoint no record whose window holds it recorded, a test's or a `"between"` one, is unclaimed, the mark of a way of reaching the back end the recorder does not see, such as Node's own `fetch`.
+   The `"between"` lines are what keeps the audit clean at two workers, where one worker's `beforeAll` reaches the back end inside the other worker's test: without them, eight specs at two workers left 16 such lines unclaimed.
+   A line outside every test's window, such as the global setup's or the seed's, is left out, as is a line whose path no rule has.
    The build prints each shard's count of unclaimed lines and the five endpoints with the most, and writes them into the map as `"unclaimed": {"<shard>": {"lines": n, "endpoints": {"METHOD rule": n}}}`, with `null` for a shard that saved no log, which still builds.
    It refuses, writing nothing, when a shard recorded no test, or when the shards that uploaded records are not as many as the matrix's (`--shards-expected`), so a map is whole or not made.
 

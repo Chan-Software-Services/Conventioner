@@ -22,7 +22,8 @@ why). It exits 1 when the suite failed, writing nothing.
 `gh run download` or `actions/download-artifact` lays them out), each holding the shard's
 records, every `*.jsonl` of it (front-end/e2e/helpers/testMap.ts: `records-<worker>.jsonl`, one
 line a test, with its spec file, its window on the wall clock and the requests its pages and its
-Node helpers made; a shard recorded before that, one `records.jsonl`), and `backend.log`
+Node helpers made, and a `"between"` line for what a worker called between two of its tests; a
+shard recorded before that, one `records.jsonl`), and `backend.log`
 (`docker compose logs --timestamps` of the back end). Each spec's endpoints are its tests'
 recorded `/api/` calls, each path matched to a Flask rule of `endpoints.json`, so `/markets/<id>`
 is one endpoint whatever the id. It writes:
@@ -33,11 +34,11 @@ is one endpoint whatever the id. It writes:
 
 where a module is the repository path of a file under front-end/src/ a page of the spec loaded.
 `unclaimed` is the audit of each shard's log: the request lines inside some test's window whose
-endpoint no test whose window holds them recorded, which a way of reaching the back end the
-recorder does not see would leave; a line outside every window (a `beforeAll`, the seed) is left
-out, and a shard with no log is null. It prints each shard's count and its five endpoints with the
-most lines. It refuses, writing nothing, a shard with no records, or fewer shards than
-`--shards-expected`.
+endpoint no record whose window holds them recorded, a test's or a worker's between its tests,
+which a way of reaching the back end the recorder does not see would leave; a line outside every
+test's window (the global setup, the seed) is left out, and a shard with no log is null. It
+prints each shard's count and its five endpoints with the most lines. It refuses, writing
+nothing, a shard with no test's record, or fewer shards than `--shards-expected`.
 
 Exit codes: 0 written, 1 refused or the suite failed, 2 a usage error.
 """
@@ -168,6 +169,11 @@ def log_requests(lines: Iterable[str]) -> Iterable[Tuple[int, str, str]]:
             yield docker_time(m.group(1)), m.group(2), m.group(3).split("?", 1)[0]
 
 
+def is_test(record: dict) -> bool:
+    """Whether a record is a test's, not a worker's between two of its tests."""
+    return not record.get("between")
+
+
 def recorded_endpoint(request: str, rules: Rules) -> Optional[str]:
     """The endpoint of a recorded `/api/` call (`GET /api/markets/m-1`), or None."""
     method, _, path = request.rpartition(" ")
@@ -181,7 +187,7 @@ def spec_maps(shards: Iterable[Shard], rules: Rules) -> Dict[str, Dict[str, List
     modules: Dict[str, set] = defaultdict(set)
     endpoints: Dict[str, set] = defaultdict(set)
     for shard in shards:
-        for t in shard.records:
+        for t in filter(is_test, shard.records):
             spec = t["spec"]
             # Every recorded spec is in the map, whatever it reached.
             modules.setdefault(spec, set())
@@ -202,27 +208,28 @@ def spec_maps(shards: Iterable[Shard], rules: Rules) -> Dict[str, Dict[str, List
 def audit(shard: Shard, rules: Rules) -> Optional[dict]:
     """The request lines of a shard's log that no test recorded, or None with no log.
 
-    A line counts when some test's window holds it and no test whose window holds it recorded
-    its endpoint: at two workers two windows can hold one line, and either test's record claims
-    it. A line outside every window, or whose path no rule has, is left out.
+    A line counts when some test's window holds it and no record whose window holds it recorded
+    its endpoint: at two workers two tests' windows can hold one line, or one test's and the other
+    worker's between two of its tests (a `beforeAll` seeding), and any of them claims it. A line
+    outside every test's window, or whose path no rule has, is left out.
     """
     if shard.log is None:
         return None
-    tests = sorted(
+    windows = sorted(
         (
-            (t["start"], t["end"], {recorded_endpoint(r, rules) for r in t["requests"]})
-            for t in shard.records
+            (r["start"], r["end"], is_test(r), {recorded_endpoint(q, rules) for q in r["requests"]})
+            for r in shard.records
         ),
-        key=lambda t: t[0],
+        key=lambda r: r[0],
     )
-    starts = [t[0] for t in tests]
+    starts = [r[0] for r in windows]
     unclaimed: Dict[str, int] = defaultdict(int)
     for when, method, path in log_requests(shard.log):
-        holding = [t for t in tests[: bisect.bisect_right(starts, when)] if when <= t[1]]
-        if not holding:
+        holding = [r for r in windows[: bisect.bisect_right(starts, when)] if when <= r[1]]
+        if not any(r[2] for r in holding):
             continue
         endpoint = rules.match(method, path)
-        if endpoint and not any(endpoint in t[2] for t in holding):
+        if endpoint and not any(endpoint in r[3] for r in holding):
             unclaimed[endpoint] += 1
     return {"lines": sum(unclaimed.values()), "endpoints": dict(sorted(unclaimed.items()))}
 
@@ -339,8 +346,8 @@ def read_shards(directory: Path, expected: Optional[int]) -> Tuple[List[Shard], 
             for line in records_file.read_text().splitlines()
             if line.strip()
         ]
-        if not records:
-            problems.append(f"{shard.name} has no records (no line in a *.jsonl)")
+        if not any(map(is_test, records)):
+            problems.append(f"{shard.name} has no records (no test's line in a *.jsonl)")
             continue
         log_file = shard / "backend.log"
         log = log_file.read_text(errors="replace").splitlines() if log_file.is_file() else None
@@ -368,7 +375,7 @@ def run_build(args: argparse.Namespace) -> int:
     args.out.write_text(json.dumps(test_map, indent=0) + "\n")
     for name, found in unclaimed.items():
         print(f"test_map: {audit_line(name, found)}")
-    tests = sum(len(shard.records) for shard in shards)
+    tests = sum(len(list(filter(is_test, shard.records))) for shard in shards)
     print(
         f"test_map: {len(specs)} specs from {tests} tests on {len(shards)} shards, "
         f"{len(bridge['endpoints'])} endpoints, at {args.commit}, to {args.out}"

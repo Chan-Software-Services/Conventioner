@@ -16,8 +16,10 @@
  *    (`docker compose logs --timestamps`) for request lines no test recorded.
  *
  * and appends one JSON line for it to `records-<workerIndex>.jsonl` in `TEST_MAP_OUT`, a file a
- * worker, so two workers' lines never interleave; a retry is a line of its own. A context a
- * `beforeAll` opens, and a call made then, record nothing, since no test is running.
+ * worker, so two workers' lines never interleave; a retry is a line of its own. What a worker's
+ * contexts and calls reach between two of its tests (a `beforeAll` seeding, a worker fixture)
+ * counts for no test: it is a `"between"` line of its own, with its window, which the build's
+ * audit reads, since at two workers it reaches the back end inside the other worker's test.
  * `scripts/test_map.py build` turns the lines into the map
  * (`docs/implementation/testing/the-test-map.md`).
  */
@@ -110,9 +112,30 @@ export function recordsFile(dir: string, workerIndex: number): string {
 }
 
 type Recording = { requests: Set<string>; coverage: Map<string, Stretch[]> };
+type Between = { start: number; requests: Set<string> };
 
 /** The test running now, in this worker; null between tests. */
 let recording: Recording | null = null;
+/** What this worker reaches between two of its tests, once it records; null in a test. */
+let between: Between | null = null;
+
+/** Where a request made now counts: the running test, else the stretch between tests. */
+function counting(): { requests: Set<string> } | null {
+  return recording ?? between;
+}
+
+/** Starts the stretch between two tests (or before the first), which counts for no test. */
+export function startBetween(): Between {
+  between = { start: Date.now(), requests: new Set() };
+  return between;
+}
+
+/** Ends the stretch between tests, handing it back. */
+export function endBetween(): Between | null {
+  const ended = between;
+  between = null;
+  return ended;
+}
 
 /** Starts recording a test, which every request from here on counts for. */
 export function startRecording(): Recording {
@@ -202,7 +225,8 @@ function attach(context: BrowserContext) {
   attached.add(context);
   context.on('request', (request) => {
     const key = requestKey(request.method(), request.url());
-    if (key && recording) recording.requests.add(key);
+    const into = counting();
+    if (key && into) into.requests.add(key);
   });
   context.on('page', (page) => void startPage(page));
   for (const page of context.pages()) void startPage(page);
@@ -238,7 +262,8 @@ let backEnd: string | undefined;
 
 /**
  * Counts every call of the API request context class that `context` is one of for the test
- * running when the call started, keyed by its response's URL (`requestKey`, at `backendOrigin`).
+ * running when the call started, or for the stretch between tests, keyed by its response's URL
+ * (`requestKey`, at `backendOrigin`).
  *
  * The class's `get`, `post`, `put`, `patch`, `delete` and `head` all call its `fetch` (Playwright
  * 1.64), so wrapping that once counts every context's calls, the `request` fixture's,
@@ -257,7 +282,7 @@ export function recordApiCalls(context: APIRequestContext, backendOrigin: string
     urlOrRequest,
     options,
   ): Promise<APIResponse> {
-    const into = recording;
+    const into = counting();
     const response = await fetch.call(this, urlOrRequest, options);
     const method =
       options?.method ?? (typeof urlOrRequest === 'string' ? 'GET' : urlOrRequest.method());
@@ -268,6 +293,13 @@ export function recordApiCalls(context: APIRequestContext, backendOrigin: string
 }
 
 type Test = typeof playwrightTest;
+
+/** Appends what a worker reached between two of its tests, unless it reached nothing. */
+function appendBetween(file: string, ended: Between | null) {
+  if (!ended?.requests.size) return;
+  const line = { between: true, start: ended.start, end: Date.now() };
+  appendFileSync(file, `${JSON.stringify({ ...line, requests: [...ended.requests].sort() })}\n`);
+}
 
 /** `base`, recording the test map into `TEST_MAP_OUT` when it is set, else `base` itself. */
 export function withTheTestMap(base: Test): Test {
@@ -283,18 +315,23 @@ export function withTheTestMap(base: Test): Test {
       { scope: 'worker', auto: true },
     ],
     testMapApiCalls: [
-      async ({ playwright }, use) => {
+      async ({ playwright }, use, workerInfo) => {
         // The back end's address as `fixtures.ts` reads it, once the worker runs.
         const backendOrigin = process.env.BACKEND_URL || stack().backendURL;
         const context = await playwright.request.newContext();
         recordApiCalls(context, backendOrigin);
         await context.dispose();
+        startBetween();
         await use();
+        // After the last test's `afterAll`.
+        appendBetween(recordsFile(out, workerInfo.workerIndex), endBetween());
       },
       { scope: 'worker', auto: true },
     ],
     testMapRecording: [
       async ({}, use, testInfo) => {
+        const file = recordsFile(out, testInfo.workerIndex);
+        appendBetween(file, endBetween());
         startRecording();
         contexts = new Set();
         const start = Date.now();
@@ -302,8 +339,9 @@ export function withTheTestMap(base: Test): Test {
         await Promise.all([...contexts].map((context) => stopContext(context)));
         const end = Date.now();
         const mine = endRecording()!;
+        startBetween();
         appendFileSync(
-          recordsFile(out, testInfo.workerIndex),
+          file,
           `${JSON.stringify({
             spec: testInfo.titlePath[0],
             title: testInfo.titlePath.slice(1).join(' › '),

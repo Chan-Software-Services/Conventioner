@@ -65,6 +65,11 @@ def record(spec, start, end, requests=(), title="a test"):
     }
 
 
+def between(start, end, requests=()):
+    """A worker's record of what it called between two of its tests."""
+    return {"between": True, "start": start, "end": end, "requests": list(requests)}
+
+
 def shard(records, log=(), name="test-map-shard-1"):
     """A shard as the build reads it; `log=None` for one that saved no back-end log."""
     return test_map.Shard(name, list(records), None if log is None else list(log))
@@ -103,6 +108,15 @@ class TestASpecReachesWhatItsTestsRecorded:
         assert specs["a.spec.ts"]["endpoints"] == ["GET /markets"]
         assert specs["b.spec.ts"]["endpoints"] == ["POST /markets"]
 
+    def test_what_a_worker_called_between_its_tests_counts_for_no_spec(self):
+        records = [
+            record("a.spec.ts", T0, T0 + 1000, ["GET /api/markets"]),
+            between(T0 + 1000, T0 + 2000, ["POST /api/markets", "/src/App.vue"]),
+        ]
+        assert specs_of([shard(records)]) == {
+            "a.spec.ts": {"modules": [], "endpoints": ["GET /markets"]}
+        }
+
     def test_a_shard_with_no_log_still_builds(self):
         records = [record("a.spec.ts", T0, T0 + 1000, ["GET /api/markets"])]
         assert specs_of([shard(records, log=None)])["a.spec.ts"]["endpoints"] == ["GET /markets"]
@@ -129,6 +143,22 @@ class TestTheLogIsAnAudit:
         ]
         log = [log_line(T0 + 700, "GET", "/markets"), log_line(T0 + 1500, "GET", "/markets")]
         assert audit_of(shard(records, log)) == {"lines": 1, "endpoints": {"GET /markets": 1}}
+
+    def test_a_line_another_worker_called_between_its_tests_is_claimed_by_that_record(self):
+        # Worker 0 runs a; worker 1, between two tests of its own, seeds a market in a `beforeAll`.
+        records = [
+            record("a.spec.ts", T0, T0 + 2000),
+            between(T0 + 500, T0 + 800, ["POST /api/markets"]),
+        ]
+        log = [log_line(T0 + 600, "POST", "/markets"), log_line(T0 + 1000, "POST", "/markets")]
+        assert audit_of(shard(records, log)) == {"lines": 1, "endpoints": {"POST /markets": 1}}
+
+    def test_a_line_only_a_between_record_holds_is_left_out(self):
+        records = [record("a.spec.ts", T0, T0 + 1000), between(T0 + 1000, T0 + 3000)]
+        assert audit_of(shard(records, [log_line(T0 + 2000, "GET", "/markets")])) == {
+            "lines": 0,
+            "endpoints": {},
+        }
 
     def test_a_line_outside_every_window_is_left_out(self):
         records = [
@@ -461,6 +491,8 @@ class TestTheCommandLine:
             + "\n"
             + json.dumps(record("a.spec.ts", T0 + 1000, T0 + 1500, ["PUT /api/markets/m-1"]))
             + "\n"
+            + json.dumps(between(T0 + 1500, T0 + 1600, ["GET /api/markets/new"]))
+            + "\n"
         )
         done = self.build(tmp_path)
         assert done.returncode == 0, done.stderr
@@ -528,6 +560,13 @@ class TestTheCommandLine:
         assert done.returncode == 1
         assert "test-map-shard-1" in done.stderr
         assert not (tmp_path / "out.json").exists()
+
+    def test_build_refuses_a_shard_that_recorded_only_between_tests(self, tmp_path):
+        shard = self.shard(tmp_path, 1, records=False)
+        (shard / "records-0.jsonl").write_text(json.dumps(between(T0, T0 + 1000)) + "\n")
+        done = self.build(tmp_path)
+        assert done.returncode == 1
+        assert "test-map-shard-1 has no records" in done.stderr
 
     def test_build_refuses_fewer_shards_than_expected(self, tmp_path):
         # A shard that stopped before it uploaded anything leaves no directory at all.
