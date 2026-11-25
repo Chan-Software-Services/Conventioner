@@ -6,7 +6,8 @@ summary file, and the exit code. The stub answers each API path with a scripted 
 every request, in the pattern of test_promote_check.py's, which this file does not import.
 
 The workflow's tests read .github/workflows/test.yml and the two actions under .github/actions/ as
-text, and run the `decide` step's shell as the runner runs it (`bash -e`) with a fake `python3`.
+text, evaluate the actions' conditions over the cases they decide, and run the `decide` step's shell
+as the runner runs it (`bash -e`) with a fake `python3`.
 """
 import json
 import os
@@ -15,6 +16,7 @@ import subprocess
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from itertools import product
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
@@ -994,6 +996,106 @@ def test_a_missing_script_is_the_whole_suite(tmp_path):
     assert outputs.read_text() == "run=full\n"
 
 
+# The two actions' conditions are evaluated, as the runner would, so a test says what a step does,
+# not how its condition is written.
+
+TOKEN = re.compile(r"\s*('[^']*'|==|!=|&&|\|\||[()]|[\w.-]+)")
+
+
+def result_of(expression, context):
+    """The result of an expression of the forms these steps use: references, 'literals', ==, !=, &&,
+    which binds before ||, and brackets. A reference the context lacks, or any other form, raises."""
+    tokens = []
+    rest = expression.strip()
+    if rest.startswith("${{") and rest.endswith("}}"):
+        rest = rest[3:-2]
+    while rest.strip():
+        found = TOKEN.match(rest)
+        assert found, f"cannot read {rest!r}"
+        tokens.append(found.group(1))
+        rest = rest[found.end():]
+
+    def taken(token):
+        if tokens[:1] != [token]:
+            return False
+        del tokens[0]
+        return True
+
+    # && and || result in one of their operands, as Python's `and` and `or` do.
+    def either():
+        result = both()
+        while taken("||"):
+            right = both()
+            result = result or right
+        return result
+
+    def both():
+        result = comparison()
+        while taken("&&"):
+            right = comparison()
+            result = result and right
+        return result
+
+    def comparison():
+        left = operand()
+        for op in ("==", "!="):
+            if taken(op):
+                return (left == operand()) == (op == "==")
+        return left
+
+    def operand():
+        token = tokens.pop(0)
+        if token == "(":
+            inner = either()
+            assert taken(")"), f"unclosed bracket in {expression!r}"
+            return inner
+        return token[1:-1] if token.startswith("'") else context[token]
+
+    result = either()
+    assert not tokens, f"cannot read {tokens} in {expression!r}"
+    return result
+
+
+def evaluate(expression, context):
+    """Whether an `if:` with this expression runs its step."""
+    return bool(result_of(expression, context))
+
+
+def value(written, context):
+    """What a `with:` value passes: an expression's result as a string, else the literal."""
+    if written.startswith("${{"):
+        result = result_of(written, context)
+        return str(result).lower() if isinstance(result, bool) else result
+    return written.strip('"')
+
+
+def cache_hit(hit):
+    """A restore's `cache-hit` output on a hit of its key or a miss: actions/cache/restore leaves it
+    unset, so empty, on a miss."""
+    return "true" if hit else ""
+
+
+@pytest.mark.parametrize(
+    ("written", "passed_on"),
+    [
+        ("${{ a == 'x' || a == 'y' && b == 'y' }}", "true"),
+        ("${{ (a == 'x' || a == 'y') && b == 'y' }}", "false"),
+        ("${{ b != 'y' && (a == 'y' || (a == 'x')) }}", "true"),
+        ("${{ a == 'x' && 'false' || 'true' }}", "false"),
+        ("${{ (a) == 'x' }}", "true"),
+    ],
+    ids=["and-before-or", "brackets-first", "nested-brackets", "an-operand-as-the-result", "a-bracketed-reference"],
+)
+def test_an_expression_results_as_the_runner_would_read_it(written, passed_on):
+    assert value(written, {"a": "x", "b": "z"}) == passed_on
+
+
+@pytest.mark.parametrize("expression", ["(a == 'x'", "a == 'x')", "a == 'x' b", "!(a == 'x')", "c == 'x'"])
+def test_an_expression_the_evaluator_cannot_read_raises(expression):
+    with pytest.raises((AssertionError, KeyError)):
+        evaluate(expression, {"a": "x", "b": "z"})
+
+
 # The e2e-stack action's `start`: by default every step runs as before.
 
 NOT_STARTING = [
@@ -1021,99 +1123,98 @@ def test_start_is_an_input_that_defaults_to_true():
     assert start["default"] == '"true"'
 
 
+# Every case the e2e-stack action's conditions can turn on: each input, each cache's hit or miss,
+# whether the runner lacks packages, and whether their install marks the files cacheable.
+FACTS = ("start", "save_caches", "browsers_hit", "lacks_packages", "packages_hit", "cacheable", "images_hit")
+CASES = [dict(zip(FACTS, values)) for values in product([True, False], repeat=len(FACTS))]
+
+
+def e2e_stack(case):
+    """What the action does in one case: whether each step runs, and whether each restore only looks
+    its key up. A skipped step's outputs are empty."""
+
+    def text(fact):
+        return "true" if case[fact] else "false"
+
+    outputs = {
+        "Restore Playwright's browsers": ("cache-hit", cache_hit(case["browsers_hit"])),
+        "The system packages Chromium lacks": ("packages", "libnss3" if case["lacks_packages"] else ""),
+        "Restore Chromium's system packages": ("cache-hit", cache_hit(case["packages_hit"])),
+        "Install Chromium's system packages": ("cacheable", text("cacheable")),
+        "Restore the images": ("cache-hit", cache_hit(case["images_hit"])),
+    }
+    context = {"inputs.start": text("start"), "inputs.save-caches": text("save_caches")}
+    runs, looks_only = {}, {}
+    for name, step in action()["steps"].items():
+        runs[name] = "if" not in step or evaluate(step["if"], context)
+        if "lookup-only" in step["with"]:
+            looks_only[name] = value(step["with"]["lookup-only"], context) == "true"
+        if name in outputs:
+            output, written = outputs[name]
+            context[f"steps.{step['id']}.outputs.{output}"] = written if runs[name] else ""
+    return {"runs": runs, "looks only": looks_only}
+
+
 @pytest.mark.parametrize("name", NOT_STARTING)
 def test_a_step_that_starts_the_stack_runs_only_when_starting(name):
-    condition = action()["steps"][name]["if"]
-
-    assert condition == "inputs.start == 'true'" or condition.startswith("inputs.start == 'true' && ")
+    for case in CASES:
+        # Only a restored archive can be loaded.
+        expected = case["start"] and (case["images_hit"] or name != "Load the images")
+        assert e2e_stack(case)["runs"][name] == expected, case
 
 
 @pytest.mark.parametrize(
     "name", ["Restore Playwright's browsers", "Restore Chromium's system packages", "Restore the images"]
 )
 def test_a_restore_only_looks_when_not_starting(name):
-    assert action()["steps"][name]["with"]["lookup-only"] == "${{ inputs.start != 'true' }}"
+    for case in CASES:
+        assert e2e_stack(case)["looks only"][name] == (not case["start"]), case
 
 
 def test_chromium_is_installed_on_a_miss_without_its_system_packages():
-    install = action()["steps"]["Install Playwright's Chromium"]
+    name = "Install Playwright's Chromium"
+    for case in CASES:
+        assert e2e_stack(case)["runs"][name] == (not case["browsers_hit"]), case
 
-    assert install["if"] == "steps.browsers.outputs.cache-hit != 'true'"
+    install = action()["steps"][name]
     assert install["env"] == {}
     assert install["run"] == "npx playwright install chromium\n"
+
+
+def test_chromium_s_system_packages_are_restored_only_when_the_runner_lacks_some():
+    for case in CASES:
+        assert e2e_stack(case)["runs"]["Restore Chromium's system packages"] == case["lacks_packages"], case
 
 
 # Not starting, the packages install only on a miss, which is how their files are made and marked
 # cacheable for the save; a hit, only looked up, has no files to install.
 def test_chromium_s_system_packages_install_when_starting_or_on_a_miss():
-    install = action()["steps"]["Install Chromium's system packages"]
-
-    assert install["if"] == (
-        "steps.packages.outputs.packages != '' && "
-        "(inputs.start == 'true' || steps.packages-cache.outputs.cache-hit != 'true')"
-    )
+    for case in CASES:
+        expected = case["lacks_packages"] and (case["start"] or not case["packages_hit"])
+        assert e2e_stack(case)["runs"]["Install Chromium's system packages"] == expected, case
 
 
-@pytest.mark.parametrize(
-    "name",
-    [
-        "Build the images",
-        "Write the images for the cache",
-        "Save the images",
-        "Save Playwright's browsers",
-        "The system packages Chromium lacks",
-        "Save Chromium's system packages",
-    ],
-)
+# What each of these runs on: never `start`.
+BUILDS_AND_SAVES = {
+    "Build the images": lambda case: not case["images_hit"],
+    "Write the images for the cache": lambda case: case["save_caches"] and not case["images_hit"],
+    "Save the images": lambda case: case["save_caches"] and not case["images_hit"],
+    "Save Playwright's browsers": lambda case: case["save_caches"] and not case["browsers_hit"],
+    "The system packages Chromium lacks": lambda case: True,
+    "Save Chromium's system packages": lambda case: (
+        case["save_caches"] and case["lacks_packages"] and not case["packages_hit"] and case["cacheable"]
+    ),
+}
+
+
+@pytest.mark.parametrize("name", BUILDS_AND_SAVES)
 def test_the_builds_and_saves_ignore_start(name):
-    assert "inputs.start" not in action()["steps"][name].get("if", "")
+    for case in CASES:
+        assert e2e_stack(case)["runs"][name] == BUILDS_AND_SAVES[name](case), case
 
 
 # The front-end-deps action's `fill-npm-cache`: by default it installs only on its own cache's miss.
-# Its conditions are evaluated, as the runner would, over each cache's hit or miss.
-
-TOKEN = re.compile(r"\s*('[^']*'|==|!=|&&|\|\||[\w.-]+)")
-
-
-def evaluate(expression, context):
-    """An expression of the forms these steps use: references, 'literals', ==, !=, && and ||."""
-    tokens = []
-    rest = expression.strip()
-    if rest.startswith("${{") and rest.endswith("}}"):
-        rest = rest[3:-2]
-    while rest.strip():
-        found = TOKEN.match(rest)
-        assert found, f"cannot read {rest!r}"
-        tokens.append(found.group(1))
-        rest = rest[found.end():]
-
-    def operand(token):
-        return token[1:-1] if token.startswith("'") else context[token]
-
-    def comparison(tokens):
-        if len(tokens) == 1:
-            return operand(tokens[0])
-        left, op, right = tokens
-        return (operand(left) == operand(right)) == (op == "==")
-
-    def split(tokens, op):
-        parts, part = [], []
-        for token in tokens:
-            if token == op:
-                parts.append(part)
-                part = []
-            else:
-                part.append(token)
-        return parts + [part]
-
-    return any(all(comparison(c) for c in split(o, "&&")) for o in split(tokens, "||"))
-
-
-def value(written, context):
-    """What a `with:` value passes: an expression's result as a string, else the literal."""
-    if written.startswith("${{"):
-        return "true" if evaluate(written, context) else "false"
-    return written.strip('"')
+# Its conditions are evaluated over each cache's hit or miss.
 
 
 def front_end_deps(given, modules_hit):
@@ -1125,7 +1226,7 @@ def front_end_deps(given, modules_hit):
     inputs.update(given)
     context = {f"inputs.{name}": v for name, v in inputs.items()}
     looks_only = value(restore["with"]["lookup-only"], context) == "true"
-    context[f"steps.{restore['id']}.outputs.cache-hit"] = "true" if modules_hit else "false"
+    context[f"steps.{restore['id']}.outputs.cache-hit"] = cache_hit(modules_hit)
     return {
         "looks only": looks_only,
         "downloads": modules_hit and not looks_only,
