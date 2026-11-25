@@ -912,6 +912,9 @@ function runShard(
   const phases: Phase[] = [];
   for (const pass of passes(hand, serial)) {
     const json = join(resultsDir, `results-${pass.name}.json`);
+    // Outside the pass's output folder, so Playwright never empties it: a pass that ends before
+    // its JSON reporter writes must leave none, not an earlier run's.
+    rmSync(json, { force: true });
     const started = Date.now();
     const run = spawnSync(
       'npx',
