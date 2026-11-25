@@ -184,6 +184,7 @@ const invitations = useInvitationsWaiting({
   key: () => (props.manageOpen && canManage() ? (orgData.value?.id ?? null) : null),
   fetch: fetchOrganizationInvitations,
   withdraw: withdrawOrganizationInvitation,
+  ended: (isCurrent) => refreshOrg('Could not re-read the organization', isCurrent),
 });
 watch(
   () => [props.manageOpen, props.org] as const,

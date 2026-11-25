@@ -544,6 +544,29 @@ describe('Withdraw', () => {
     expect(document.body.textContent).not.toContain('That invitation has already ended.');
   });
 
+  it('reads the market again when the invitation was accepted meanwhile, so its person shows', async () => {
+    const NEWCOMER: PersonWithAccess = {
+      ...EDITOR,
+      userId: 'u-newcomer',
+      email: 'newcomer@example.test',
+    };
+    invited = [invitation()];
+    api.delete.mockImplementation(async () => {
+      invited = [];
+      served = market({ peopleWithAccess: [OWNER, EDITOR, NEWCOMER] });
+      throw refusing(404, 'That invitation has already ended.');
+    });
+    await open();
+    await askToWithdraw();
+
+    confirm();
+    await flushPromises();
+
+    expect(byTestId('manage-market-withdraw-window')).toBeNull();
+    expect(byTestId('manage-market-window')).not.toBeNull();
+    expect(peopleShown()).toContain('newcomer@example.test');
+  });
+
   it('says an invitation sent again meanwhile under the confirmation, and re-reads the list', async () => {
     const sentence =
       'That invitation was sent again meanwhile. Read the invitations again, and withdraw it if you still mean to.';

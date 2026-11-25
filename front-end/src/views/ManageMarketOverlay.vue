@@ -301,6 +301,7 @@ const invitations = useInvitationsWaiting({
   key: () => (grantableRoles.value.length ? read.key.value : null),
   fetch: fetchMarketInvitations,
   withdraw: withdrawMarketInvitation,
+  ended: rereadAfterAWrite,
 });
 // Each opening starts with nothing finding in "Invited".
 watch(

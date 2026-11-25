@@ -17,6 +17,11 @@ export interface InvitationsWaitingOptions<Role extends string> {
   key: () => string | null;
   fetch: (key: string) => Promise<SentInvitation<Role>[]>;
   withdraw: (key: string, id: string) => Promise<void>;
+  /**
+   * Reads the people again inside the write `isCurrent` belongs to, after a withdrawal found the
+   * invitation already ended: one accepted meanwhile has put its person among them.
+   */
+  ended?: (isCurrent: () => boolean) => Promise<void>;
 }
 
 /** Said in the section's place when the read failed, with "Try again". */
@@ -56,7 +61,8 @@ export function useInvitationsWaiting<Role extends string>(
   /**
    * Withdraws the invitation `id` on `key`, then reads the invitations again, inside the write that
    * `isCurrent` belongs to. A 404 is an invitation already accepted, declined, ended or withdrawn:
-   * nobody can accept it any more, which is what was asked, so it is done. A 409 is one sent again
+   * nobody can accept it any more, which is what was asked, so it is done, and the people are read
+   * again too (`ended`), as one accepted meanwhile is among them now. A 409 is one sent again
    * meanwhile, to another role or place: it is thrown for the confirmation to say, with the list
    * behind it read again, so what was sent again is in sight before it is withdrawn.
    */
@@ -68,6 +74,9 @@ export function useInvitationsWaiting<Role extends string>(
         if (getApiErrorStatus(err) === 409) await reread(isCurrent);
         throw err;
       }
+      await reread(isCurrent);
+      await options.ended?.(isCurrent);
+      return;
     }
     await reread(isCurrent);
   }

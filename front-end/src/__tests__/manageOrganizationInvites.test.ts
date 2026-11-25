@@ -581,6 +581,29 @@ describe('Withdraw', () => {
     expect(document.body.textContent).not.toContain('That invitation has already ended.');
   });
 
+  it('reads the organization again when the invitation was accepted meanwhile, so its person shows', async () => {
+    invited = [invitation()];
+    api.delete.mockImplementation(async () => {
+      invited = [];
+      served = org({
+        memberPeople: [
+          { userId: 'u-member', email: 'member@example.com' },
+          { userId: 'u-newcomer', email: 'newcomer@example.test' },
+        ],
+      });
+      throw refusing(404, 'That invitation has already ended.');
+    });
+    await open();
+    await askToWithdraw();
+
+    confirm();
+    await flushPromises();
+
+    expect(byTestId('manage-org-withdraw-window')).toBeNull();
+    expect(byTestId('manage-org-window')).not.toBeNull();
+    expect(shown('manage-org-member-email')).toContain('newcomer@example.test');
+  });
+
   it('says an invitation sent again meanwhile under the confirmation, and re-reads the list', async () => {
     const sentence =
       'That invitation was sent again meanwhile. Read the invitations again, and withdraw it if you still mean to.';
