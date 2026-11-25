@@ -1152,7 +1152,7 @@ def test_a_run_with_nothing_downloaded_passes_the_results_step(tmp_path, shards)
 
 
 QUEUE_AUDIT_STEP = "Audit the pull request's selection"
-TRIAL_COMMITS_DIFF = ["audit", "--queue", "--github", "--base", "HEAD^1", "--head", "HEAD"]
+QUEUE_AUDIT_ARGS = ["audit", "--queue", "--github", "--base", "HEAD^1", "--head", "HEAD"]
 
 
 def run_queue_audit(tmp_path, shards):
@@ -1172,21 +1172,26 @@ def run_queue_audit(tmp_path, shards):
 
 
 def test_a_trial_commit_s_run_audits_the_pull_request_s_selection_beside_the_pull_request_s_own_audit(tmp_path):
-    checkout, *_ = steps = workflow_jobs()["e2e"]["steps"]
-    names = [step.get("name") for step in steps]
-    own = steps[names.index("Audit the selection")]
-    queue = steps[names.index("Audit the selection") + 1]
+    e2e = workflow_jobs()["e2e"]
+    checkout = e2e["steps"][0]
+    first_audit = [step.get("name") for step in e2e["steps"]].index("Audit the selection")
+    own, queue = e2e["steps"][first_audit:first_audit + 2]
 
     assert queue["name"] == QUEUE_AUDIT_STEP
     assert queue["if"] == "github.event_name == 'merge_group'"
     assert queue["continue-on-error"] == "true"
     assert queue["timeout-minutes"] == "10"
     assert queue["env"] == {"GH_TOKEN": "${{ github.token }}", "GH_REPO": "${{ github.repository }}"}
-    # The trial commit's change is the diff from its first parent, so the checkout takes both.
+    # The step continues on error, so what it needs would be missed in silence. It runs the script
+    # from the repository's root, reads dev's newest map with `actions: read`, and diffs the trial
+    # commit from its first parent, so the checkout takes both.
+    assert "working-directory" not in queue
+    assert e2e["permissions"] == {"contents": "read", "actions": "read"}
+    assert checkout["uses"].startswith("actions/checkout@")
     assert checkout["with"]["fetch-depth"] == "2"
     done, reports = run_queue_audit(tmp_path, 2)
     assert done.returncode == 0, done.stderr
-    assert calls(tmp_path) == [["scripts/affected-specs.py", *TRIAL_COMMITS_DIFF, *reports]]
+    assert calls(tmp_path) == [["scripts/affected-specs.py", *QUEUE_AUDIT_ARGS, *reports]]
     assert own["if"] == "github.event_name == 'pull_request'"
     assert "--queue" not in own["run"]
 
@@ -1196,7 +1201,7 @@ def test_the_queue_s_audit_with_no_report_downloaded_passes_the_script_none(tmp_
 
     assert done.returncode == 0, done.stderr
     # Not the pattern that matched nothing, which the script would name as a report it could not read.
-    assert calls(tmp_path) == [["scripts/affected-specs.py", *TRIAL_COMMITS_DIFF]]
+    assert calls(tmp_path) == [["scripts/affected-specs.py", *QUEUE_AUDIT_ARGS]]
 
 
 NO_SPEC_RAN = "No E2E spec ran: the test map names none for this change."

@@ -558,7 +558,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 90
       # The report and the deal record, which the `e2e` job checks and blends into the next
-      # timings; the selection audit reads the report too.
+      # timings; the selection's audits read the report too.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
@@ -772,8 +772,8 @@ jobs:
       # On a merge queue trial commit, each failed spec as the pull request's own E2E run would
       # treat it for this change, from the trial commit's first parent: it ran it by name, it ran
       # the whole suite, or it left it out, each spec left out a warning annotation. The audit
-      # decides that again, by the map as it reads it now. It continues on error, so it never
-      # decides the job.
+      # decides that again as it runs, from this commit and the newest map, so it is no record of
+      # what that run did. It continues on error, so it never decides the job.
       - name: Audit the pull request's selection
         if: github.event_name == 'merge_group'
         continue-on-error: true
