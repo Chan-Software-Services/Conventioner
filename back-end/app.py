@@ -108,7 +108,9 @@ from utils.request_origin import install_request_origin_check
 from utils.security_headers import install_security_headers
 from client_errors import BadRequestError, install_error_answers
 from utils.secret_key import (
+    ORGANIZER_SESSIONS,
     SecretKeyNotConfiguredError,
+    derived_key,
     signing_secret,
 )
 from utils.identity import authenticated_email
@@ -424,7 +426,8 @@ def check_public_endpoint_defenses() -> PublicEndpointDefenses:
 def configure_public_endpoint_defenses(
     flask_app: Flask, defenses: PublicEndpointDefenses,
 ) -> None:
-    """Install what the check confirmed: the signing key, the origins it may be spent from (which
+    """Install what the check confirmed: the organizer session's signing key, derived from the
+    secret (``utils.secret_key``), the origins it may be spent from (which
     are also the origins a write is taken from), the store it is kept in, and the hops a caller's
     address may be read back through.
 
@@ -432,7 +435,7 @@ def configure_public_endpoint_defenses(
     interface is built against the app's ``SECRET_KEY``, which the first line here is what puts
     there.
     """
-    flask_app.config["SECRET_KEY"] = defenses.signing_secret
+    flask_app.config["SECRET_KEY"] = derived_key(defenses.signing_secret, ORGANIZER_SESSIONS)
     install_cors(flask_app, defenses.origins)
     install_request_origin_check(flask_app, defenses.origins)
     logger.info(

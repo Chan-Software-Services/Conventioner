@@ -27,7 +27,7 @@ from conftest import at_the_door, stored_market
 from datatypes import MarketPhase
 from test_every_write_records import Attendance, LiveMarkets
 from utils.application_token import generate_application_token
-from utils.secret_key import signing_secret
+from utils.secret_key import vendor_token_key
 
 SLUG = "test-market"
 MARKET = "market-123"
@@ -406,7 +406,7 @@ def ended_sign_in(market_id=MARKET, email=VENDOR):
     """A sign-in that ended: signed as the server signs one, its 30 minutes long past."""
     now = int(time.time())
     claims = {"market_id": market_id, "email": email, "iat": now - 3600, "exp": now - 1800}
-    return {"Authorization": f"Bearer {jwt.encode(claims, signing_secret(), algorithm='HS256')}"}
+    return {"Authorization": f"Bearer {jwt.encode(claims, vendor_token_key(), algorithm='HS256')}"}
 
 
 class TestAnEndedSignIn:

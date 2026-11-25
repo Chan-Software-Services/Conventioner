@@ -100,7 +100,7 @@ The Deploy workflow refuses a back end that does not see it, before anything is 
 **Changing a variable does nothing until the next deploy**, and a `VITE_` one is baked into the front-end bundle when it is built.
 After changing one, redeploy without a code change: GitHub, Actions, **Deploy**, Run workflow, from `main`.
 
-Rotating `SECRET_KEY` signs every organizer out once; that is expected.
+Rotating `SECRET_KEY` signs every organizer out once and ends every vendor's sign-in token, since each signing key is derived from it; that is expected, so rotate it at a quiet time, never on a market day.
 Rotating the database password means updating `MONGODB_URI` and redeploying, in that order, or the back end cannot boot.
 When `VERCEL_TOKEN` expires, the Deploy workflow fails at "Stage the back end" with an authentication error; create a new token and set the secret again.
 
