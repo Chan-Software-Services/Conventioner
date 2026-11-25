@@ -236,8 +236,25 @@ describe('the guards', () => {
     );
   });
 
+  it('refuses a token whose value holds a backslash, which no table cell shows as written', () => {
+    const message =
+      '--mark in base.css holds a backslash, which a DESIGN.md table cannot show as written';
+    const top = BASE.replace('  --leading: 1.6;\n', "  --leading: 1.6;\n  --mark: '\\2014';\n");
+    expect(refusal(() => render({ ...FIXTURE, base: top }, PLAIN))).toBe(message);
+    const phone = BASE.replace(
+      '    --target-min: 44px;\n',
+      "    --target-min: 44px;\n    --mark: '\\2014';\n",
+    );
+    expect(refusal(() => render({ ...FIXTURE, base: phone }, PLAIN))).toBe(message);
+  });
+
+  it('escapes a pipe in a table cell, so the cell stays whole', () => {
+    const base = BASE.replace('  --leading: 1.6;\n', "  --leading: 1.6;\n  --mark: 'a|b';\n");
+    expect(render({ ...FIXTURE, base }, PLAIN).text).toContain("| `--mark` | `'a\\|b'` |\n");
+  });
+
   it('refuses a body family that main.css loads no face of', () => {
-    const main = MAIN.replace("'Outfit'", "'Inter'");
+    const main = MAIN.replace("'Outfit'", "'Another Face'");
     expect(refusal(() => render({ ...FIXTURE, main }, PLAIN))).toBe(
       'Outfit is not a face main.css loads',
     );

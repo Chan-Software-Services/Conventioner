@@ -13,9 +13,10 @@
  * `npm run design-md:check` (`--check`), which CI's frontend-lint-and-types job and
  * scripts/nm-test.sh run, fails when the committed file is not what this script writes, and when the
  * pinned `@google/design.md` linter finds an error or any warning but `orphaned-tokens`.
- * When a guard refuses (a token declared twice, a family no face loads, words naming a token or a
- * class the CSS no longer has, a component selector no rule lists, a rule of primitives.css nested
- * in another, a component font size off the type scale) it says why and writes nothing.
+ * When a guard refuses (a token declared twice or holding a backslash, a family no face loads,
+ * words naming a token or a class the CSS no longer has, a component selector no rule lists, a rule
+ * of primitives.css nested in another, a component font size off the type scale) it says why and
+ * writes nothing.
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -96,6 +97,18 @@ const CLASSES_SPAN = /^(?:\.[a-z][\w-]*)+$/;
 const collapse = (text: string) => text.replace(/\s+/g, ' ').trim();
 const unquote = (family: string) => family.trim().replace(/^(['"])(.*)\1$/, '$2');
 
+/**
+ * Refuses a token value with a backslash: a GFM table undoes a backslash escape inside a code span
+ * only before `|`, so no cell could show such a value as `base.css` writes it.
+ */
+function refuseBackslash(decl: Declaration): void {
+  if (decl.value.includes('\\')) {
+    throw new Refusal(
+      `${decl.prop} in base.css holds a backslash, which a DESIGN.md table cannot show as written`,
+    );
+  }
+}
+
 /** Every custom property of the top-level `:root` rules, in source order. */
 function readTokens(base: Root): Token[] {
   const tokens: Token[] = [];
@@ -104,6 +117,7 @@ function readTokens(base: Root): Token[] {
     rule.each((node) => {
       if (node.type !== 'decl' || !node.prop.startsWith('--')) return;
       if (seen.has(node.prop)) throw new Refusal(`${node.prop} is declared twice in base.css`);
+      refuseBackslash(node);
       seen.add(node.prop);
       tokens.push({ name: node.prop, value: collapse(node.value), note: sameLineNote(node) });
     });
@@ -242,7 +256,8 @@ function guardWords(content: Content, tokens: Set<string>, classes: Set<string>)
 const yamlKey = (key: string) => (/^[a-z0-9-]+$/.test(key) ? key : JSON.stringify(key));
 const yamlString = (value: string) => JSON.stringify(value);
 const comment = (note: string | undefined) => (note ? ` # ${note}` : '');
-const cell = (text: string) => `\`${text}\``.replace(/\|/g, '\\|');
+/** A table cell, as a code span, each backslash and pipe escaped; a backslash value is refused first. */
+const cell = (text: string) => `\`${text}\``.replace(/[\\|]/g, '\\$&');
 
 /** Each `@media` rule of base.css holding a `:root` rule: its query, and what it sets there. */
 function overrides(base: Root): { params: string; decls: Declaration[] }[] {
@@ -252,7 +267,9 @@ function overrides(base: Root): { params: string; decls: Declaration[] }[] {
     for (const rule of topLevelRules(node, ':root')) {
       const decls: Declaration[] = [];
       rule.each((child) => {
-        if (child.type === 'decl') decls.push(child);
+        if (child.type !== 'decl') return;
+        refuseBackslash(child);
+        decls.push(child);
       });
       found.push({ params: collapse(node.params), decls });
     }
