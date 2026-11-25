@@ -41,7 +41,7 @@ describes:
   - back-end/tests/test_a_roll_forward_rebuilds_the_people_from_the_lists.py
   - back-end/tests/test_a_persons_organizations_in_either_shape.py
   - back-end/api/organizations.py#change_org_place
-verified: 2026-11-17
+verified: 2026-11-25
 sources:
   - E20/F04/S01
   - E21/F03/S01

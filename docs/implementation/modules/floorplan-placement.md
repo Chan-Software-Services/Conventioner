@@ -63,7 +63,7 @@ describes:
   - front-end/src/components/daymap/DayMap.vue
   - front-end/src/components/daymap/dayMap.ts
   - front-end/src/components/daymap/freeParts.ts
-verified: 2026-11-24
+verified: 2026-11-25
 sources:
   - bug/38
   - E26/F09/S01
