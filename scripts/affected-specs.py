@@ -10,8 +10,10 @@ From the worktree root, on the worktree's stack (`team-stack up`, `team-stack se
 `eval "$(~/agent-team/bin/team-stack env)"`, so Playwright reaches it). The change is the diff from
 the merge-base with `origin/dev` to the worktree, uncommitted and untracked files included
 (`--base` and `--head` name two commits instead, for `--list`). The map is the newest `test-map`
-artifact of a push to `dev`, downloaded once a run to `.stack-logs/test-map/<run id>/` beside that
-run's shard results (`--map` and `--results` name files instead). A spec is chosen:
+artifact of a run on `dev`, which the nightly Test run makes on `dev`'s tip (or one started by hand,
+`gh workflow run test.yml --ref dev`), so up to a day behind `dev`; it is downloaded once a run to
+`.stack-logs/test-map/<run id>/` beside that run's shard results (`--map` and `--results` name
+files instead). A spec is chosen:
 
 1. when the change edits it, or a file it imports, transitively, or deletes a file it imported at
    the base (scores 1);
@@ -28,7 +30,7 @@ run's shard results (`--map` and `--results` name files instead). A spec is chos
    rule places: not a spec, not imported by one at the head or the base, in no spec's modules and
    no endpoint's files (a stylesheet Vite inlines, a module no endpoint ran, a config no rule
    reads); docs, Markdown, the suites that are not E2E and their configs, the lint and format
-   configs, the scripts that deal, repeat or measure the specs, the back end's deploy config,
+   configs, the scripts that deal or measure the specs, the back end's deploy config,
    `back-end/vercel.json`, the advisory scan's lock, `back-end/requirements-audit.in` and its
    `.txt`, and the migrations, `back-end/migrations/` (`DRIVES_NO_SPEC`), choose nothing, and so
    does a file the change deletes no rule places, since what read it changes with it and is placed
@@ -87,7 +89,7 @@ RUN_EVERY_SPEC = re.compile(
 
 # The changed files that drive no spec, wherever the map places them: the docs, Markdown, the
 # suites the E2E run does not run and their configs, the lint and format configs, the scripts that
-# deal, repeat or measure the specs (or that nothing runs), the back end's deploy config, the
+# deal or measure the specs (or that nothing runs), the back end's deploy config, the
 # advisory scan's lock, which only CI's python-advisories job installs, and the migrations, which an
 # operator runs by hand, none of which the stack or a page reads.
 DRIVES_NO_SPEC = re.compile(
@@ -96,7 +98,7 @@ DRIVES_NO_SPEC = re.compile(
     r"|^front-end/src/.*\.(?:test|spec)\.tsx?$"
     r"|^front-end/(?:vitest\.config\.ts|tsconfig\.vitest\.json|eslint\.config\.ts"
     r"|stylelint\.config\.js|\.prettierrc\.json|\.prettierignore|\.editorconfig"
-    r"|scripts/(?:e2e-shard-timings\.json|e2e-shards\.ts|e2e-repeat\.ts|bundle-budget\.ts"
+    r"|scripts/(?:e2e-shard-timings\.json|e2e-shards\.ts|bundle-budget\.ts"
     r"|no-eval\.ts|brand-icons\.ts))$"
     r"|^back-end/(?:pytest\.ini|vercel\.json|requirements-audit\.(?:in|txt))$"
 )
@@ -747,8 +749,9 @@ def gh(root: Path, *args: str) -> Optional[str]:
 
 
 def newest_map(root: Path) -> Tuple[Optional[dict], Optional[dict], Optional[Path]]:
-    """(the map, where it came from, its run's shard results) of the newest push to `dev` that
-    made one, downloaded once a run; offline, the newest one downloaded before."""
+    """(the map, where it came from, its run's shard results) of the newest run on `dev` that
+    made one (a nightly run's, or an older push's), downloaded once a run; offline, the newest one
+    downloaded before."""
     cache = root / CACHE
     listing = gh(root, "api", "repos/{owner}/{repo}/actions/artifacts?name=test-map&per_page=50")
     run_id: Optional[int] = None
@@ -824,7 +827,7 @@ def escape(text: str) -> str:
 def describe_source(source: Optional[dict]) -> str:
     if source is None:
         return (
-            "affected-specs: no test map (no `gh`, offline, or no push to dev has made one yet): "
+            "affected-specs: no test map (no `gh`, offline, or no run on dev has made one yet): "
             "choosing only the changed specs and those importing a changed file, as Playwright's "
             "--only-changed would"
         )

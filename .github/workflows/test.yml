@@ -11,6 +11,14 @@ on:
   merge_group:
     types: [checks_requested]
     branches: [dev]
+  # The nightly test map (docs/implementation/testing/the-test-map.md), on dev's tip at 19:17 UTC,
+  # off the hour GitHub's scheduler is busiest at: the shards record and `test-map` builds it, and
+  # the run makes no map when that commit already has one, as on a night with no merge.
+  # python-advisories, which reads no `suite` word, scans the Python locks every night either way.
+  schedule:
+    - cron: "17 19 * * *"
+  # The same on demand, with `gh workflow run test.yml --ref dev`.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -34,8 +42,43 @@ env:
 # Each job's `name:` is its check's name, which the rules of dev and main require a check by:
 # renaming a required job drops its check from the required list.
 jobs:
+  # Which suite this run runs (scripts/ci_suite.py), on a push to dev, a nightly run or one started
+  # by hand. A commit dev's merge queue already passed is the commit the queue tested, so its push
+  # only warms the caches the pull requests read (`warm`); every other commit, or any doubt, runs
+  # the whole suite (`full`). A nightly or hand-started run makes the test map (`map`: the shards,
+  # recording, and `test-map`), or no test job when the commit has one (`none`); python-advisories
+  # reads no word, so it runs on each of them. Every other run skips this job and starts every job
+  # at once. The step's shell makes anything but one of the script's words `full`, and the jobs read
+  # an empty output, this job skipped or failed, as `full` too, so nothing here can skip a test it
+  # should not.
+  suite:
+    name: suite
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The script needs only the standard library, so the runner's own Python runs it.
+      - id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          COMMIT: ${{ github.sha }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          run="$(python3 scripts/ci_suite.py --event "$EVENT" --commit "$COMMIT")" || run=full
+          case "$run" in warm | map | none) ;; *) run=full ;; esac
+          echo "run=$run" >>"$GITHUB_OUTPUT"
+
   backend:
     name: backend
+    needs: suite
+    if: ${{ !cancelled() && (needs.suite.outputs.run == '' || needs.suite.outputs.run == 'full') }}
     runs-on: ubuntu-latest
     # The real-MongoDB tests (back-end/tests/real_mongo/) run on this server, the compose file's
     # MongoDB, whose comment says why it is 7 while production runs 8.0. REAL_MONGODB_REQUIRED
@@ -82,10 +125,12 @@ jobs:
   # locked: each pinned version with its hashes, resolving and installing nothing. Any known
   # advisory fails the job, whose summary names each finding and the version that fixes it. Not a
   # required check, so an advisory published overnight never holds an unrelated pull request: the
-  # red job on a push to dev is the alert. It waits for real-data-and-workflows, which ends in under
-  # a minute, so a pull request's run never asks for more than the account's 20 jobs at once
-  # (docs/implementation/testing/ci-and-the-gate.md#the-e2e-shards). A trial commit skips it, as it
-  # skips e2e-repeat and test-map.
+  # red job on a push to dev, or on the nightly run on dev's tip, is the alert, so an advisory
+  # published on a day with no merge is seen that night. It reads no `suite` word, so a warm push
+  # and a nightly run whose commit has a map run it too. It waits for real-data-and-workflows, which
+  # ends in under a minute, so a pull request's run never asks for more than the account's 20 jobs
+  # at once (docs/implementation/testing/ci-and-the-gate.md#the-e2e-shards). A trial commit skips
+  # it, as it skips test-map.
   python-advisories:
     name: python-advisories
     needs: real-data-and-workflows
@@ -133,6 +178,8 @@ jobs:
   # bumped. Drift reads the base branch's history, hence the full clone.
   knowledge-graph:
     name: knowledge-graph
+    needs: suite
+    if: ${{ !cancelled() && (needs.suite.outputs.run == '' || needs.suite.outputs.run == 'full') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -163,9 +210,10 @@ jobs:
   # branch is published before any job runs. The protection is the same checker in the git hooks
   # and the gate, before anything leaves the PC
   # (docs/implementation/conventions/security-invariants.md). These steps only keep a PR that got
-  # past them from merging. gitleaks also reads each push to dev and main, so a secret that reached
-  # one other than through a pull request's scan (a Release PR, merged with --admin, gets no CI)
-  # fails a run there.
+  # past them from merging. gitleaks also reads each push to main, and each push to dev that runs
+  # the whole suite, so a secret that reached one other than through a pull request's scan (a
+  # Release PR, merged with --admin, gets no CI) fails a run there. A warm push to dev skips this
+  # job: the queue merged it from pull requests whose own runs scanned each of its commits.
   # zizmor reads the repository's workflows and Dependabot config, offline, so it needs no token.
   # Every finding fails the job; an accepted one is ignored on the line zizmor reports, with its
   # audit and the reason after it.
@@ -174,6 +222,8 @@ jobs:
   # security, does not read. Every finding fails the job.
   real-data-and-workflows:
     name: real-data-and-workflows
+    needs: suite
+    if: ${{ !cancelled() && (needs.suite.outputs.run == '' || needs.suite.outputs.run == 'full') }}
     runs-on: ubuntu-latest
     env:
       BASE_REF: ${{ github.base_ref }}
@@ -253,6 +303,8 @@ jobs:
 
   frontend-unit:
     name: frontend-unit
+    needs: suite
+    if: ${{ !cancelled() && (needs.suite.outputs.run == '' || needs.suite.outputs.run == 'full') }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -271,6 +323,8 @@ jobs:
 
   frontend-lint-and-types:
     name: frontend-lint-and-types
+    needs: suite
+    if: ${{ !cancelled() && (needs.suite.outputs.run == '' || needs.suite.outputs.run == 'full') }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -325,6 +379,8 @@ jobs:
 
   docker-build:
     name: docker-build
+    needs: suite
+    if: ${{ !cancelled() && (needs.suite.outputs.run == '' || needs.suite.outputs.run == 'full') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -338,12 +394,14 @@ jobs:
   # never across runners. `front-end/scripts/e2e-shards.ts` deals the spec files to the shards by
   # their measured seconds, not Playwright's `--shard`, which cuts the alphabetical list by test
   # count and once left one shard at 24 minutes and another at 6. The seconds are the newest
-  # `e2e-shard-timings` artifact a run on dev or a merge queue trial commit published, made at
+  # `e2e-shard-timings` artifact a push to dev or a merge queue trial commit published, made at
   # least ten minutes before this run was created, so every shard and every re-run picks the same
   # one; with none, or one it cannot read, the committed `e2e-shard-timings.json`.
   # `total` is the length of `shard`'s list: the two move together.
   e2e-shard:
     name: e2e shard ${{ matrix.shard }}/${{ matrix.total }}
+    needs: suite
+    if: ${{ !cancelled() && (needs.suite.outputs.run == '' || needs.suite.outputs.run == 'full' || needs.suite.outputs.run == 'map') }}
     runs-on: ubuntu-latest
     # The timings step lists the artifacts and reads its own run's creation time.
     permissions:
@@ -358,9 +416,10 @@ jobs:
       DISABLE_CAPTCHA: "true"
       DISABLE_EMAIL: "true"
       DISCORD_FAKE: "true"
-      # On a push to dev only, the shards record the test map (front-end/e2e/helpers/testMap.ts),
-      # which the test-map job below builds; every other run records nothing.
-      RECORD_TEST_MAP: ${{ github.event_name == 'push' && github.ref == 'refs/heads/dev' }}
+      # On the nightly run only, or one started by hand, the shards record the test map
+      # (front-end/e2e/helpers/testMap.ts), which the test-map job below builds; every other run
+      # records nothing, so recording's slowdown is never on a pull request's or the queue's path.
+      RECORD_TEST_MAP: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -457,71 +516,52 @@ jobs:
             front-end/test-results/
           retention-days: 7
 
-  # Information, not a required check, until its failures over a week are read: the spec files a
-  # pull request adds or changes, run several times each with no retry on one stack
-  # (`front-end/scripts/e2e-repeat.ts`), so a spec that passes only sometimes is caught before it
-  # merges on one green run of its shard. The diff is from the merge commit's first parent, the
-  # base the PR is tested against, hence two commits of history. With no such file it passes at
-  # once, before any stack starts.
-  e2e-repeat:
-    name: e2e-repeat
-    if: github.event_name == 'pull_request'
+  # On a push to dev the merge queue already passed (`suite` says `warm`), this job alone runs: it
+  # restores or makes each cache a pull request's run reads, saved in dev's scope as shard 1 of a
+  # whole-suite run would, and runs no test. npm's cache is frontend-unit's and
+  # frontend-lint-and-types', which `npm ci` fills for the setup-node post step to save on a miss;
+  # front-end/node_modules, Playwright's browser, Chromium's system packages and the stack's images
+  # are the shards'. It never fails the run: the queue's run already proved the commit, and a cache
+  # it could not save only costs the next pull requests a cold start, until the next warm push saves
+  # it, or, for front-end/node_modules, the browser, the packages and the images, a nightly run's
+  # shard 1.
+  warm-caches:
+    name: warm-caches
+    needs: suite
+    if: needs.suite.outputs.run == 'warm'
     runs-on: ubuntu-latest
-    # Two runs of up to 15 minutes each (e2e-repeat.ts) and the setup.
-    timeout-minutes: 40
-    env:
-      DISABLE_CAPTCHA: "true"
-      DISABLE_EMAIL: "true"
-      DISCORD_FAKE: "true"
+    continue-on-error: true
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: 2
-      - uses: ./.github/actions/front-end-deps # zizmor: ignore[self-repository] actionlint 1.7.12, the latest, refuses the $/ form
-      - name: The spec files this pull request changes
-        id: changed
-        working-directory: front-end
-        run: |
-          files="$(node scripts/e2e-repeat.ts changed HEAD^1)"
-          if [ -n "$files" ]; then
-            echo "any=true" >>"$GITHUB_OUTPUT"
-            {
-              echo "### Spec files this pull request changes"
-              while IFS= read -r file; do echo "- $file"; done <<<"$files"
-            } >>"$GITHUB_STEP_SUMMARY"
-          else
-            echo "any=false" >>"$GITHUB_OUTPUT"
-            echo "No spec file changed: nothing to repeat." | tee -a "$GITHUB_STEP_SUMMARY"
-          fi
-      - uses: ./.github/actions/e2e-stack # zizmor: ignore[self-repository] actionlint 1.7.12, the latest, refuses the $/ form
-        if: steps.changed.outputs.any == 'true'
-      - name: Run each several times
-        if: steps.changed.outputs.any == 'true'
-        working-directory: front-end
-        run: node scripts/e2e-repeat.ts run HEAD^1
-      - name: Docker compose logs
-        if: always() && steps.changed.outputs.any == 'true'
-        run: docker compose logs
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: failure() && steps.changed.outputs.any == 'true'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          name: playwright-artifacts-repeat
-          path: |
-            front-end/playwright-report/
-            front-end/test-results/
-          retention-days: 7
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: front-end/package-lock.json
+      - name: Fill npm's cache
+        working-directory: front-end
+        run: npm ci
+      - uses: ./.github/actions/front-end-deps # zizmor: ignore[self-repository] actionlint 1.7.12, the latest, refuses the $/ form
+        with:
+          save-cache: true
+      - uses: ./.github/actions/e2e-stack # zizmor: ignore[self-repository] actionlint 1.7.12, the latest, refuses the $/ form
+        with:
+          save-caches: true
+          start: "false"
 
-  # The test map (docs/implementation/testing/the-test-map.md), on a push to dev only, once the
-  # shards have recorded what each spec reached: the back end's suite once under coverage, for what
-  # each endpoint runs, then the build of both into the `test-map` artifact. No check requires it,
-  # and a pull request never runs it. A shard that failed still recorded; a shard that recorded
-  # nothing makes the build refuse, so the map is whole or not made. `--shards-expected` is the
+  # The test map (docs/implementation/testing/the-test-map.md), on a nightly or hand-started run
+  # whose shards ran (not one whose commit had a map), once they have recorded what each spec
+  # reached: the back end's suite once under coverage, for what each endpoint runs, then the build
+  # of both into the `test-map` artifact. No check requires it, and a push or a pull request never
+  # runs it. A shard that failed still recorded; a shard that recorded nothing makes the build
+  # refuse, so the map is whole or not made. `--shards-expected` is the
   # matrix's `total`: the two move together.
   test-map:
     name: test-map
-    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/dev' }}
-    needs: e2e-shard
+    needs: [suite, e2e-shard]
+    if: ${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && needs.e2e-shard.result != 'skipped' }}
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
@@ -558,20 +598,22 @@ jobs:
   # The one check to require: it passes only when every shard did and the shards ran every spec
   # file exactly once, so the rules name a single job whatever the shard count becomes. It runs
   # whatever the shards' result, so a failed shard fails it, but not on a run that was cancelled,
-  # which would post a red check on the head a later push made moot.
+  # which would post a red check on the head a later push made moot, nor on a warm push, whose
+  # skipped shards would post a red one on a commit the queue's run passed, nor on a nightly or
+  # hand-started run, which posts it on dev's tip only as skipped, read as passing, never a red one.
   e2e:
     name: e2e
-    if: ${{ !cancelled() }}
-    needs: e2e-shard
+    needs: [suite, e2e-shard]
+    if: ${{ !cancelled() && (needs.suite.outputs.run == '' || needs.suite.outputs.run == 'full') }}
     runs-on: ubuntu-latest
-    # The audit reads the newest dev push's `test-map` artifact, which another run made.
+    # The audit reads dev's newest `test-map` artifact, which a nightly run made.
     permissions:
       contents: read
       actions: read
     env:
-      # A push to dev, a scheduled run on dev and a merge queue trial commit publish the next
-      # timings; no other run does, and a run whose shards did not all pass publishes nothing.
-      PUBLISHES_TIMINGS: ${{ github.event_name == 'merge_group' || ((github.event_name == 'push' || github.event_name == 'schedule') && github.ref == 'refs/heads/dev') }}
+      # A push to dev and a merge queue trial commit publish the next timings; no other run does,
+      # and a run whose shards did not all pass publishes nothing.
+      PUBLISHES_TIMINGS: ${{ github.event_name == 'merge_group' || (github.event_name == 'push' && github.ref == 'refs/heads/dev') }}
     steps:
       # The checkout and the shards' artifacts serve the deal's check below and, on a pull request,
       # the selection audit. The checkout takes two commits for the audit's diff.
@@ -612,9 +654,9 @@ jobs:
           retention-days: 90
       # On a pull request, the selection audit (docs/implementation/testing/the-test-map.md): each
       # spec the shards failed, as `scripts/affected-specs.py` would have treated it for the PR's
-      # diff (from the merge commit's first parent, as e2e-repeat reads it): ran, left to CI past
-      # the cap, or missed, each miss a warning annotation once a test map exists. It continues on
-      # error, so it never decides the job.
+      # diff (from the merge commit's first parent): ran, left to CI past the cap, or missed, each
+      # miss a warning annotation once a test map exists. It continues on error, so it never
+      # decides the job.
       # The script needs only the standard library, so the runner's own Python runs it.
       - name: Audit the selection
         if: github.event_name == 'pull_request'

@@ -22,6 +22,7 @@ sources:
   - T381
   - T375
   - T349
+  - T510
 ---
 
 # Testing Conventioner
@@ -41,7 +42,7 @@ Before it delivers, a builder runs only the tests its change reaches:
 - **E2E**: on the worktree's stack (`scripts/th-compose.sh up -d` then `./scripts/seed_fixture.sh`, a team worker's with `team-stack up` then `team-stack seed`), `python3 scripts/affected-specs.py --run` from the worktree root.
 - **The knowledge graph**: `python3 scripts/knowledge_graph.py check` when you changed any Markdown.
 
-It never runs a whole suite, which CI runs on every pull request's head and every push to `dev` and `main` ([CI and the gate](implementation/testing/ci-and-the-gate.md)).
+It never runs a whole suite, which CI runs on every pull request's head, every merge queue trial commit and every push to `main`, and on a push to `dev` only when the queue did not test it ([CI and the gate](implementation/testing/ci-and-the-gate.md#which-suite-a-run-runs)).
 That is Daniel's rule (2026-11-15): a whole suite run on the machine every worktree shares repeats what CI runs anyway, beside every other task's work.
 The E2E specs are chosen by `affected-specs.py`, since the whole suite takes about an hour and a half locally, while CI's [test map](implementation/testing/the-test-map.md#choosing-a-builders-specs) says which specs a change reaches, and the script runs them by score up to 30 of CI's minutes, a spec the change edits whatever the cap, and leaves the rest to CI's full run.
 
@@ -452,7 +453,7 @@ Connecting through the card skips Discord's approval screen under it, and connec
 
 ## CI Pipeline
 
-Pushes and PRs to `main` or `dev`, and a merge queue's trial commit for `dev`, run `.github/workflows/test.yml` and CodeQL's `.github/workflows/codeql.yml`, which also runs weekly on `dev`.
+Pushes and PRs to `main` or `dev` and a merge queue's trial commit for `dev` run `.github/workflows/test.yml` and CodeQL's `.github/workflows/codeql.yml`, which also runs weekly on `dev`; `test.yml` also runs nightly on `dev`'s tip, or when started by hand, to make [the test map](implementation/testing/the-test-map.md).
 [CI and the gate](implementation/testing/ci-and-the-gate.md) says what each job runs, which checks
 the rules require (eleven on `dev`, CodeQL's three `Analyze (<language>)` among them, and six on `main`, `real-data-and-workflows` on both), why a flaky test fails the build, and what the no-mistakes gate
 runs through `scripts/nm-test.sh` (the real-data checks alone, since CI runs every suite before a merge).

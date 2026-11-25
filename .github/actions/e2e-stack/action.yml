@@ -1,13 +1,15 @@
 name: Start the e2e stack
 description: >-
   Installs Playwright's Chromium and the system packages it needs, builds or restores the stack's
-  images, starts the stack and seeds it, for a job that runs Playwright on one runner. The job checks
-  the repository out and runs the front-end-deps action first, which says why front-end/node_modules
-  must be there before the stack starts. Browsers, packages and images come from GitHub's cache when
-  an earlier run left them, keyed on what decides them: the Playwright version for the browsers, the
-  packages the runner lacks and their versions for the packages, scripts/image-tags.sh's tags (a
-  hash of the files each image is built from) for the images. The source is not in the key: it
-  reaches the containers through the compose file's bind mounts.
+  images, starts the stack and seeds it, for a job that runs Playwright on one runner; with
+  `start: "false"`, only restores-or-makes the browser's, the packages' and the images' caches, for
+  the warm-caches job. The job checks the repository out and runs the front-end-deps action first,
+  which says why front-end/node_modules must be there before the stack starts. Browsers, packages
+  and images come from GitHub's cache when an earlier run left them, keyed on what decides them: the
+  Playwright version for the browsers, the packages the runner lacks and their versions for the
+  packages, scripts/image-tags.sh's tags (a hash of the files each image is built from) for the
+  images. The source is not in the key: it reaches the containers through the compose file's bind
+  mounts.
 
 inputs:
   save-caches:
@@ -17,6 +19,13 @@ inputs:
       run saves, so the others do not race to write the same key.
     required: false
     default: "false"
+  start:
+    description: >-
+      "false" to only restore-or-make the caches, for warm-caches: no image load, no stack, and the
+      system packages installed only on a miss, the one way their files are made for the save. A
+      restore then only looks the key up, so a hit downloads nothing.
+    required: false
+    default: "true"
 
 runs:
   using: composite
@@ -32,6 +41,7 @@ runs:
       with:
         path: ~/.cache/ms-playwright
         key: playwright-chromium-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}
+        lookup-only: ${{ inputs.start != 'true' }}
     - name: Install Playwright's Chromium
       if: steps.browsers.outputs.cache-hit != 'true'
       shell: bash
@@ -47,6 +57,8 @@ runs:
     # The runner has most of the system packages Chromium needs. The cache keeps the .deb files of
     # those it lacks, keyed on the release and each package's version, so a shard whose cached
     # files install reaches Ubuntu's apt mirrors for none of them (scripts/chromium-packages.sh).
+    # Not starting, a hit is only looked up and installs nothing; a miss downloads and installs the
+    # files, which is how the script marks them cacheable, so warm-caches can save them.
     - name: The system packages Chromium lacks
       id: packages
       shell: bash
@@ -59,9 +71,12 @@ runs:
       with:
         path: ${{ runner.temp }}/chromium-packages
         key: chromium-packages-${{ runner.os }}-${{ runner.arch }}-${{ steps.packages.outputs.hash }}
+        lookup-only: ${{ inputs.start != 'true' }}
     - name: Install Chromium's system packages
       id: packages-install
-      if: steps.packages.outputs.packages != ''
+      if: >-
+        steps.packages.outputs.packages != '' &&
+        (inputs.start == 'true' || steps.packages-cache.outputs.cache-hit != 'true')
       shell: bash
       working-directory: front-end
       env:
@@ -95,8 +110,9 @@ runs:
       with:
         path: ${{ runner.temp }}/e2e-images
         key: e2e-images-${{ runner.os }}-${{ runner.arch }}-${{ steps.images.outputs.TH_BACKEND_TAG }}-${{ steps.images.outputs.TH_FRONTEND_TAG }}
+        lookup-only: ${{ inputs.start != 'true' }}
     - name: Load the images
-      if: steps.images-cache.outputs.cache-hit == 'true'
+      if: inputs.start == 'true' && steps.images-cache.outputs.cache-hit == 'true'
       shell: bash
       run: docker load --input "$RUNNER_TEMP/e2e-images/images.tar"
     - name: Build the images
@@ -123,6 +139,7 @@ runs:
     # A transient Docker Hub 500 on one of the stack's registry images once failed one shard
     # outright. Retry only that pull, so a stack that genuinely fails to start fails the job at once.
     - name: Pull the stack's registry images
+      if: inputs.start == 'true'
       shell: bash
       run: |
         for attempt in 1 2 3 4 5 6; do
@@ -132,8 +149,10 @@ runs:
         done
         exit 1
     - name: Start the stack
+      if: inputs.start == 'true'
       shell: bash
       run: docker compose up -d
     - name: Seed it
+      if: inputs.start == 'true'
       shell: bash
       run: ./scripts/seed_fixture.sh --primary

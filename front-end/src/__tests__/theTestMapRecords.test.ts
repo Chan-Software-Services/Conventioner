@@ -1,8 +1,8 @@
 /**
- * The test map's recording (T349, `e2e/helpers/testMap.ts`): on a push to `dev`, CI's shards write
- * one line per test naming the app modules and API calls its pages made, and the stretches of each
- * module that ran. These are the pure parts: which requests count, and how V8's nested block
- * counts become the stretches that ran.
+ * The test map's recording (T349, `e2e/helpers/testMap.ts`): on the nightly Test run of `dev`'s tip
+ * (or one started by hand), CI's shards write one line per test naming the app modules and API
+ * calls its pages made, and the stretches of each module that ran. These are the pure parts: which
+ * requests count, and how V8's nested block counts become the stretches that ran.
  */
 import { describe, expect, it } from 'vitest';
 

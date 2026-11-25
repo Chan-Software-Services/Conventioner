@@ -6,9 +6,11 @@
 It reads GitHub and writes nothing, so it can be run anywhere without promoting. The checks, in
 order, each refusal one `::error::` line:
 
-1. The Test workflow passed on a push to `dev` at the commit: the newest run by `run_number`
-   decides, read by scripts/github_runs.py as Deploy reads `main`'s. No run, a run still going or
-   any conclusion but `success` refuses.
+1. A green Test run on the commit, from `dev`'s merge queue or a push to `dev` (T510): the newest
+   of those runs by `run_number` decides, whatever its event, read by scripts/github_runs.py's
+   `dev_runs`. A merged commit's push run is always newer than its queue run, so it decides; a
+   commit the queue merged inside a batch has only its queue run. No run, a run still going or any
+   conclusion but `success` refuses; a nightly, a hand-started or a pull request's run never counts.
 2. The commit is on `dev`: GitHub's compare of `dev...<sha>` says `behind` or `identical`.
 3. `main` is its ancestor: the compare of `main...<sha>` says `ahead`, so moving `main` to it is a
    fast-forward. `identical` (already there), `behind` (older than `main`) and `diverged` (most
@@ -66,11 +68,15 @@ def compare(base: str, sha: str, api: str, repository: str, token: str):
 
 
 def promote_check(sha: str, api: str, repository: str, token: str) -> int:
-    newest, reason = github_runs.newest_run(sha, "dev", api, repository, token)
+    runs, reason = github_runs.dev_runs(sha, api, repository, token)
     if reason is not None:
         return unreadable(f"the Test runs for {short(sha)}", reason)
+    newest = max(runs, key=lambda run: run["run_number"], default=None)
     if newest is None:
-        return refuse(f"No Test run on a push to dev at {short(sha)}. Promote only a commit on dev whose Test run has passed.")
+        return refuse(
+            f"No Test run on dev at {short(sha)}, from the merge queue or a push."
+            " Promote only a commit on dev whose Test run has passed."
+        )
     url = newest.get("html_url")
     if newest["status"] != "completed":
         return refuse(f"Test is still running on dev at {short(sha)} ({url}). Run Promote again once it has passed.")
