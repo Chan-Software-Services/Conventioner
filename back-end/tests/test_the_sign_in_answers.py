@@ -197,7 +197,7 @@ def _wrong_codes(client, email, tries):
 def test_every_wrong_code_answers_alike_with_an_account_or_without(client, verified):
     """Alike at every try the sign-in limits let through: an account's fifth wrong code discards
     its code in silence, so it and the tries after it answer as an address with no code does."""
-    tries = sign_in_limits.ORGANIZER_CODE_PER_ADDRESS.attempts
+    tries = sign_in_limits.ORGANIZER_CODE_PER_CALLER_AND_ADDRESS.attempts
     assert _wrong_codes(client, NO_ACCOUNT_EMAIL, tries) == _wrong_codes(client, FIXTURE_EMAIL, tries)
     assert verified.doc["secrets"]["code"]["state"] == "discarded"
 

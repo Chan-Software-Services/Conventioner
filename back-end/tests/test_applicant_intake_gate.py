@@ -198,7 +198,7 @@ class TestTheTwoLoginEndpoints:
         with app.test_request_context(
             f"/public/markets/{slug}/request-code",
             method="POST",
-            json={"email": "someone@example.com"},
+            json={"email": "someone@example.com", "captcha_token": "test-human-check"},
         ):
             body, status = ApplicantAuthApi.request_login_code(slug)
         return body.get_json(), status

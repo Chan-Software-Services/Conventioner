@@ -17,11 +17,18 @@
  * on, and says a refusal, from its own request's answer, never from the store's shared `error`,
  * which another reader may write while the request is out; and "Use a different email" waits for
  * the answer, so a late one never lands on the email step.
+ *
+ * Both steps hold one human check (T539), mounted with the sign-in, directly above the step's
+ * primary button: Send code and Sign in each send its token, the check is reset after every
+ * answer, and a request the server answers by asking for the check is sent once more with a new
+ * token. A check that cannot load says so in the error line, and the step stays as it was.
  */
-import { computed, nextTick, onUnmounted, ref } from 'vue';
+import { computed, nextTick, onUnmounted, ref, useTemplateRef } from 'vue';
 import CodeInput from '@/components/CodeInput.vue';
+import HumanCheck from '@/components/HumanCheck.vue';
 import { useApplicationStore, type CodeAnswer } from '@/stores/application';
 import type { CodeState } from '@/utils/applicantApi';
+import { withHumanCheck, type HumanCheckHandle } from '@/utils/captcha';
 import { Refusal, useSubmit } from '@/utils/useSubmit';
 import { getShortDate } from '@/utils/utils';
 
@@ -55,12 +62,23 @@ class CodeRefused extends Refusal {
   }
 }
 
-/** One of the store's code requests, sent from here, its refusal thrown for the submit to say. */
-async function sendFromHere(request: () => Promise<CodeAnswer>): Promise<void> {
+const signInCheck = useTemplateRef<HumanCheckHandle>('signInCheck');
+
+/**
+ * One of the store's code requests, sent from here with the human check's token, its refusal
+ * thrown for the submit to say; asked for the check, it is sent once more with a new token.
+ */
+async function sendFromHere(request: (captchaToken: string) => Promise<CodeAnswer>): Promise<void> {
   validationError.value = null;
   sent.value = true;
-  const answer = await request();
-  if (!answer.ok) throw new CodeRefused(answer);
+  await withHumanCheck(
+    signInCheck.value!,
+    async (captchaToken) => {
+      const answer = await request(captchaToken);
+      if (!answer.ok) throw new CodeRefused(answer);
+    },
+    (error) => error instanceof CodeRefused && error.answer.humanCheckRequired,
+  );
 }
 
 const codeInput = ref<InstanceType<typeof CodeInput> | null>(null);
@@ -106,7 +124,7 @@ async function requestCode() {
     return;
   }
   const address = email.value.trim().toLowerCase();
-  await submit(() => sendFromHere(() => store.requestCode(props.marketSlug, address)), {
+  await submit(() => sendFromHere((token) => store.requestCode(props.marketSlug, address, token)), {
     done: async () => {
       codeState.value = null;
       requestedEmail.value = address;
@@ -129,8 +147,8 @@ async function verifyCode() {
   // A right code signs the vendor in through the store, and the page draws their sections.
   await submit(
     () =>
-      sendFromHere(() =>
-        store.verifyCode(props.marketSlug, email.value.trim().toLowerCase(), typed, keep),
+      sendFromHere((token) =>
+        store.verifyCode(props.marketSlug, email.value.trim().toLowerCase(), typed, keep, token),
       ),
     {
       refused: (err) => {
@@ -169,83 +187,85 @@ function goBack() {
     <!--
       A native form, not a key handler (E20/F01/S03). Enter then runs the same handler as the
       button and inherits its guard - including the cooldown, which a `@keyup.enter` bypassed.
+      One form for both steps, so the human check above the primary button stays mounted, and
+      keeps its token, from one step to the next.
     -->
     <form
-      v-if="step === 'email'"
       class="sign-in-step"
-      data-testid="vendor-sign-in-email-step"
-      @submit.prevent="requestCode"
+      :data-testid="step === 'email' ? 'vendor-sign-in-email-step' : 'vendor-sign-in-code-step'"
+      @submit.prevent="step === 'email' ? requestCode() : verifyCode()"
     >
-      <p class="sign-in-instruction">
-        Enter your email address. We'll send you a code to sign in with.
-      </p>
-      <div class="sign-in-field">
-        <label class="field-label" for="vendor-sign-in-email">Email</label>
-        <input
-          id="vendor-sign-in-email"
-          v-model="email"
-          class="field"
-          type="email"
-          autocomplete="email"
-          placeholder="you@example.com"
-          data-testid="vendor-sign-in-email-input"
-        />
-      </div>
-      <button
-        type="submit"
-        class="btn btn--primary"
-        :disabled="submitting || !email.trim() || cooldownApplies"
-        data-testid="vendor-sign-in-request-btn"
-      >
-        <template v-if="cooldownApplies"
-          >Code already sent - retry in {{ cooldownRemaining }}s</template
-        >
-        <template v-else>{{ submitting ? 'Sending…' : 'Send code' }}</template>
-      </button>
-    </form>
-
-    <form
-      v-else
-      class="sign-in-step"
-      data-testid="vendor-sign-in-code-step"
-      @submit.prevent="verifyCode"
-    >
-      <!-- The same words for every address, and true for every address: each is sent a code. -->
-      <p
-        class="sign-in-instruction sign-in-instruction--centred"
-        data-testid="vendor-sign-in-code-instruction"
-      >
-        We've sent a code to {{ requestedEmail }}. Only the newest one works.
-      </p>
-      <template v-if="!spent">
+      <template v-if="step === 'email'">
+        <p class="sign-in-instruction">
+          Enter your email address. We'll send you a code to sign in with.
+        </p>
         <div class="sign-in-field">
-          <label class="field-label" for="vendor-sign-in-code">Sign-in code</label>
-          <CodeInput
-            id="vendor-sign-in-code"
-            ref="codeInput"
-            v-model="code"
-            data-testid="vendor-sign-in-code-input"
+          <label class="field-label" for="vendor-sign-in-email">Email</label>
+          <input
+            id="vendor-sign-in-email"
+            v-model="email"
+            class="field"
+            type="email"
+            autocomplete="email"
+            placeholder="you@example.com"
+            data-testid="vendor-sign-in-email-input"
           />
         </div>
-        <div v-if="rememberUntil">
-          <label class="remember-me">
-            <input
-              v-model="remember"
-              type="checkbox"
-              aria-describedby="vendor-sign-in-remember-me-help"
-              data-testid="vendor-sign-in-remember-me"
+      </template>
+      <template v-else>
+        <!-- The same words for every address, and true for every address: each is sent a code. -->
+        <p
+          class="sign-in-instruction sign-in-instruction--centred"
+          data-testid="vendor-sign-in-code-instruction"
+        >
+          We've sent a code to {{ requestedEmail }}. Only the newest one works.
+        </p>
+        <template v-if="!spent">
+          <div class="sign-in-field">
+            <label class="field-label" for="vendor-sign-in-code">Sign-in code</label>
+            <CodeInput
+              id="vendor-sign-in-code"
+              ref="codeInput"
+              v-model="code"
+              data-testid="vendor-sign-in-code-input"
             />
-            <!-- "until <date>" wraps as one phrase on a narrow phone, never leaving the year alone. -->
-            <span>
-              Remember me on this device
-              <span class="remember-me-until">until {{ rememberUntil }}</span>
-            </span>
-          </label>
-          <p id="vendor-sign-in-remember-me-help" class="remember-me-help">
-            Leave it unticked on a shared device.
-          </p>
-        </div>
+          </div>
+          <div v-if="rememberUntil">
+            <label class="remember-me">
+              <input
+                v-model="remember"
+                type="checkbox"
+                aria-describedby="vendor-sign-in-remember-me-help"
+                data-testid="vendor-sign-in-remember-me"
+              />
+              <!-- "until <date>" wraps as one phrase on a narrow phone, never leaving the year alone. -->
+              <span>
+                Remember me on this device
+                <span class="remember-me-until">until {{ rememberUntil }}</span>
+              </span>
+            </label>
+            <p id="vendor-sign-in-remember-me-help" class="remember-me-help">
+              Leave it unticked on a shared device.
+            </p>
+          </div>
+        </template>
+      </template>
+      <div class="sign-in-actions">
+        <HumanCheck ref="signInCheck" action="vendor-sign-in" />
         <button
+          v-if="step === 'email'"
+          type="submit"
+          class="btn btn--primary"
+          :disabled="submitting || !email.trim() || cooldownApplies"
+          data-testid="vendor-sign-in-request-btn"
+        >
+          <template v-if="cooldownApplies"
+            >Code already sent - retry in {{ cooldownRemaining }}s</template
+          >
+          <template v-else>{{ submitting ? 'Sending…' : 'Send code' }}</template>
+        </button>
+        <button
+          v-else-if="!spent"
           type="submit"
           class="btn btn--primary"
           :disabled="submitting || code.trim().length !== 6"
@@ -253,19 +273,21 @@ function goBack() {
         >
           {{ submitting ? 'Signing in…' : 'Sign in' }}
         </button>
-      </template>
-      <!-- `type="button"`: inside a form, a button with no type submits it. -->
-      <button
-        v-else
-        type="button"
-        class="btn btn--primary"
-        :disabled="submitting || cooldownRemaining > 0"
-        data-testid="vendor-sign-in-send-new-code-btn"
-        @click="requestCode"
-      >
-        {{ cooldownRemaining > 0 ? `Send a new code in ${cooldownRemaining}s` : 'Send a new code' }}
-      </button>
-      <div class="sign-in-alt">
+        <!-- `type="button"`: inside a form, a button with no type submits it. -->
+        <button
+          v-else
+          type="button"
+          class="btn btn--primary"
+          :disabled="submitting || cooldownRemaining > 0"
+          data-testid="vendor-sign-in-send-new-code-btn"
+          @click="requestCode"
+        >
+          {{
+            cooldownRemaining > 0 ? `Send a new code in ${cooldownRemaining}s` : 'Send a new code'
+          }}
+        </button>
+      </div>
+      <div v-if="step === 'code'" class="sign-in-alt">
         <button
           type="button"
           class="sign-in-link-btn"
@@ -322,6 +344,13 @@ function goBack() {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+}
+
+/* The step's primary button, with the human check directly above it: the check takes no room until
+   Cloudflare draws into it, and the button keeps the step's full width. */
+.sign-in-actions {
+  display: flex;
+  flex-direction: column;
 }
 
 /* A field and its label, held together rather than spaced like the step's other parts. */
