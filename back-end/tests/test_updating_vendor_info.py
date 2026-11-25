@@ -7,7 +7,7 @@ told when what they wrote has changed since.
 """
 import pytest
 
-from conftest import FakeMarketsCollection, reviewing, stored_market
+from conftest import FakeMarketsCollection, a_review_view, reviewing, stored_market
 
 import api.applicants as ApplicantsApi
 import api.applications as ApplicationsApi
@@ -123,11 +123,11 @@ class TestAnUpdateMovesTheAnswersVersion:
     def _approve(self, seen):
         return ApplicantsApi.review_application(
             MARKET, "app-1", ApplicationStatus.REVIEWER_APPROVED, by=REVIEWER,
-            reviewing=reviewing(MARKET, REVIEWER.email), seen=seen)
+            reviewing=reviewing(MARKET, REVIEWER.email), view=a_review_view(), seen=seen)
 
     def test_a_verdict_on_a_card_opened_before_an_update_is_refused(self, market):
         applications = market()
-        opened = self._seen(ApplicantsApi.organizer_view(_stored(applications)))
+        opened = self._seen(ApplicantsApi.organizer_view(_stored(applications), a_review_view()))
 
         _update({"shop": "Ember Ceramics"})
         body, status = self._approve(opened)
@@ -178,7 +178,7 @@ class TestTheUpdateReadsInItsPlace:
         applications = market()
         _update({"shop": "Ember Ceramics"})
 
-        view = ApplicantsApi.organizer_view(_stored(applications))
+        view = ApplicantsApi.organizer_view(_stored(applications), a_review_view())
 
         assert view["formData"]["shop"] == "Ember Ceramics"
         assert view["formData"]["student"] == "No"
@@ -426,7 +426,7 @@ class TestAReImportKeepsTheUpdate:
         return markets, stored["id"]
 
     def _view(self, applications, app_id):
-        return ApplicantsApi.organizer_view(applications.find_one({"id": app_id}))
+        return ApplicantsApi.organizer_view(applications.find_one({"id": app_id}), a_review_view())
 
     def test_the_same_original_keeps_the_update_silently(self, imported, applications):
         markets, app_id = imported
@@ -459,7 +459,7 @@ class TestKeepingAnUpdateTheirAnswerChangedUnder:
         applications = market()
         _update({"shop": "Ember Ceramics"})
         applications.update_one({"id": "app-1"}, {"$set": {"form_data.shop": "Ember Pottery"}})
-        assert ApplicantsApi.organizer_view(_stored(applications))[
+        assert ApplicantsApi.organizer_view(_stored(applications), a_review_view())[
             "answerUpdates"]["shop"]["changedSince"] is True
         return applications
 
@@ -518,7 +518,7 @@ class TestKeepingAnUpdateTheirAnswerChangedUnder:
         applications = market()
         _update({"shop": "Ember Ceramics"})
         applications.update_one({"id": "app-1"}, {"$set": {"form_data.shop": "Ember Ceramics"}})
-        view = ApplicantsApi.organizer_view(_stored(applications))
+        view = ApplicantsApi.organizer_view(_stored(applications), a_review_view())
         assert view["answerUpdates"]["shop"]["changedSince"] is True
 
         result, status = _update({"shop": "Ember Ceramics"})

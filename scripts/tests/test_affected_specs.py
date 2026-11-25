@@ -95,6 +95,10 @@ BASE_FILES = {
     "back-end/api/door.py": DOOR_PY,
     "back-end/api/markets.py": MARKETS_PY,
     "back-end/api/stats.py": "def stats():\n    return 1\n",
+    # Files no rule places: no spec imports them, no page loaded them, no endpoint ran them.
+    "front-end/src/assets/old.css": "p { margin: 0; }\n",
+    "front-end/tools/old-tool.ts": "export const tool = 1;\n",
+    "back-end/utils/old_module.py": "def old():\n    return 1\n",
 }
 
 
@@ -610,6 +614,8 @@ class TestAFileNoRulePlaces:
             # The advisory scan's lock, which only CI's python-advisories job installs.
             "back-end/requirements-audit.in",
             "back-end/requirements-audit.txt",
+            # The migrations, which an operator runs by hand and nothing the stack loads imports.
+            "back-end/migrations/migrate_door.py",
         ],
     )
     def test_docs_and_the_suites_that_are_not_e2e_choose_nothing(self, repo, path):
@@ -633,6 +639,42 @@ class TestAFileNoRulePlaces:
         env = TestWhereTheMapComesFrom().fake_gh(tmp_path, "import sys\nsys.exit(1)\n")
         write(repo, {"front-end/src/assets/base.css": "changed\n"})
         assert chosen(choose(repo, env=env, fixture_map=False)) == {}
+
+
+class TestAFileTheChangeDeletes:
+    """A deleted file is placed by its deletion: what read it changes with it, and is placed on its
+    own, so a deleted file no spec reached drives none, and one a spec reached drives that spec."""
+
+    UNPLACED = ["front-end/src/assets/old.css", "front-end/tools/old-tool.ts", "back-end/utils/old_module.py"]
+
+    @pytest.mark.parametrize("path", UNPLACED)
+    def test_a_deleted_file_no_spec_reached_chooses_nothing(self, repo, path):
+        write(repo, {path: None})
+        assert chosen(choose(repo)) == {}
+
+    @pytest.mark.parametrize("path", UNPLACED)
+    def test_a_committed_deletion_chooses_nothing_either(self, repo, path):
+        git(repo, "rm", "-q", path)
+        git(repo, "commit", "-qm", "delete it")
+        assert chosen(choose(repo, "--head", "HEAD")) == {}
+
+    def test_a_file_no_rule_places_beside_a_deletion_still_chooses_every_spec(self, repo):
+        write(repo, {"front-end/src/assets/old.css": None, "front-end/src/assets/base.css": "new\n"})
+        rows = chosen(choose(repo))
+        assert set(rows) == {"a.spec.ts", "b.spec.ts", "c.spec.ts"}
+        assert rows["a.spec.ts"]["why"] == ["front-end/src/assets/base.css is not in the map"]
+
+    def test_a_deleted_helper_a_spec_imported_still_chooses_that_spec(self, repo):
+        # seat.ts still imports the deleted seeds: the spec that imported it at the base breaks.
+        write(repo, {"front-end/e2e/helpers/seeds.ts": None})
+        rows = chosen(choose(repo))
+        assert set(rows) == {"a.spec.ts"}
+        assert rows["a.spec.ts"]["why"] == ["imported helpers/seeds.ts, which the change deletes"]
+        assert rows["a.spec.ts"]["score"] == 1
+
+    def test_a_deleted_module_a_page_loaded_still_chooses_its_specs(self, repo):
+        write(repo, {"front-end/src/views/Door.vue": None})
+        assert set(chosen(choose(repo))) == {"a.spec.ts"}
 
 
 class TestTheOrderAndTheCap:

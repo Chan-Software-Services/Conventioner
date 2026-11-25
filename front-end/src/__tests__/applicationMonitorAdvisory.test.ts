@@ -8,6 +8,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import ApplicationMonitor from '@/components/application/ApplicationMonitor.vue';
 import { ApplicationStatus, type Application, type Market } from '@/assets/types/datatypes';
+import { servedReview } from './support/servedReview';
 
 const fetchMarketApplications = vi.fn();
 
@@ -31,6 +32,7 @@ function application(email: string): Application {
     marketId: 'm1',
     applicantEmail: email,
     status: ApplicationStatus.Open,
+    ...servedReview('open'),
     formData: {},
     submittedAt: '2026-09-15T14:20:18.000Z',
   } as unknown as Application;

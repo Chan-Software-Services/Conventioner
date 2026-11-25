@@ -27,6 +27,12 @@ test.beforeAll(async ({ request }) => {
   });
 });
 
+// Held at the seed's instant: a run that passes midnight would open the map on the seed's next
+// day, where other vendors sit at other tables.
+test.beforeEach(async ({ page }) => {
+  await page.clock.setFixedTime(seeded.seededAt);
+});
+
 /** The map's own route, as the browser asks it. */
 const isTheMapAnswer = (url: string, slug: string) =>
   new URL(url).pathname.endsWith(`/public/markets/${slug}/map`);

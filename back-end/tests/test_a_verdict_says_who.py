@@ -20,6 +20,7 @@ import api.markets as MarketsApi  # noqa: E402
 import api.users as UsersApi  # noqa: E402
 import application_status as ReviewState
 from conftest import (  # noqa: E402
+    a_review_view,
     FakeApplicationsCollection, reviewing, seen_as_read, sessions_load_through_get_user,
 )
 from datatypes import ApplicationStatus, MarketPhase, VerdictGiver  # noqa: E402
@@ -67,7 +68,8 @@ class TestTheGiverIsStored:
     def test_a_verdict_stores_its_giver_and_time_and_serves_them(self, stored):
         result, status = ApplicantsApi.review_application(
             "market-1", "app-1", ApplicationStatus.REVIEWER_APPROVED, by=ALEX,
-            reviewing=reviewing("market-1", ALEX.email), seen=seen_as_read("app-1"))
+            reviewing=reviewing("market-1", ALEX.email), view=a_review_view(),
+            seen=seen_as_read("app-1"))
 
         assert status == 200
         assert stored[0]["verdict_by"] == {
@@ -80,7 +82,8 @@ class TestTheGiverIsStored:
     def test_a_status_that_is_no_verdict_clears_the_giver(self, stored):
         ApplicantsApi.review_application(
             "market-1", "app-1", ApplicationStatus.REVIEWER_APPROVED, by=ALEX,
-            reviewing=reviewing("market-1", ALEX.email), seen=seen_as_read("app-1"))
+            reviewing=reviewing("market-1", ALEX.email), view=a_review_view(),
+            seen=seen_as_read("app-1"))
 
         # Answers that changed send an approval back to review (the import, E32/F02/S02).
         assert ReviewState.answers_changed(
@@ -93,7 +96,7 @@ class TestTheGiverIsStored:
     def test_an_application_stored_before_this_has_no_giver(self, stored):
         stored[0]["status"] = ApplicationStatus.REVIEWER_REJECTED.value
 
-        result, _ = ApplicantsApi.list_market_applications("market-1")
+        result, _ = ApplicantsApi.list_market_applications("market-1", a_review_view())
 
         assert result["applications"][0]["verdictBy"] is None
         assert result["applications"][0]["verdictAt"] is None

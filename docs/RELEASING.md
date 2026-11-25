@@ -376,6 +376,7 @@ Migrations are never run automatically - rewriting stored documents is a deliber
 Production was started that way on 2026-10-18, so the list below matters only for a database older than its code.
 Every migration in `back-end/migrations/` is idempotent; the ones not described here (`migrate_roles`, `migrate_publishing_to_market_days`, `migrate_submitted_at_to_iso`, `migrate_tier_preference_per_date`, `migrate_table_code_separator`, `migrate_table_share_answer`, `migrate_to_uuid`, `add_email_verification`) each say in their own docstring what they repair and when; `cleanup_unverified_users` repairs nothing: it deletes every unverified account, and is a script never to run against production ([OPERATIONS.md](OPERATIONS.md#scripts-never-to-run-against-production)).
 `swap_location_names` is no migration and is not idempotent: it is an operator's fix of one market, and a second run swaps back ([OPERATIONS.md](OPERATIONS.md#swapping-the-names-of-two-locations)).
+`history_follows_location_swap` is none either, though a second run changes nothing: it renames one market's older layout lines in the history after a run of the swap ([OPERATIONS.md](OPERATIONS.md#renaming-the-older-layout-lines-after-a-swap)).
 `rename_location` is none either: it gives one location of one market a new name, and a second run with the same name is refused ([OPERATIONS.md](OPERATIONS.md#giving-a-location-a-new-name)).
 
 Before a deploy reaches an older production database, run the pending migrations in `back-end/migrations/` against the production database (each is idempotent, and `--dry-run` previews the changes):
@@ -394,6 +395,7 @@ python migrations/migrate_organization_people.py      # AFTER the deploy, whenev
 python migrations/migrate_organization_people.py --reconcile  # ONLY after a roll forward over a rollback past the map's release, `--dry-run` first: rebuilds each map from its lists
 python migrations/migrate_assignment_state.py         # AFTER the deploy, `--dry-run` first, and again after any roll forward past a rollback: stores each market's assignment state and its published revision
 python migrations/migrate_owed_day_state.py           # Right AFTER the deploy, `--dry-run` first, and again after any roll forward past a rollback: stores each owed table-day's state, and drops an Admin's amount on a day not held, recording it
+python migrations/migrate_application_status.py       # Right AFTER the deploy, before any organizer uses Begin assignment, `--dry-run` first, and again after any roll forward past a rollback: stores each application's status and origin the review reads, and marks those waiting for the deal
 python migrations/migrate_business_name.py --list    # AFTER the deploy, once per market whose form asks a business name question, past its applications stage where vendors apply on its page, `--list` and `--dry-run` first: moves that question to the built-in field (`--market <id> --question <key>`)
 ```
 

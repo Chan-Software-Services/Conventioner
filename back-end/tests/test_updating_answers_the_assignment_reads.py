@@ -8,7 +8,7 @@ update after a run marks the assignment out of date.
 """
 import pytest
 
-from conftest import FakeMarketsCollection, stored_market
+from conftest import FakeMarketsCollection, a_review_view, stored_market
 
 import api.applicants as ApplicantsApi
 import api.market_actions as Actions
@@ -162,7 +162,7 @@ class TestTheAssignmentReadsTheUpdate:
         _update({EF.TABLE_SHARE_EMAIL_KEY: "Seat me with ana@example.com",
                  EF.TABLE_CHOICE_KEY: "half"})
 
-        result, _status = ApplicantsApi.list_market_applications(MARKET)
+        result, _status = ApplicantsApi.list_market_applications(MARKET, a_review_view())
         [served] = result["applications"]
         assert served["tableShareNotice"] == {"reason": "no_applicant",
                                               "address": "ana@example.com"}

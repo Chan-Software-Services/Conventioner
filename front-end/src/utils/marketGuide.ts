@@ -511,7 +511,7 @@ export function pageForTab(
 }
 
 /** The guard that holds the stage open while an application is undecided (`guards.py`). */
-const UNDECIDED = 'all_applications_reviewed';
+const ALL_REVIEWED = 'all_applications_reviewed';
 
 /**
  * The guards whose refusal, when it names no remedy, is a plain fact that asks nobody to do
@@ -522,7 +522,7 @@ const UNDECIDED = 'all_applications_reviewed';
  * names none and is a fact too, but guards only the move back to draft, never the step onward.
  * Keyed on the guard, never on its words.
  */
-const FACTS: ReadonlySet<string> = new Set([UNDECIDED]);
+const FACTS: ReadonlySet<string> = new Set([ALL_REVIEWED]);
 
 /**
  * The rail's statement for this market, now.
@@ -571,7 +571,7 @@ export function nextStep(market: Market, today: string = calendarToday()): NextS
     const lead = onlooking ? watchedStageLead({ path, stopped }) : stageLead({ path, stopped });
     // Work left to finish leads to the review; none at all is said as what the move waits on.
     const ask =
-      stage && standing.id === UNDECIDED && standing.resolutionLink
+      stage && standing.id === ALL_REVIEWED && standing.resolutionLink
         ? 'Finish deciding'
         : `To ${pathTransitionLabel(phase, forward, path).toLowerCase()}`;
     return {
