@@ -368,9 +368,6 @@ const COMPONENTS: Content = {
 
 const COMPONENT_FIXTURE: Sources = { ...FIXTURE, primitives: COMPONENT_PRIMITIVES };
 
-/** `.btn--quiet` named only in the list of a rule `btn-primary-hover` ends on. */
-const WITHOUT_QUIET = COMPONENT_PRIMITIVES.replace('.btn--quiet {\n  background: none;\n}\n\n', '');
-
 describe('the components, on fixture CSS', () => {
   const { text, counts } = render(COMPONENT_FIXTURE, COMPONENTS);
   const yaml = frontMatter(text);
@@ -620,6 +617,30 @@ describe('the components, on fixture CSS', () => {
         COMPONENTS,
         "title's font-size is not a --text-* token",
       ],
+      [
+        'a rule nested in a rule, whose declarations no line writes',
+        {
+          ...COMPONENT_FIXTURE,
+          primitives: COMPONENT_PRIMITIVES.replace(
+            '  width: 100%;\n}',
+            '  width: 100%;\n\n  & .badge {\n    color: red;\n  }\n}',
+          ),
+        },
+        COMPONENTS,
+        '.title in primitives.css nests & .badge, which DESIGN.md never writes: make it a rule of its own',
+      ],
+      [
+        'an at-rule nested in a rule',
+        {
+          ...COMPONENT_FIXTURE,
+          primitives: COMPONENT_PRIMITIVES.replace(
+            '  width: 100%;\n}',
+            '  width: 100%;\n\n  @media print {\n    color: black;\n  }\n}',
+          ),
+        },
+        COMPONENTS,
+        '.title in primitives.css nests @media print, which DESIGN.md never writes: make it a rule of its own',
+      ],
     ];
 
     it.each(cases)('refuses %s', (_, sources, content, message) => {
@@ -633,19 +654,6 @@ describe('the components, on fixture CSS', () => {
       expect(refusal(() => writeDesignMd(dir!, target, content))).toBe(message);
       expect(readFileSync(target, 'utf8')).toBe('the old file\n');
     });
-  });
-
-  it('names a class through the prose as well as through a selector', () => {
-    const fixture = { ...COMPONENT_FIXTURE, primitives: WITHOUT_QUIET };
-    const named: Content = {
-      ...COMPONENTS,
-      componentGroups: [
-        { name: 'Buttons', words: ['A quiet button is `.btn--quiet`.'] },
-        COMPONENTS.componentGroups[1]!,
-      ],
-      componentEntries: COMPONENTS.componentEntries.filter(({ key }) => key !== 'btn-quiet'),
-    };
-    expect(() => render(fixture, named)).not.toThrow();
   });
 });
 

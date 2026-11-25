@@ -14,8 +14,8 @@
  * scripts/nm-test.sh run, fails when the committed file is not what this script writes, and when the
  * pinned `@google/design.md` linter finds an error or any warning but `orphaned-tokens`.
  * When a guard refuses (a token declared twice, a family no face loads, words naming a token or a
- * class the CSS no longer has, a component selector no rule lists, a class of primitives.css the
- * file never names, a component font size off the type scale) it says why and writes nothing.
+ * class the CSS no longer has, a component selector no rule lists, a rule of primitives.css nested
+ * in another, a component font size off the type scale) it says why and writes nothing.
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -189,6 +189,23 @@ function primitiveClasses(primitives: Root): Set<string> {
   return classes;
 }
 
+/**
+ * Refuses a rule of primitives.css that nests a rule or an at-rule: the file writes a rule's own
+ * declarations, and an at-rule's rules under its query, so what is nested would never reach it.
+ */
+function refuseNesting(primitives: Root): void {
+  primitives.walkRules((rule) => {
+    rule.each((node) => {
+      if (node.type !== 'rule' && node.type !== 'atrule') return;
+      const nested = node.type === 'rule' ? node.selector : `@${node.name} ${node.params}`;
+      throw new Refusal(
+        `${collapse(rule.selector)} in primitives.css nests ${collapse(nested)}, which DESIGN.md ` +
+          'never writes: make it a rule of its own',
+      );
+    });
+  });
+}
+
 /** Refuses when a section's words name a token base.css or a class primitives.css lacks. */
 function guardWords(content: Content, tokens: Set<string>, classes: Set<string>): void {
   const words: [Section, readonly string[]][] = [
@@ -314,6 +331,7 @@ export function render(sources: Sources, content: Content = CONTENT): Rendered {
   }
   const [textFamily, headingFamily] = families as [string, string];
 
+  refuseNesting(primitives);
   guardWords(content, new Set(values.keys()), primitiveClasses(primitives));
 
   /** A lone `var()` of a grouped token is the format's reference; anything else as the CSS wrote it. */
@@ -585,17 +603,7 @@ export function render(sources: Sources, content: Content = CONTENT): Rendered {
     for (const block of generated[section] ?? []) body.push('', ...block);
   }
 
-  const text = [...yaml, ...body].join('\n') + '\n';
-  const named = new Set([...text.matchAll(/\.([a-zA-Z_][\w-]*)/g)].map(([, name]) => name!));
-  for (const name of primitiveClasses(primitives)) {
-    if (!named.has(name)) {
-      throw new Refusal(
-        `primitives.css has .${name}, which DESIGN.md never names: give it a component in ` +
-          "scripts/design-md-content.ts, or name it in that file's prose",
-      );
-    }
-  }
-  return { text, counts };
+  return { text: [...yaml, ...body].join('\n') + '\n', counts };
 }
 
 /** What `npm run design-md` prints once it has written the file. */
