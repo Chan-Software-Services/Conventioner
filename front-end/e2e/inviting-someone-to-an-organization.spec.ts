@@ -163,7 +163,7 @@ for (const window of [
       await expect(orgs.invitation(admin.email)).toHaveCount(0);
       await expect(orgs.invitedRows).toHaveCount(2);
 
-      // Nothing in the dialog runs past the window.
+      // The page does not scroll sideways.
       const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
       expect(scrollWidth).toBeLessThanOrEqual(window.viewport.width);
     });

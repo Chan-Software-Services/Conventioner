@@ -132,7 +132,7 @@ for (const window of [
       ).toHaveValue('editor');
       await expect(manage.invited).toHaveCount(0);
 
-      // Nothing in the dialog runs past the window.
+      // The page does not scroll sideways.
       const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
       expect(scrollWidth).toBeLessThanOrEqual(window.viewport.width);
     });
