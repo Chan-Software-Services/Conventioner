@@ -39,9 +39,9 @@ With no DSN, nothing here changes how the app runs.
 **Where each event starts.**
 An unexpected exception is `report()`'s one event: with a handler registered for `Exception`, Flask never sends `got_request_exception`, so the Flask integration never sees one, and the `client_errors` logger is ignored for events, so its log line is not a second.
 A warning or error log line is an event, captured by a root handler at `WARNING`; the `/healthz` 503's `logger.exception` is one, of level `error`, with the exception's type and no message.
-So is a library's own warning or error line, whatever logger it names, its words sent with only every address replaced: [the guard](../../../back-end/tests/test_no_log_line_carries_an_exceptions_message.py) reads only this repository's code, and Flask-Session, for one, logs a session it could not serialise with its exception's message.
+So is a library's own warning or error line, its words sent with only every address replaced: [the guard](../../../back-end/tests/test_no_log_line_carries_an_exceptions_message.py) reads only this repository's code, and Flask-Session, for one, logs a session it could not serialise with its exception's message.
 An informational line is a breadcrumb on the next event.
-`werkzeug`'s request lines, which carry paths, queries and addresses, are never either.
+`werkzeug`'s request lines, which carry paths, queries and addresses, are never either; nor, by the SDK's own default, are the lines of `sentry_sdk.errors`, `urllib3.connectionpool` and `urllib3.connection`.
 
 **Sent before the response leaves.**
 Vercel freezes a function once it has answered, so `before_send` marks the request (`g.error_tracked`) and the `after_request` flush sends its events, waiting at most `FLUSH_TIMEOUT_SECONDS`; Flask runs it for an error handler's 500 too.
