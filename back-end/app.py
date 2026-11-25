@@ -2446,12 +2446,13 @@ def get_market_attendance(market_id: str) -> Response:
 
 def _door_write(market_id: str, write) -> Response:
     """An organizer's check-in, check-out or the undo of either: body ``{vendorEmail, date}``,
-    asking ``Actions.CHECK_IN`` (E29/F01/S02)."""
+    asking ``Actions.CHECK_IN`` (E29/F01/S02). A value that is not a string reads as missing, and
+    is answered as one, 400."""
     data = json_object(required=False)
     result, status_code = write(
         market_id,
-        str(data.get("vendorEmail") or ""),
-        str(data.get("date") or ""),
+        string_field(data, "vendorEmail") or "",
+        string_field(data, "date") or "",
         authenticated_email(),
     )
     return jsonify(result), status_code

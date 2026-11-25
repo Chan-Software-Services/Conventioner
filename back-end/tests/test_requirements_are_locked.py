@@ -19,7 +19,11 @@ from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
 
 BACK_END = Path(__file__).resolve().parent.parent
-LOCKS = ["requirements.txt", "requirements-floorplan-solver.txt", "requirements-dev.txt"]
+# Every lock, one for each `.in` beside it, requirements.txt first: the others are constrained by it.
+LOCKS = ["requirements.txt"] + sorted(
+    source.with_suffix(".txt").name
+    for source in BACK_END.glob("requirements-*.in")
+)
 
 HASH = re.compile(r"\s--hash=sha256:[0-9a-f]{64}")
 

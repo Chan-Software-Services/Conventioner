@@ -96,6 +96,7 @@ Everything else on the page is found by its `data-testid`.
 **A page object wraps one screen** ([`front-end/e2e/pages/`](../../../front-end/e2e/pages/)): it holds `getByTestId()` locators and exposes action methods, and a spec calls those methods rather than reaching for locators of its own.
 `LoginPage.login` opens a bare `/login` first; `signIn` signs in on the page as it stands, so a spec about where signing in returns to keeps the address's `next`.
 `waitForMarkets` waits for where signing in lands by the path, since `/login?next=/markets` ends in `/markets` too and a glob would be met before the sign-in had happened; a spec asserts a landing the same way.
+A move on the phase rail shows the new phase before it lands on that phase's page, so a spec that uses the rail again after a move first waits for the page the move lands on to draw: a menu opened in between is gone once the landing draws its page, as [`phase-state-machine.spec.ts`](../../../front-end/e2e/phase-state-machine.spec.ts)'s full walk waits for the door after publishing.
 `signInToMarkets`, the sign-in of the `authenticatedPage` fixture and of `withUser()`, returns only once Markets has the answers to its two reads, the account's markets and its organizations ([a seed's sign-in ends the page's](#sharp-edges)).
 A new page follows the existing ones (`LoginPage`, `MarketsPage`, `NewMarketPage`, `MarketSetupPage`, `ResultPage`, `OrganizationsPage`, `ManageMarketPage`); TESTING.md lists them all.
 `MarketSetupPage` holds more than the plan: the market's tabs and the phase rail are there too, because every market page stands in the same frame, and `publishResults`, which a walk into market days takes on either path.
@@ -238,7 +239,7 @@ Note `uptime` before and during each run in the report, and report a run that ra
 
 **A cold stack**, for a flake seen on a stack's first spec: stop the worktree's stack and start it again (a team worker with `team-stack stop` and `team-stack up`), then run the spec as the first thing after it is up.
 
-**The run.** From `front-end/`, `npx playwright test <files> --retries=0 --repeat-each=<k> --output=<a new directory>`, with `<k>` 20 for a single test or file; a fresh `--output` per run keeps each run's traces apart, since a rerun empties the last one's.
+**The run.** From `front-end/`, `npx playwright test <files> --retries=0 --repeat-each=<k> --output=<a new directory>`, with `<k>` 20 for a single test or file; a fresh `--output` per run keeps each run's traces apart, since a rerun empties the last one's, and holds only the failed attempts' output, since a local run removes a passing attempt's ([when a test fails](../../TESTING.md#when-a-test-fails)).
 Before a fix the run must fail at least once; one that does not fail in 20 repeats under load, and 3 cold starts where a cold stack applies, is reported with what was tried, not fixed and not called fixed.
 After the fix the same run passes 30 of 30 under the same load.
 

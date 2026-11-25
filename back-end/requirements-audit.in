@@ -1,0 +1,5 @@
+# The advisory scan CI's python-advisories job runs over every back-end lock, this one among them.
+# Edit it here; requirements-audit.txt is its lock (scripts/lock-backend-requirements.sh).
+# Its own lock, not requirements-dev.in, so the scanner and what it needs are installed by that job
+# alone, never by a test run.
+pip-audit==2.10.1
