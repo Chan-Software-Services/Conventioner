@@ -6,7 +6,7 @@ describes:
   - back-end/tests/test_map_plugin.py
   - front-end/e2e/helpers/testMap.ts
   - scripts/affected-specs.py
-verified: 2026-11-24
+verified: 2026-11-26
 sources:
   - T349
   - T510

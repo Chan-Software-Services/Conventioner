@@ -28,7 +28,7 @@ describes:
   - back-end/migrations/migrate_business_name.py
   - front-end/vite.config.ts#assertHumanCheckSiteKey
   - back-end/migrations/migrate_drop_organization_lists.py
-verified: 2026-11-25
+verified: 2026-11-26
 sources:
   - T74
   - T254

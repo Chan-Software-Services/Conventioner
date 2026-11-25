@@ -24,7 +24,7 @@ describes:
   - scripts/nm-lint.sh
   - scripts/affected-specs.py#ci_decision
   - scripts/affected-specs.py#shard_count
-verified: 2026-11-25
+verified: 2026-11-26
 sources:
   - T47
   - T53

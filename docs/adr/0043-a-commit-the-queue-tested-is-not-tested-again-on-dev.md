@@ -5,7 +5,7 @@ describes:
   - .github/workflows/test.yml
   - scripts/ci_suite.py
   - scripts/promote_check.py
-verified: 2026-11-25
+verified: 2026-11-26
 sources:
   - T510
   - T612
