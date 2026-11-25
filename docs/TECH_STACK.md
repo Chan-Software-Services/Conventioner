@@ -4,12 +4,12 @@ kind: module
 describes:
   - back-end/requirements.txt
   - back-end/requirements.in
+  - back-end/requirements-audit.in
   - scripts/lock-backend-requirements.sh
   - front-end/package.json
   - .nvmrc
   - docker-compose.yml
   - front-end/vite.config.ts
-  - back-end/requirements-audit.in
 verified: 2026-11-16
 sources:
   - T254
