@@ -20,7 +20,6 @@ colors:
   mm-red: "#c0392b" # white text on it: 5.44
   mm-blue: "#1a6f8b" # white text on it: 5.69
   mm-chart-yellow: "#bd8619" # on white: 3.19
-  mm-chart-grey: "#777474" # on white: 4.63
   mm-fill-third: "#e3eeeb" # --mm-black on it: 13.10
   mm-fill-two-thirds: "#bfd7d1" # 10.26
   mm-fill-nearly: "#96beb4" # 7.64
