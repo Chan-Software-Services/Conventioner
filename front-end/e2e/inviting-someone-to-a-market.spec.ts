@@ -103,7 +103,7 @@ for (const window of [
       await expect(manage.addUserButton).toHaveText('Invite someone');
 
       // Withdrawing asks first, opens on Cancel, and Cancel changes nothing.
-      const withdraw = manage.invitation(noAccount).getByTestId('manage-market-invited-withdraw');
+      const withdraw = manage.withdrawButton(noAccount);
       await withdraw.click();
       await expect(manage.withdrawConfirm).toContainText(
         `Withdraw the invitation to ${noAccount}?`,

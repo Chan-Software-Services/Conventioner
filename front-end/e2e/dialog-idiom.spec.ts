@@ -247,6 +247,17 @@ test.describe('Manage organization stays open', () => {
     return organizations.find((org) => org.name === name)!.id;
   }
 
+  // The organization a test left invitations waiting in, deleted after it, pass or fail: its
+  // invitations go with it, so no run leaves an invitation or an organization on the stack.
+  let leftWaiting = '';
+  test.afterEach(async ({ request }) => {
+    if (!leftWaiting) return;
+    const orgId = await idOf(request, leftWaiting);
+    leftWaiting = '';
+    const deleted = await request.delete(`${BACKEND_URL}/organizations/${orgId}`);
+    expect(deleted.ok(), await deleted.text()).toBe(true);
+  });
+
   async function openAFreshOrg(page: import('@playwright/test').Page) {
     const orgs = new OrganizationsPage(page);
     await orgs.goto();
@@ -264,7 +275,8 @@ test.describe('Manage organization stays open', () => {
   test('two people are invited in a row, with no reopening', async ({
     authenticatedPage: page,
   }) => {
-    const { orgs } = await openAFreshOrg(page);
+    const { orgs, orgName } = await openAFreshOrg(page);
+    leftWaiting = orgName;
     const second = runAddress('second');
     const third = runAddress('third');
 

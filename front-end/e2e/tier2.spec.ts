@@ -10,7 +10,7 @@ import {
 } from './fixtures';
 import { marketScreenPath, marketSetupPath, vendorPagePath } from './helpers/marketScreens';
 import { seedAssignedMarket } from './helpers/seedAssignedMarket';
-import { SEED_MARKET_DATE, ensureTestOrgAuthenticated } from './helpers/seeds';
+import { SEED_MARKET_DATE, ensureTestOrgAuthenticated, loginViaApi } from './helpers/seeds';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
 import { acceptInvitation } from './helpers/invitations';
 import { MarketsPage } from './pages/MarketsPage';
@@ -27,6 +27,26 @@ const SECOND_USER = {
 const runAddress = (who: string) => `e2e-tier2-${who}-${Date.now()}@example.test`;
 
 test.describe('Tier 2 - Organization CRUD', () => {
+  // The organization the test made, by the name it starts with (the test renames it), deleted after
+  // it when the test failed before deleting it: its invitation still waiting goes with it, so no
+  // run leaves one on the stack.
+  let made = '';
+  test.afterEach(async ({ request }) => {
+    if (!made) return;
+    const name = made;
+    made = '';
+    await loginViaApi(request, BACKEND_URL, TEST_USER.email, TEST_USER.password);
+    const listed = await request.get(`${BACKEND_URL}/organizations`);
+    expect(listed.ok(), await listed.text()).toBe(true);
+    const { organizations } = (await listed.json()) as {
+      organizations: Array<{ id: string; name: string }>;
+    };
+    for (const org of organizations.filter((one) => one.name.startsWith(name))) {
+      const deleted = await request.delete(`${BACKEND_URL}/organizations/${org.id}`);
+      expect(deleted.ok(), await deleted.text()).toBe(true);
+    }
+  });
+
   test('create org, invite and withdraw, rename, and delete', async ({
     authenticatedPage: page,
   }) => {
@@ -39,6 +59,7 @@ test.describe('Tier 2 - Organization CRUD', () => {
     const orgName = `E2E Org ${Date.now()}`;
 
     await orgsPage.createOrg(orgName);
+    made = orgName;
     const manageButton = (await orgsPage.findCard(orgName)).getByTestId(
       'organizations-manage-button',
     );
@@ -79,6 +100,7 @@ test.describe('Tier 2 - Organization CRUD', () => {
     ).not.toBeVisible({
       timeout: 5000,
     });
+    made = '';
   });
 });
 

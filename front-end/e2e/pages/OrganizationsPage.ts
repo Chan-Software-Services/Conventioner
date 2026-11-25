@@ -42,19 +42,16 @@ export class OrganizationsPage {
   readonly addAdminCancel: Locator;
   readonly addAdminError: Locator;
   readonly addAdminSent: Locator;
-  readonly addAdminNotEmailed: Locator;
   readonly addMemberButton: Locator;
   readonly addMemberInput: Locator;
   readonly addMemberSubmit: Locator;
   readonly addMemberCancel: Locator;
   readonly addMemberError: Locator;
   readonly addMemberSent: Locator;
-  readonly addMemberNotEmailed: Locator;
   /** "Invited": the invitations waiting, for the owner and the admins (T538). */
   readonly invited: Locator;
   readonly invitedRows: Locator;
   readonly invitedWithdrawButtons: Locator;
-  readonly invitedReadFailed: Locator;
   readonly withdrawConfirm: Locator;
   readonly withdrawConsequence: Locator;
   readonly withdrawConfirmButton: Locator;
@@ -146,15 +143,12 @@ export class OrganizationsPage {
     this.addAdminCancel = page.getByTestId('manage-org-add-admin-cancel');
     this.addAdminError = page.getByTestId('manage-org-add-admin-error');
     this.addAdminSent = page.getByTestId('manage-org-add-admin-sent');
-    this.addAdminNotEmailed = page.getByTestId('manage-org-add-admin-not-emailed');
     this.addMemberCancel = page.getByTestId('manage-org-add-member-cancel');
     this.addMemberError = page.getByTestId('manage-org-add-member-error');
     this.addMemberSent = page.getByTestId('manage-org-add-member-sent');
-    this.addMemberNotEmailed = page.getByTestId('manage-org-add-member-not-emailed');
     this.invited = page.getByTestId('manage-org-invited');
     this.invitedRows = page.getByTestId('manage-org-invited-row');
     this.invitedWithdrawButtons = page.getByTestId('manage-org-invited-withdraw');
-    this.invitedReadFailed = page.getByTestId('manage-org-invited-read-failed');
     // Withdraw asks first: its own destructive dialog, a sibling of Manage organization.
     this.withdrawConfirm = page.getByTestId('manage-org-withdraw-window');
     this.withdrawConsequence = page.getByTestId('manage-org-withdraw-consequence');
@@ -301,9 +295,14 @@ export class OrganizationsPage {
     return this.invitedRows.filter({ hasText: email });
   }
 
+  /** The Withdraw of the invitation to `email`: the owner's on every row, an admin's on a member's. */
+  withdrawButton(email: string): Locator {
+    return this.invitation(email).getByTestId('manage-org-invited-withdraw');
+  }
+
   /** Withdraws the invitation to `email`, through the confirmation its Withdraw opens. */
   async withdraw(email: string): Promise<void> {
-    await this.invitation(email).getByTestId('manage-org-invited-withdraw').click();
+    await this.withdrawButton(email).click();
     await this.withdrawConfirmButton.click();
     await this.withdrawConfirm.waitFor({ state: 'detached' });
   }

@@ -38,15 +38,12 @@ export class ManageMarketPage {
   readonly addUserSelect: Locator;
   readonly addUserSubmit: Locator;
   readonly addUserCancel: Locator;
-  /** What the invite row says: its error, the sent line, or the line saying the email failed. */
+  /** What the invite row says: its error, or the sent line. */
   readonly addUserError: Locator;
   readonly addUserSent: Locator;
-  readonly addUserNotEmailed: Locator;
-  /** "Invited" (T538): its list, its rows, each row's Withdraw, and the confirmation it opens. */
+  /** "Invited" (T538): its list, its rows, and the confirmation a row's Withdraw opens. */
   readonly invited: Locator;
   readonly invitedRows: Locator;
-  readonly invitedWithdrawButtons: Locator;
-  readonly invitedReadFailed: Locator;
   readonly withdrawConfirm: Locator;
   readonly withdrawConsequence: Locator;
   readonly withdrawConfirmButton: Locator;
@@ -137,11 +134,8 @@ export class ManageMarketPage {
     this.addUserCancel = page.getByTestId('manage-market-add-user-cancel');
     this.addUserError = page.getByTestId('manage-market-add-user-error');
     this.addUserSent = page.getByTestId('manage-market-add-user-sent');
-    this.addUserNotEmailed = page.getByTestId('manage-market-add-user-not-emailed');
     this.invited = page.getByTestId('manage-market-invited');
     this.invitedRows = page.getByTestId('manage-market-invited-row');
-    this.invitedWithdrawButtons = page.getByTestId('manage-market-invited-withdraw');
-    this.invitedReadFailed = page.getByTestId('manage-market-invited-read-failed');
     // Its own destructive dialog, a sibling of Manage market.
     this.withdrawConfirm = page.getByTestId('manage-market-withdraw-window');
     this.withdrawConsequence = page.getByTestId('manage-market-withdraw-consequence');
@@ -257,6 +251,11 @@ export class ManageMarketPage {
     return this.invitedRows.filter({ hasText: email });
   }
 
+  /** The Withdraw of the invitation to `email`, drawn only where the reader may give its role. */
+  withdrawButton(email: string): Locator {
+    return this.invitation(email).getByTestId('manage-market-invited-withdraw');
+  }
+
   // ── Invite someone ──
 
   async clickAddUser(): Promise<void> {
@@ -290,7 +289,7 @@ export class ManageMarketPage {
 
   /** Withdraws the invitation to `email`, through the confirmation its Withdraw opens. */
   async withdraw(email: string): Promise<void> {
-    await this.invitation(email).getByTestId('manage-market-invited-withdraw').click();
+    await this.withdrawButton(email).click();
     await this.withdrawConfirmButton.click();
     await this.withdrawConfirm.waitFor({ state: 'detached' });
   }

@@ -9,10 +9,10 @@ import { grantMarketRole } from './helpers/grantMarketRole';
  * Manage market holds together (bug 15, and items 14 and 15 of bug 43; E26/F10/S01).
  *
  * Its buttons were the compact size, smaller than every other button in the product. "Add user",
- * now "Invite someone", turned into a lone Cancel above the row it opened. The owner's own row offered a role select the
- * server refused every use of, and the refusal appeared at the foot of the dialog: it is said
- * under the person's row now, as `changing-a-role-asks-first.spec.ts` proves. Delete asked
- * "Are you sure?" inline, Confirm before Cancel, with focus left on the page.
+ * now "Invite someone", turned into a lone Cancel above the row it opened. The owner's own row
+ * offered a role select the server refused every use of, and the refusal appeared at the foot of
+ * the dialog: it is said under the person's row now, as `changing-a-role-asks-first.spec.ts`
+ * proves. Delete asked "Are you sure?" inline, Confirm before Cancel, with focus left on the page.
  */
 test.use({ viewport: { width: 1440, height: 900 } });
 
@@ -72,7 +72,8 @@ test('on a phone, the email field and the role each take the invite row, with it
   request,
 }) => {
   // Beside the role, Add and Cancel at 390, the field and the role were squeezed to 66px each,
-  // "User e" and "Edi" (T142); beside the role alone, Send invitation left Cancel a line of its own.
+  // "User e" and "Edi" (T142); beside the role alone, Send invitation left Cancel a line of its
+  // own.
   await page.setViewportSize({ width: 390, height: 844 });
   const { marketName } = await seedApplicantMarket(
     request,

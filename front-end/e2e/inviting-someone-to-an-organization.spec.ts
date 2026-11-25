@@ -137,7 +137,7 @@ for (const window of [
       await expect(orgs.addAdminButton).toBeVisible();
 
       // Withdrawing asks first, opens on Cancel, and Cancel changes nothing.
-      const withdraw = orgs.invitation(noAccountMember).getByTestId('manage-org-invited-withdraw');
+      const withdraw = orgs.withdrawButton(noAccountMember);
       await withdraw.click();
       await expect(orgs.withdrawConfirm).toContainText(
         `Withdraw the invitation to ${noAccountMember}?`,
@@ -188,12 +188,8 @@ for (const window of [
           const orgs = await openManage(page, orgId);
           await expect(orgs.invitedRows).toHaveCount(2);
           await expect(orgs.invitation(invitedAdmin)).toContainText(/Invited as admin, until /);
-          await expect(
-            orgs.invitation(invitedAdmin).getByTestId('manage-org-invited-withdraw'),
-          ).toHaveCount(0);
-          await expect(
-            orgs.invitation(invitedMember).getByTestId('manage-org-invited-withdraw'),
-          ).toHaveCount(1);
+          await expect(orgs.withdrawButton(invitedAdmin)).toHaveCount(0);
+          await expect(orgs.withdrawButton(invitedMember)).toHaveCount(1);
           // An admin invites members, never admins.
           await expect(orgs.addAdminButton).toHaveCount(0);
           await expect(orgs.addMemberButton).toHaveText('Invite member');
