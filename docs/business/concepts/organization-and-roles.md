@@ -9,7 +9,7 @@ verified: 2026-11-11
 **Organization** and **Organizer** are defined in [the glossary](../../../CONTEXT.md#organizing), under Organizing; this node gathers what the graph says about an organization, its people, and the roles they hold on a market.
 
 An organization's people each hold one place in it: its one owner, an admin or a member.
-The place is one entry in one map, as a person's role on a market is, so nobody stands in two places, and an organization written before that map is read with the owner winning over any other place they were also listed in ([one map of people](../../implementation/data/organization-document.md#one-map-of-people)).
+The place is one entry in one map, as a person's role on a market is, so nobody stands in two places, and an organization stored with no map reads as holding nobody ([one map of people](../../implementation/data/organization-document.md#one-map-of-people)).
 Adding a person and removing one is each one write that lands only while the places it was judged on still stand, so a change that meets another is refused and said, never half-made ([the organization's people](../../implementation/modules/organization-people.md)).
 
 ## Rules
