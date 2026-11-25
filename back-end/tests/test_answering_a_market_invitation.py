@@ -34,7 +34,6 @@ import market_write as MarketWrite  # noqa: E402
 import sign_in_limits  # noqa: E402
 import utils.email as Email  # noqa: E402
 from datatypes import MarketPhase  # noqa: E402
-from market_write import MARKET_CHANGED  # noqa: E402
 
 MARKET_ID = "market-123"
 OTHER_MARKET_ID = "market-456"
