@@ -8,7 +8,7 @@ import {
 } from './helpers/seedPhaseMarket';
 import { oneByOnePath } from './helpers/marketScreens';
 import { mongoEval } from './helpers/mongo';
-import { ensureOrganizationAdmin } from './helpers/grantMarketRole';
+import { ensureOrganizationAdmin, grantMarketRole } from './helpers/grantMarketRole';
 import { loginViaApi, removeFromOrganization } from './helpers/seeds';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
 import { namelessControls } from './helpers/accessibleNames';
@@ -55,10 +55,7 @@ test('a follow-up is marked, waits out of the queue, holds the market, and is ha
   await transitionMarket(request, BACKEND_URL, TEST_USER.email, marketId, 'applications');
   const nadia = seedApplicationWithStatus(marketId, 'open', 'nadia@ember.test');
   seedApplicationWithStatus(marketId, 'open', 'theo@thistle.test');
-  const granted = await request.post(`${BACKEND_URL}/markets/${marketId}/roles`, {
-    data: { user_email: EDITOR.email, role: 'editor' },
-  });
-  expect(granted.ok(), await granted.text()).toBeTruthy();
+  await grantMarketRole(request, marketId, EDITOR, 'editor');
   // The organizer already knows Nadia: a note is there before anyone reviews her.
   const noted = await request.put(
     `${BACKEND_URL}/markets/${marketId}/vendor-notes/${encodeURIComponent('nadia@ember.test')}`,
@@ -267,10 +264,7 @@ test('an editor from outside the organization is offered only the people on the 
       `db.applications.updateOne({ id: ${JSON.stringify(theo)} }, ` +
       `{ $set: { follow_up_owner: { user_id: admin.id, email: admin.email } } })`,
   );
-  const granted = await request.post(`${BACKEND_URL}/markets/${marketId}/roles`, {
-    data: { user_email: EDITOR.email, role: 'editor' },
-  });
-  expect(granted.ok(), await granted.text()).toBeTruthy();
+  await grantMarketRole(request, marketId, EDITOR, 'editor');
 
   await withUser(browser, EDITOR.email, EDITOR.password, async (page) => {
     await page.goto(oneByOnePath(marketId));

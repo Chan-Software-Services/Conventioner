@@ -119,7 +119,8 @@ export interface TheScreensSeed {
   applicant: { email: string };
   /**
    * An organization of the organizer's own, its name long and its admin's and member's addresses
-   * long (T148), so Manage organization draws its people.
+   * long (T148), so Manage organization draws its people, with an admin's invitation to a long
+   * address and `SCREENS_INVITEE`'s member invitation waiting (`anAdminInvitationWaiting`).
    */
   organization: { name: string };
   /**
@@ -335,6 +336,31 @@ async function twoInvitationsWaiting(api: APIRequestContext, marketId: string): 
     'admin',
   );
   await inviteToMarket(api, marketId, `e2e-screens-invited-${stamp}@example.test`, 'viewer');
+}
+
+/**
+ * An admin's invitation to a long address waiting on `organizationId`, beside `SCREENS_INVITEE`'s
+ * member one, so Manage organization draws its "Invited" with a row of each place (T538). The
+ * organization is the same on every seed of a stack and an invitation waits 14 days, so it is sent
+ * only when no admin's invitation waits; its address is the seed's own. Fixture data.
+ */
+async function anAdminInvitationWaiting(
+  api: APIRequestContext,
+  backend: string,
+  organizationId: string,
+): Promise<void> {
+  const listed = await api.get(`${backend}/organizations/${organizationId}/invitations`);
+  if (!listed.ok()) {
+    throw new Error(`Invitations read failed: ${listed.status()} ${await listed.text()}`);
+  }
+  const { invitations } = (await listed.json()) as { invitations: Array<{ role: string }> };
+  if (invitations.some((invitation) => invitation.role === 'admin')) return;
+  await inviteToOrganization(
+    api,
+    organizationId,
+    `e2e-screens-invited-admin-${Date.now()}@riverside-makers.example.test`,
+    'admin',
+  );
 }
 
 /** The other reviewer of `dealt`, a Viewer on that market only; fixture data. */
@@ -855,6 +881,7 @@ export async function seedTheScreens(
   const { id: organizationId, ...organization } = await organizationWithPeople(api, backend);
   const ofTheOrganization = await organizationMarket(api, backend, email, organizationId);
   await invitationsForTheInvitee(api, big.marketId, organizationId);
+  await anAdminInvitationWaiting(api, backend, organizationId);
   await twoInvitationsWaiting(api, draft.marketId);
 
   const layout = await seedLayout(api, backend, email, password, { layout: true });

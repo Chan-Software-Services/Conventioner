@@ -239,7 +239,7 @@ test.describe('in a window too short to show the whole body', () => {
     await expectShownInTheBody(body, page.getByTestId('manage-market-add-user-error'));
   });
 
-  test("Manage organization's Add rows scroll into view, and their forms still submit by Enter", async ({
+  test("Manage organization's invite rows scroll into view, and their forms still submit by Enter", async ({
     authenticatedPage: page,
   }) => {
     await openManageOrganization(page);
@@ -260,16 +260,20 @@ test.describe('in a window too short to show the whole body', () => {
       await expect(field).toBeFocused();
       await expectShownInTheBody(body, field);
 
-      await field.fill('nobody-has-this-address@example.com');
+      // Enter runs the row's own form, whose refusal names the address: the organization's
+      // owner, already in it, since any other address is invited.
+      await field.fill(TEST_USER.email);
       await field.press('Enter');
-      await expect(page.getByTestId(error)).toBeVisible();
+      await expect(page.getByTestId(error)).toHaveText(
+        `${TEST_USER.email} owns this organization.`,
+      );
       await expect(page.getByTestId('manage-org-window')).toBeVisible();
       await expectShownInTheBody(body, page.getByTestId(error));
     }
   });
 });
 
-test.describe('in a window too short to show an Add row and its refusal', () => {
+test.describe('in a window too short to show an invite row and its refusal', () => {
   test.use({ viewport: { width: 1280, height: 400 } });
 
   /** Whole in the body and clear of its bottom edge shade, 12px, so it never reads as cut off. */
@@ -288,13 +292,7 @@ test.describe('in a window too short to show an Add row and its refusal', () => 
    * Refused with the form's foot at the body's foot, as a person who has scrolled there has it, so
    * the refusal arrives past the foot however many people the stack holds.
    */
-  async function refuse(
-    page: Page,
-    body: string,
-    button: string,
-    input: string,
-    address = 'nobody-has-this-address@example.com',
-  ) {
+  async function refuse(page: Page, body: string, button: string, input: string, address: string) {
     const add = page.getByTestId(button);
     await add.scrollIntoViewIfNeeded();
     await add.click();
@@ -338,6 +336,8 @@ test.describe('in a window too short to show an Add row and its refusal', () => 
         'manage-org-body',
         `manage-org-add-${row}-button`,
         `manage-org-add-${row}-input`,
+        // The organization's owner, already in it, so refused: any other address is invited.
+        TEST_USER.email,
       );
       await expectRefusalShown(
         page,

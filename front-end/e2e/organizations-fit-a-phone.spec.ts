@@ -108,14 +108,17 @@ test.describe('on a phone', () => {
       addressBox.y + addressBox.height,
     );
 
-    // Its add row: the field takes the row, Add and Cancel beneath it.
+    // Its invite row: the field takes the row, Send invitation and Cancel beneath it.
     await orgs.addMemberButton.tap();
     await expect(orgs.addMemberInput).toBeVisible();
     const field = await box(orgs.addMemberInput);
-    const add = await box(orgs.addMemberSubmit);
-    expect(add.y, 'Add is beneath the field').toBeGreaterThanOrEqual(field.y + field.height);
+    const send = await box(orgs.addMemberSubmit);
+    expect(send.y, 'Send invitation is beneath the field').toBeGreaterThanOrEqual(
+      field.y + field.height,
+    );
     expect(field.width, 'the field takes the row').toBeGreaterThan(250);
     await expectInside(orgs.addMemberInput, 'the email field');
+    await expectInside(orgs.addMemberSubmit, 'Send invitation');
     await expectInside(page.getByTestId('manage-org-add-member-cancel'), 'Cancel');
     expect(await widths(page)).toEqual({ layout: 390, page: 390, zoom: 1 });
 

@@ -20,19 +20,18 @@ const SECOND_USER = {
   password: 'e2esecond123',
 };
 
-const THIRD_USER = {
-  email: 'e2e-third@example.com',
-  password: 'e2ethird123',
-};
+/**
+ * An address no earlier run invited, in the fixture domain: this test never accepts the
+ * invitations it sends, so a retry never meets the limit on invitations to one address.
+ */
+const runAddress = (who: string) => `e2e-tier2-${who}-${Date.now()}@example.test`;
 
 test.describe('Tier 2 - Organization CRUD', () => {
-  test.beforeAll(() => {
-    for (const user of [SECOND_USER, THIRD_USER]) {
-      ensureVerifiedUser(user.email, user.password);
-    }
-  });
-
-  test('create org, manage roles, rename, and delete', async ({ authenticatedPage: page }) => {
+  test('create org, invite and withdraw, rename, and delete', async ({
+    authenticatedPage: page,
+  }) => {
+    const admin = runAddress('admin');
+    const member = runAddress('member');
     const orgsPage = new OrganizationsPage(page);
     await orgsPage.goto();
     await orgsPage.waitForLoaded();
@@ -49,33 +48,29 @@ test.describe('Tier 2 - Organization CRUD', () => {
     await manageButton.click();
     await orgsPage.waitForManageOverlay();
 
-    await orgsPage.addAdmin(SECOND_USER.email);
-    await expect(orgsPage.adminEmails.filter({ hasText: SECOND_USER.email })).toBeVisible({
-      timeout: 5000,
-    });
+    // An admin and a member are invited (T538): each waits under Invited until they accept.
+    await orgsPage.inviteAdmin(admin);
+    await expect(orgsPage.addAdminSent).toHaveText(`Invitation sent to ${admin}.`);
+    await expect(orgsPage.invitation(admin)).toBeVisible();
     await expect(orgsPage.manageWindow).toBeVisible();
 
-    await orgsPage.addMember(THIRD_USER.email);
-    await expect(orgsPage.memberEmails.filter({ hasText: THIRD_USER.email })).toBeVisible({
-      timeout: 5000,
-    });
+    await orgsPage.inviteMember(member);
+    await expect(orgsPage.addMemberSent).toHaveText(`Invitation sent to ${member}.`);
+    await expect(orgsPage.invitation(member)).toBeVisible();
     await expect(orgsPage.manageWindow).toBeVisible();
 
-    const memberRemove = orgsPage.removeMemberButtons.first();
-    await expect(memberRemove).toBeVisible({ timeout: 5000 });
-    // Remove asks first (E38/F15/S01).
-    await memberRemove.click();
-    await orgsPage.confirmRemove();
-    await expect(orgsPage.memberEmails.filter({ hasText: THIRD_USER.email })).toHaveCount(0, {
-      timeout: 5000,
-    });
+    // Withdraw asks first, as Remove does (E38/F15/S01).
+    await orgsPage.withdraw(member);
+    await expect(orgsPage.invitation(member)).toHaveCount(0);
+    await expect(orgsPage.invitation(admin)).toBeVisible();
     await expect(orgsPage.manageWindow).toBeVisible();
 
     const newName = `${orgName} (renamed)`;
     await orgsPage.renameOrg(newName);
     await expect(orgsPage.manageWindow).toBeVisible();
 
-    // Deleting IS one of the three correct closes: the thing being managed no longer exists.
+    // Deleting IS one of the three correct closes: the thing being managed no longer exists, and
+    // the invitation still waiting goes with it.
     await orgsPage.deleteOrg();
     await expect(orgsPage.manageWindow).toBeHidden({ timeout: 5000 });
 

@@ -1,5 +1,7 @@
 import type { APIRequestContext, Browser, Page } from '@playwright/test';
 import { test, expect, TEST_USER, BACKEND_URL, LoginPage, OrganizationsPage } from './fixtures';
+import { placeInOrganization } from './helpers/grantMarketRole';
+import { acceptInvitation } from './helpers/invitations';
 import { loginViaApi } from './helpers/seeds';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
 import { hideDevToolsPanel } from './helpers/hideDevToolsPanel';
@@ -7,9 +9,10 @@ import { hideDevToolsPanel } from './helpers/hideDevToolsPanel';
 /**
  * The organization's own changes, read in Manage organization's History section (E40/F02/S01).
  *
- * The owner adds an admin and renames the organization in Manage organization, as they would;
- * the section reads both back, newest first, each saying who and when, and a member of the
- * organization opens the same History from their own Organizations page. A long history, and a
+ * The owner invites an admin, who accepts, and renames the organization in Manage organization, as
+ * they would; the section reads the invitation, the place it gave and the rename back, newest
+ * first, each saying who and when, and a member of the organization opens the same History from
+ * their own Organizations page. A long history, and a
  * long record of changes to the default, each stand in a box and bring more as their end scrolls
  * into view.
  */
@@ -74,7 +77,7 @@ async function signedIn(browser: Browser, who: { email: string; password: string
   return { context, page };
 }
 
-test('an admin added and the organization renamed each read back with who and when', async ({
+test('an admin invited and accepting, and the organization renamed, each read back with who and when', async ({
   authenticatedPage: page,
   request,
 }) => {
@@ -83,8 +86,9 @@ test('an admin added and the organization renamed each read back with who and wh
   const me = TEST_USER.email;
   const orgs = await openManage(page, org.name);
 
-  await orgs.addAdmin(ADMIN.email);
-  await expect(orgs.adminEmails.filter({ hasText: ADMIN.email })).toBeVisible();
+  await orgs.inviteAdmin(ADMIN.email);
+  await expect(orgs.addAdminSent).toHaveText(`Invitation sent to ${ADMIN.email}.`);
+  await acceptInvitation(ADMIN, org.id);
   await orgs.renameOrg(renamed);
   await expect(orgs.manageWindow.getByText(renamed, { exact: true })).toBeVisible();
 
@@ -95,7 +99,8 @@ test('an admin added and the organization renamed each read back with who and wh
 
   await expect(orgs.historySentences).toHaveText([
     `${me} renamed the organization from "${org.name}" to "${renamed}"`,
-    `${me} gave ${ADMIN.email} the Admin role`,
+    `${me} gave ${ADMIN.email} the Admin role, which they accepted`,
+    `${me} invited ${ADMIN.email} as an Admin`,
   ]);
   const day = await today(page);
   for (const when of await orgs.historyEntries.getByTestId('org-history-when').all()) {
@@ -108,20 +113,18 @@ test('an admin added and the organization renamed each read back with who and wh
   await expect(rename).toContainText(renamed);
 
   // A change made with the History open shows in it, without reopening the dialog.
-  await orgs.addMember(MEMBER.email);
+  await orgs.inviteMember(MEMBER.email);
   await expect(orgs.historySentences.first()).toHaveText(
-    `${me} gave ${MEMBER.email} the Member role`,
+    `${me} invited ${MEMBER.email} as a Member`,
   );
-  await expect(orgs.historySentences).toHaveCount(3);
+  await expect(orgs.historySentences).toHaveCount(4);
+  // Accepted, so nothing is left waiting for the address.
+  await acceptInvitation(MEMBER, org.id);
 });
 
 test('a member opens the organization and reads its History', async ({ browser, request }) => {
   const org = await makeOrganization(request);
-  await ok(
-    await request.post(`${BACKEND_URL}/organizations/${org.id}/members`, {
-      data: { user_email: MEMBER.email },
-    }),
-  );
+  await placeInOrganization(request, org.id, MEMBER, 'member');
 
   const { context, page } = await signedIn(browser, MEMBER);
   try {
@@ -132,7 +135,8 @@ test('a member opens the organization and reads its History', async ({ browser, 
     await expect(orgs.renameInput).toHaveCount(0);
     await orgs.openHistory();
     await expect(orgs.historySentences).toHaveText([
-      `${TEST_USER.email} gave ${MEMBER.email} the Member role`,
+      `${TEST_USER.email} gave ${MEMBER.email} the Member role, which they accepted`,
+      `${TEST_USER.email} invited ${MEMBER.email} as a Member`,
     ]);
   } finally {
     await context.close();
