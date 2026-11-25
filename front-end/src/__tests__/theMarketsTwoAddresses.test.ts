@@ -51,13 +51,6 @@ describe("a market's two addresses", () => {
     expect(at.query).toEqual({ door: 'C0DE' });
   });
 
-  it.each(['/spring-market/vendor/anything', '/spring-market/apply', '/spring-market/check-in'])(
-    'answers "Page not found" at %s',
-    async (path) => {
-      expect((await landing(path)).name).toBe('not-found');
-    },
-  );
-
   it.each(['market-page', 'vendor-page'])('makes %s public and a vendor-facing page', (name) => {
     const record = router.getRoutes().find((route) => route.name === name);
     expect(record?.meta).toEqual({ public: true, vendorFacing: true });
@@ -78,6 +71,22 @@ describe("a market's two addresses", () => {
       arrive();
       const at = await landing(path);
       expect(at.name).toBe(name);
+      expect(at.path).toBe(path);
+    });
+
+    // Nothing under the two is a page, the vendor's old sign-in and dashboard among them (ADR
+    // 0022): each asks no server, so a gated market's reads as an unknown one's.
+    it.each([
+      '/spring-market/vendor/anything',
+      '/spring-market/vendor/apply',
+      '/spring-market/apply',
+      '/spring-market/check-in',
+      '/spring-market/applicant-login',
+      '/spring-market/applicant/dashboard',
+    ])('answers "Page not found" at %s, keeping the address', async (path) => {
+      arrive();
+      const at = await landing(path);
+      expect(at.name).toBe('not-found');
       expect(at.path).toBe(path);
     });
   });

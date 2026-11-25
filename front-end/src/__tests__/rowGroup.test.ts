@@ -73,12 +73,15 @@ describe('RowGroup', () => {
   });
 
   it('past the fold shows the first rows and Show all N in the heading', () => {
-    const wrapper = mountGroup(31);
-    expect(rows(wrapper)).toHaveLength(20);
-    expect(seatTexts(wrapper)[19]).toBe('19: Seat 20');
-    expect(button(wrapper).text()).toBe('Show all 31 in North Wing');
-    expect(button(wrapper).attributes('type')).toBe('button');
-    wrapper.unmount();
+    // One past the fold folds as far past it does.
+    for (const count of [21, 31]) {
+      const wrapper = mountGroup(count);
+      expect(rows(wrapper)).toHaveLength(20);
+      expect(seatTexts(wrapper)[19]).toBe('19: Seat 20');
+      expect(button(wrapper).text()).toBe(`Show all ${count} in North Wing`);
+      expect(button(wrapper).attributes('type')).toBe('button');
+      wrapper.unmount();
+    }
   });
 
   it('folds at the size it is given', () => {

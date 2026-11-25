@@ -38,12 +38,16 @@ function team(count: number, unable: readonly number[] = []) {
   }));
 }
 
-function market(reviewers: ReturnType<typeof team>, chooses: boolean): Market {
+function market(
+  reviewers: ReturnType<typeof team>,
+  chooses: boolean,
+  candidates = reviewers.map((reviewer) => reviewer.email),
+): Market {
   return {
     id: 'market-1',
     phase: MarketPhase.Applications,
     reviewTeam: { reviewers },
-    reviewerCandidates: reviewers.map((reviewer) => reviewer.email),
+    reviewerCandidates: candidates,
     actionRefusals: chooses ? answersRefusing() : answersRefusing(MarketAction.ChooseReviewers),
   } as Market;
 }
@@ -284,10 +288,23 @@ describe('saving', () => {
     await flushPromises();
   }
 
+  /** One in, the thirteenth of the market's people, and the first of the team out, then save. */
+  async function saveOneInOneOut() {
+    const field = wrapper!.get('[data-testid="reviewer-picker-input"]');
+    await field.setValue(address(13));
+    await field.trigger('keydown', { key: 'Enter' });
+    await saveWithoutTheFirst();
+  }
+  /** Twelve reviewers, among thirteen who may be chosen. */
+  const twelveOfThirteen = (): [ReturnType<typeof team>, string[]] => {
+    const twelve = team(12);
+    return [twelve, [...twelve.map(({ email }) => email), address(13)]];
+  };
+
   /** The market as the store holds it, as every screen's is, on a panel of its own. */
-  async function mountHeld(reviewers: ReturnType<typeof team>) {
+  async function mountHeld(reviewers: ReturnType<typeof team>, candidates?: string[]) {
     const store = useMarketStore();
-    api.get.mockResolvedValueOnce({ data: { market: market(reviewers, true) } });
+    api.get.mockResolvedValueOnce({ data: { market: market(reviewers, true, candidates) } });
     await store.refresh();
     wrapper = mount(ReviewersPanel, {
       props: { market: store.market },
@@ -297,23 +314,33 @@ describe('saving', () => {
     return store.market!;
   }
 
-  it('opens on the team saved when the re-read failed, its market the one written over', async () => {
-    await mountHeld(team(12));
+  it('opens on the team saved when the re-read failed, its market the one written over, and saves it', async () => {
+    await mountHeld(...twelveOfThirteen());
     await pressMore();
     api.get.mockRejectedValue(new Error('Network Error'));
-    await saveWithoutTheFirst();
+    await saveOneInOneOut();
     expect(byId('reviewers-dialog-window')).toBeNull();
 
     await pressMore();
-    expect(chipAddresses()).toHaveLength(11);
+    expect(chipAddresses()).toHaveLength(12);
+    expect(chipAddresses()).toContain(address(13));
     expect(chipAddresses()).not.toContain(address(1));
+
+    submit();
+    await flushPromises();
+    expect(byId('reviewers-dialog-window')).toBeNull();
+    // The second save writes: the last write read below is its own, not the first save's.
+    expect(api.put).toHaveBeenCalledTimes(2);
+    const [, body] = api.put.mock.lastCall as [string, { reviewers: string[] }];
+    expect(body.reviewers).toContain(address(13));
+    expect(body.reviewers).not.toContain(address(1));
   });
 
   it('keeps the team saved through the panel going, as a tab switch takes it', async () => {
-    const held = await mountHeld(team(12));
+    const held = await mountHeld(...twelveOfThirteen());
     await pressMore();
     api.get.mockRejectedValue(new Error('Network Error'));
-    await saveWithoutTheFirst();
+    await saveOneInOneOut();
     wrapper!.unmount();
 
     wrapper = mount(ReviewersPanel, {
@@ -322,7 +349,8 @@ describe('saving', () => {
       global: { stubs: { Teleport: true } },
     });
     await pressMore();
-    expect(chipAddresses()).toHaveLength(11);
+    expect(chipAddresses()).toHaveLength(12);
+    expect(chipAddresses()).toContain(address(13));
     expect(chipAddresses()).not.toContain(address(1));
   });
 

@@ -59,6 +59,7 @@ sources:
   - T422
   - T352
   - T496
+  - T538
 ---
 
 # The market's actions
@@ -85,7 +86,7 @@ Both ask the read row the same way, through `read_refused` in [`back-end/api/mar
 **A change records under the row it asked** ([ADR 0038](../../adr/0038-a-change-records-under-the-row-it-asked.md)): `Asked.record`, and for the few records no request asks the history's `unasked` door, are the only ways a change a row asks is recorded on a market, beside an applicant's own `record_applicant`, so the history and the table cannot disagree on what a change was let through on.
 Called on an `Asked` that was refused it raises `RecordedARefusal`, an `AssertionError`: a refused write raises before it writes anything, so a record of one is a programming error, answered to no client.
 `_market_change(market_id, user, row)` in [`back-end/api/markets.py`](../../../back-end/api/markets.py) loads a market for a write and asks its row, and returns a `MarketChange` of the market, the organization it read, and the `Asked`; it is not found, refused as an unreadable market, refused in the row's words, then refused as archived whoever may, in that order.
-Every write of the markets module loads through it and records through its `Asked`, but for the role writes and the transfer of ownership, which load the market themselves since an archived market still takes them, and ask their rows with `ask`; a move (`take_move`), which records through the recorder its caller passes; a market's deletion, which asks its row with `refusal` and records in the organization's history; and a market's creation, which records in the organization's history (T352).
+Every write of the markets module loads through it and records through its `Asked`, but for the role writes, the transfer of ownership and the invitations to a role (sending, withdrawing and accepting one), which load the market themselves since an archived market still takes them, and ask their rows with `ask`; an invitee's decline, which records through the unasked recorder (`History.unasked`, `AN_INVITEE_ANSWERS`), since the invitee holds no row; a move (`take_move`), which records through the recorder its caller passes; a market's deletion, which asks its row with `refusal` and records in the organization's history; and a market's creation, which records in the organization's history (T352).
 So does every write of the placements, the payments and the organizer's door, each handing its `Asked` to the helpers that record for it: the history's placement writers, payments' `assignment_written`, `keep_freed_line` and `deduct_freed_day`, and attendance's `record_attendance`, `undo_attendance`, `record_check_out` and `undo_check_out`; a free asked to deduct asks "Change the amount owed" with `ask` too, and records the deduction through that asking.
 The routes of `app.py` that check a row and leave the write to another module ask it with `ask` and hand that module the `Asked`: every review write the giving row's (`_reviewer_on`, held in its `Reviewer`), a verdict and a selection's the change row's too (`_reviewing`, the applicants module's `Reviewing`, whose entry goes through the one the write took), the import and the start the import row's (`_importing_market_document`, held in its `ImportingMarket`), and publishing results and stopping applications their own; the markets module hands the Choose reviewers asking to `review_team.choose`.
 So does every write of the Discord connection, vendor info, added vendors and the table types; the floorplan routes ask with the floorplans access module's `market_asking` or `image_asking`, which answer the `Asked` their delete records through, and saving a floorplan to a market asks with `ask`.
@@ -121,6 +122,7 @@ Each check keeps the order it had, so every route answers each person as it did 
 
 **Taking a role asks both roles rows first**: `DELETE /markets/:id/roles/<user_id>` (`remove_market_role`) asks the Editor-and-Viewer row and the Admin row before it looks at the person, so someone both refuse reads the Editor-and-Viewer row's refusal whoever the person is; then it answers someone holding no role as gone, refuses taking the only owner, and asks the row of the role taken.
 Each role write records through the asking of the row that gives the role (`_record_role`), among the rows its check asked: the Admin row when an Admin or Owner role is either side of the change.
+An accepted invitation records its `role_given` through the inviter's asking of the row that gives the role, asked again when it is accepted (`give_role_by_invitation`).
 
 **A write of the plan asks two rows**: its own row always, and the Assignment row too when the plan changes the assignment rules, which ride in it; restating them asks only its own row.
 The plan write's own row is Market Setup, and the start from a CSV's is the import's.
@@ -391,6 +393,8 @@ Asked by:
 
 - `/markets/:id/roles` writes on an Editor or a Viewer
 - taking any role, an Admin's or the owner's too, first, beside the Admin row
+- inviting someone as an Editor or a Viewer (`POST /markets/:id/invitations`), withdrawing such an invitation, and accepting one, asked again of the inviter
+- reading and withdrawing the market's invitations, first, beside the Admin row: either row lets the reader through
 - whom the market read names the organization's people to in `peopleWithAccess`, beside the organization's own people (E38/F12/S01)
 
 ### Give and take Admin roles (`manage-admins`)
@@ -401,6 +405,8 @@ Asked by:
 
 - `/markets/:id/roles` writes on an Admin (a role change asks the row of the role taken and of the one given)
 - taking any role, an Editor's or a Viewer's too, first, beside the Editor-and-Viewer row
+- inviting someone as an Admin, withdrawing such an invitation, and accepting one, asked again of the inviter
+- reading and withdrawing the market's invitations, first, beside the Editor-and-Viewer row
 
 ### Transfer ownership (`hand-on-market`)
 

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { reactive } from 'vue';
 import { mount } from '@vue/test-utils';
 
 import ElementSectionSetup from '@/components/elements/ElementSectionSetup.vue';
@@ -12,15 +13,16 @@ import type { SetupObject } from '@/assets/types/datatypes';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
+// Reactive, as the plan the market screen hands these components is: they add a row to it in place.
 function plan(): SetupObject {
-  return {
+  return reactive({
     priority: [],
     marketDates: [],
     tiers: [],
     locations: [{ id: 'loc-upper', name: 'Upper Hall' }],
     sections: [],
     assignmentOptions: { maxAssignmentsPerVendor: null, maxHalfTableProportionPerSection: null },
-  };
+  });
 }
 
 describe('a row added on Section Setup', () => {

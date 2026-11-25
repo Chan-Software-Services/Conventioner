@@ -22,7 +22,7 @@ describes:
   - front-end/e2e/helpers/signInWindow.ts
   - front-end/e2e/helpers/mongoSession.ts
   - front-end/e2e/helpers/mongoScript.ts
-verified: 2026-11-20
+verified: 2026-11-25
 sources:
   - E21/F02/S02
   - E22/F04/S02
@@ -58,6 +58,7 @@ sources:
   - T501
   - T519
   - T507
+  - T538
 ---
 
 # E2E patterns
@@ -97,7 +98,7 @@ Everything else on the page is found by its `data-testid`.
 `LoginPage.login` opens a bare `/login` first; `signIn` signs in on the page as it stands, so a spec about where signing in returns to keeps the address's `next`.
 `waitForMarkets` waits for where signing in lands by the path, since `/login?next=/markets` ends in `/markets` too and a glob would be met before the sign-in had happened; a spec asserts a landing the same way.
 A move on the phase rail shows the new phase before it lands on that phase's page, so a spec that uses the rail again after a move first waits for the page the move lands on to draw: a menu opened in between is gone once the landing draws its page, as [`phase-state-machine.spec.ts`](../../../front-end/e2e/phase-state-machine.spec.ts)'s full walk waits for the door after publishing.
-`signInToMarkets`, the sign-in of the `authenticatedPage` fixture and of `withUser()`, returns only once Markets has the answers to its two reads, the account's markets and its organizations ([a seed's sign-in ends the page's](#sharp-edges)).
+`signInToMarkets`, the sign-in of the `authenticatedPage` fixture and of `withUser()`, returns only once Markets has the answers to its three reads, the account's markets, its organizations and the invitations waiting for it ([a seed's sign-in ends the page's](#sharp-edges)).
 A new page follows the existing ones (`LoginPage`, `MarketsPage`, `NewMarketPage`, `MarketSetupPage`, `ResultPage`, `OrganizationsPage`, `ManageMarketPage`); TESTING.md lists them all.
 `MarketSetupPage` holds more than the plan: the market's tabs and the phase rail are there too, because every market page stands in the same frame, and `publishResults`, which a walk into market days takes on either path.
 `VendorPage` is the one object for a market's vendor page, `/<slug>/vendor`, signed out and in, the application form on it included, with a refused save's box (`formError`) and the Reload a changed form offers there (`reloadButton`, T507); `MarketPage` is the one for the market page, `/<slug>`, its application call and its notice, and `PublicMapPage` for the map it shows while open.
@@ -161,7 +162,7 @@ A `csv` market enters `applications` only holding an application, so a spec that
 
 **Market dates are calendar days, not instants**: a stored `YYYY-MM-DD` renders as the same day for every viewer, wherever they are.
 [`getFormattedDate`](../../../front-end/src/utils/utils.ts) formats with pure UTC arithmetic; never parse a market date through `new Date()` with an offset.
-[`date-display-timezone.spec.ts`](../../../front-end/e2e/date-display-timezone.spec.ts) pins it in Honolulu, Los Angeles and Tokyo through Playwright's `timezoneId`.
+[`date-display-timezone.spec.ts`](../../../front-end/e2e/date-display-timezone.spec.ts) pins it in Honolulu and Tokyo, one zone each side of UTC, through Playwright's `timezoneId`; a zone at a fixed offset between them fails only as one of the two does; neither changes its offset, so daylight saving is [`utils.test.ts`](../../../front-end/src/__tests__/utils.test.ts)'s, which loops its zones, `America/Anchorage` and `America/Los_Angeles` among them, over the formatters themselves.
 
 ## Sharp edges
 

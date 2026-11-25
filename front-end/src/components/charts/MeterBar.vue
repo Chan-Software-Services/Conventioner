@@ -47,8 +47,9 @@ const past = computed(() => value.value - within.value);
 
 <template>
   <div class="meter-bar">
-    <span class="meter-bar-label" :data-testid="`${testid}-label`">{{ label }}</span
-    ><span class="visually-hidden">: </span
+    <span class="meter-bar-label" :data-testid="`${testid}-label`">{{ label }}</span><span
+      class="visually-hidden"
+      >: </span
     ><span class="meter-bar-figures"
       ><span class="meter-bar-words" :data-testid="`${testid}-words`">{{ words }}</span
       ><span v-if="$slots.default" class="meter-bar-after" :data-testid="`${testid}-after`"

@@ -16,7 +16,7 @@ describes:
   - front-end/e2e/people-at-scale-market.spec.ts
   - front-end/src/components/HandOnMarketDialog.vue
   - front-end/e2e/handing-a-market-on.spec.ts
-verified: 2026-11-12
+verified: 2026-11-25
 sources:
   - E20/F01/S03
   - E21/F03/S04
@@ -155,9 +155,9 @@ Covered by:
 - [`changing-a-role-asks-first.spec.ts`](../../../front-end/e2e/changing-a-role-asks-first.spec.ts) (the confirmation's words, its closes, one write on confirm and where focus goes, a table whose owner moved a row, a refusal, one after someone else moved or removed them first, the arrow keys, and Viewer to Admin in sight at 1280 and 390)
 - [`everyone-with-access.spec.ts`](../../../front-end/e2e/everyone-with-access.spec.ts) (the walk's case, and at 390 nothing overflowing and each Remove a 44px target, on one edge)
 - `manageMarketMeetsAChangedMarket.test.ts` (a role's add, change and take refused over a changed market)
-- `manageMarketPeople.test.ts` (an add held, sent once, and its answer kept out of Manage market opened on another market)
+- `manageMarketPeople.test.ts` (the shown count kept through a role change and a removal, someone just added shown as the one row until the field is cleared, and an add held, sent once, and its answer kept out of Manage market opened on another market)
 - `manageMarketReadsTheMarketItOpened.test.ts` (opened on another market while the last one's read is out, Loading and its name, a failed read of the last market said nowhere, a failed first read said over the opener's copy, a table change taken into it and it kept drawn through a write's re-read, a name being typed kept over a re-read that brings the same name, and an older re-read never undoing a rename or a table change)
-- [`people-at-scale-market.spec.ts`](../../../front-end/e2e/people-at-scale-market.spec.ts) (the list at 154 people: a page at a time, finding one person, the place kept, someone just added; on a phone at 390 and 320)
+- [`people-at-scale-market.spec.ts`](../../../front-end/e2e/people-at-scale-market.spec.ts) (the list at 154 people: a page at a time, finding one person, the place kept; on a phone at 390 and 320)
 - [`removing-someone-asks-first.spec.ts`](../../../front-end/e2e/removing-someone-asks-first.spec.ts) (the confirmation's words, Cancel, Escape, confirming and where focus goes, someone removed in another window included, at 1440 and 390; at 390 the address in Remove's and a role change's title broken only before its "@" or a dot)
 - `screen-sweeps-*.spec.ts`, the sweeps' states "the manage-market dialog, an organization's people", "the manage-market dialog, removing a market role" and "the manage-market dialog, changing a market role"
 - `the-manage-market-dialog-holds-together.spec.ts`

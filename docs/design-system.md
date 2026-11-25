@@ -50,7 +50,7 @@ describes:
   - front-end/src/components/ToolRow.vue
   - front-end/src/components/ToolGroup.vue
   - front-end/src/components/PinnedTools.vue
-verified: 2026-11-24
+verified: 2026-11-25
 sources:
   - wayfinding/claims-and-room/map
   - wayfinding/claims-and-room/01
@@ -242,6 +242,7 @@ Some organizer places lift the desktop floor too, by `meta.fitsAPhone`, each wit
 
 - `/markets`, where sign-in lands on the way to the door, and the way to the market an organizer runs from it (T142, T148);
 - Organizations, the app bar's other place (T148);
+- Invitations, where an invited person accepts or declines from the email, on whatever is to hand ([answering an invitation](business/flows/answering-an-invitation.md)) (T538);
 - the Applications page, the one page of Market Setup's view that fits, with the vendor drawer and Update info over it, where a late application is decided from a phone ([the review](business/flows/review.md)) (T180);
 - the Assignments page, where the vendor drawer's "Change assignment" at the door leads ([placements](implementation/modules/placements.md)) (T142);
 - Vendors, with the [vendor drawer](business/flows/vendor-drawer.md), Update info and the payment dialogs, where a vendor is looked up, paid and corrected from the door ([vendors](business/flows/vendors.md)) (T180);

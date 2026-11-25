@@ -48,6 +48,7 @@ import discord_client as Discord  # noqa: E402
 import db_config  # noqa: E402
 import guards  # noqa: E402
 import history as History  # noqa: E402
+import invitations as Invitations  # noqa: E402
 import layout as Layout  # noqa: E402
 import payments as Payments  # noqa: E402
 import review_team as ReviewTeam  # noqa: E402
@@ -702,6 +703,49 @@ def _give_role(client, world):
     return client.post(f"/markets/{MARKET}/roles", json={"user_email": SAM, "role": "editor"})
 
 
+def _invite(client, world):
+    world.market(MarketPhase.APPLICATIONS)
+    return client.post(f"/markets/{MARKET}/invitations", json={"email": SAM, "role": "editor"})
+
+
+def _withdraw_invitation(client, world):
+    world.market(MarketPhase.APPLICATIONS)
+    sent = datetime.now(timezone.utc)
+    Invitations.invitations_collection.insert_one({
+        "id": "invitation-1", "target_kind": Invitations.MARKET, "target_id": MARKET,
+        "email": SAM, "role": "editor", "invited_by": "user-owner", "invited_by_email": OWNER,
+        "sent_at": sent, "expires_at": sent + Invitations.LIFETIME, "counted_at": sent,
+    })
+    return client.delete(f"/markets/{MARKET}/invitations/invitation-1")
+
+
+def _as(client, email):
+    with client.session_transaction() as session:
+        session["_user_id"] = email
+    return client
+
+
+def _invited(world, invitation_id="invitation-1"):
+    """An invitation of Sam to the market as an Editor, from its owner, waiting."""
+    sent = datetime.now(timezone.utc)
+    Invitations.invitations_collection.insert_one({
+        "id": invitation_id, "target_kind": Invitations.MARKET, "target_id": MARKET,
+        "email": SAM, "role": "editor", "invited_by": "user-owner", "invited_by_email": OWNER,
+        "sent_at": sent, "expires_at": sent + Invitations.LIFETIME, "counted_at": sent,
+    })
+    return invitation_id
+
+
+def _accept_invitation(client, world):
+    world.market(MarketPhase.APPLICATIONS, roles={"user-owner": "owner"})
+    return _as(client, SAM).post(f"/invitations/{_invited(world)}/accept")
+
+
+def _decline_invitation(client, world):
+    world.market(MarketPhase.APPLICATIONS, roles={"user-owner": "owner"})
+    return _as(client, SAM).post(f"/invitations/{_invited(world)}/decline")
+
+
 def _change_role(client, world):
     world.market(MarketPhase.APPLICATIONS, roles={"user-1": "owner", "user-sam": "editor"})
     return client.put(f"/markets/{MARKET}/roles/user-sam", json={"role": "admin"})
@@ -894,6 +938,18 @@ WRITES = [
           History.DISCORD_DISCONNECTED, _disconnect_discord),
     Write("a role given", "POST", f"{M}/roles", Actions.MANAGE_EDITORS_AND_VIEWERS,
           History.ROLE_GIVEN, _give_role, subject=SAM_BY_ID),
+    Write("an address invited", "POST", f"{M}/invitations", Actions.MANAGE_EDITORS_AND_VIEWERS,
+          History.INVITED, _invite, subject={"email": SAM}, before_after=False,
+          detail_keys=("role",)),
+    Write("an invitation withdrawn", "DELETE", f"{M}/invitations/<invitation_id>",
+          Actions.MANAGE_EDITORS_AND_VIEWERS, History.INVITATION_WITHDRAWN, _withdraw_invitation,
+          subject={"email": SAM}, before_after=False, detail_keys=("role",)),
+    Write("an invitation accepted", "POST", "/invitations/<invitation_id>/accept",
+          Actions.MANAGE_EDITORS_AND_VIEWERS, History.ROLE_GIVEN, _accept_invitation,
+          subject=SAM_BY_ID, detail_keys=("by_invitation",)),
+    Write("an invitation declined", "POST", "/invitations/<invitation_id>/decline",
+          Actions.MANAGE_EDITORS_AND_VIEWERS, History.INVITATION_DECLINED, _decline_invitation,
+          actor=SAM, subject={"email": SAM}, before_after=False, detail_keys=("role",)),
     Write("a role changed", "PUT", f"{M}/roles/<user_id>", Actions.MANAGE_ADMINS,
           History.ROLE_CHANGED, _change_role, subject=SAM_BY_ID),
     Write("a role taken", "DELETE", f"{M}/roles/<user_id>", Actions.MANAGE_EDITORS_AND_VIEWERS,
@@ -956,12 +1012,13 @@ NOT_RECORDED = {
 
 
 def _market_write_routes():
-    """Every route that writes, on a market or one of its floorplans; an organization's floorplan
+    """Every route that writes, on a market, one of its floorplans, or an invitation to one; an
+    organization's floorplan
     templates are no market's, but its own, and they and its other changes are guarded by
     ``test_the_organizations_history.py``."""
     for rule in app_module.app.url_map.iter_rules():
         path = rule.rule
-        if not path.startswith(("/markets", "/public/markets/", "/floorplans/")) \
+        if not path.startswith(("/markets", "/public/markets/", "/floorplans/", "/invitations/")) \
                 or path.startswith("/floorplans/templates"):
             continue
         for method in rule.methods - {"GET", "HEAD", "OPTIONS"}:
@@ -1157,13 +1214,17 @@ SWAPS_PLAN_CHANGE = Unasked(
 RENAMES_PLAN_CHANGE = Unasked(
     "the location rename's plan change", "migrations.rename_location.record_renamed",
     (), Actions.CHANGE_SETUP, NO_ROUTE)
+INVITEES_DECLINE = Unasked(
+    "an invitee's decline", "api.markets.decline_market_invitation", (), None,
+    "under the row that gives the role it offered, with the invitee's address as its actor")
 BUSINESS_NAMES_FORM_CHANGE = Unasked(
     "the business name migration's form change", "migrations.migrate_business_name.record_moved",
     (), Actions.CHANGE_FORM, NO_ROUTE)
 
 #: The records no request asks, each kept as it is, and why.
 UNASKED = (FIRST_IMPORTS_MOVE, STARTS_RELEASE, VENDORS_OWN_CHECK_IN, ARRIVALS_DEAL, SEEDERS_MOVES,
-           MIGRATIONS_DROPS, SWAPS_PLAN_CHANGE, RENAMES_PLAN_CHANGE, BUSINESS_NAMES_FORM_CHANGE)
+           MIGRATIONS_DROPS, SWAPS_PLAN_CHANGE, RENAMES_PLAN_CHANGE, BUSINESS_NAMES_FORM_CHANGE,
+           INVITEES_DECLINE)
 #: The records here no route reaches, which only an operator's script makes.
 NO_ROUTE_REACHES = (SEEDERS_MOVES, MIGRATIONS_DROPS, SWAPS_PLAN_CHANGE, RENAMES_PLAN_CHANGE,
                     BUSINESS_NAMES_FORM_CHANGE)
@@ -1257,6 +1318,7 @@ REACHING_THE_UNASKED = [
                  id="a vendor's own check-out undone"),
     pytest.param(_the_next_card_after_an_arrival_waited, ARRIVALS_DEAL,
                  id="the next card after an arrival waited"),
+    pytest.param(_decline_invitation, INVITEES_DECLINE, id="an invitee's decline"),
 ]
 
 

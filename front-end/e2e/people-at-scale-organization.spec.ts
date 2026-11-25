@@ -116,13 +116,6 @@ for (const size of PHONE_AND_DESK) {
       }
     });
 
-    test('Admins, three of them, has no find field and reads every row', async () => {
-      await expect(orgs.adminEmails).toHaveCount(seed.counts.admins);
-      await expect(orgs.adminsFind).toHaveCount(0);
-      await expect(orgs.adminsMore).toHaveCount(0);
-      await expect(orgs.adminsCount).toHaveText(`${seed.counts.admins} admins`);
-    });
-
     test('finds one member, and Remove asks about that member, keeping the words', async ({
       authenticatedPage: page,
     }) => {
@@ -144,27 +137,6 @@ for (const size of PHONE_AND_DESK) {
       await expect(orgs.membersFind).toHaveValue(part);
       await expect(orgs.membersCount).toHaveText(`Nothing matches "${part}"`);
       await expect(orgs.members).toBeFocused();
-    });
-
-    test('holds the shown count through a removal, and finds someone just added', async () => {
-      const whole = seed.counts.members;
-      await press(orgs.membersMore);
-      await expect(orgs.membersCount).toHaveText(`Showing ${2 * PAGE} of ${whole}`);
-
-      const { email } = seed.members[0]!;
-      await orgs.memberEmails.filter({ hasText: email }).waitFor();
-      await press(orgs.removeMemberButtons.first());
-      await press(orgs.removeConfirmButton);
-      await expect(orgs.removeConfirm).toHaveCount(0);
-      await expect(orgs.membersCount).toHaveText(`Showing ${2 * PAGE} of ${whole - 1}`);
-      await expect(orgs.memberEmails).toHaveCount(2 * PAGE);
-
-      await orgs.addMember(email);
-      await expect(orgs.membersFind).toHaveValue(email);
-      await expect(orgs.memberEmails).toHaveText([email]);
-
-      await orgs.membersFind.fill('');
-      await expect(orgs.membersCount).toHaveText(`Showing ${PAGE} of ${whole}`);
     });
   });
 }

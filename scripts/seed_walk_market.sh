@@ -19,7 +19,9 @@
 #   - the real solver's run over the two halls, results published, the market in its market days,
 #     some of its first day's vendors checked in, and the public map on, showing each vendor's business
 #     name, website and Instagram handle.
-# Every name, address and answer is made up here; none comes from production or a real export.
+# Every name, address and answer is made up here; none comes from production or a real export. A
+# vendor's given and family names come from the pools of common names of the synthetic Google Form
+# exports' generator, back-end/tests/fixtures/synthetic_form_exports.py, which it reads.
 #
 # Usage: [SEED_TODAY=YYYY-MM-DD] scripts/seed_walk_market.sh [--primary]
 set -euo pipefail
@@ -58,6 +60,7 @@ if ! "${DOCKER_CMD[@]}" ps --format '{{.Service}}' 2>/dev/null | grep -qx 'backe
   exit 3
 fi
 
+export SEED_PROJECT_DIR="$PROJECT_DIR"
 export SEED_BACKEND_URL="https://127.0.0.1:${BACKEND_PORT}"
 export SEED_FRONTEND_URL="http://127.0.0.1:${FRONTEND_PORT}"
 export SEED_EMAIL="$TEST_EMAIL" SEED_PASSWORD="$TEST_PASSWORD"
@@ -65,6 +68,7 @@ export SEED_TODAY="${SEED_TODAY:-$(date +%F)}"
 
 exec python3 -I - <<'PY'
 """The market, written through the API: see the header of seed_walk_market.sh."""
+import importlib.util
 import json
 import os
 import random
@@ -285,13 +289,19 @@ def lay_out(market_id, location, size, doors, tables, zones, prefix):
 
 # ── The vendors: made up from parts, seeded so every run makes the same ones ─
 
-FIRST = ["Talvi", "Orsa", "Maren", "Idris", "Calla", "Bexley", "Noor", "Tamsin", "Ilse", "Rowan",
-         "Sefa", "Juno", "Kiri", "Anouk", "Lio", "Wynn", "Esmé", "Darius", "Hollis", "Ines",
-         "Pell", "Ysolde", "Ari", "Quill", "Saoirse", "Teodor", "Vesna", "Oren", "Mika", "Fenna"]
-LAST = ["Brennick", "Ashvale", "Morrow", "Quellin", "Thistlewood", "Okafor-Lane", "Varga",
-        "Halloran", "Penhallow", "Strand", "Iversen", "Castellane", "Mbeki-Ross", "Dunleavy",
-        "Rautio", "Kesterton", "Ferrante", "Lindqvist", "Achterberg", "Sorensby", "Pryce-Owen",
-        "Tamura-Hale", "Belcourt", "Nakashima-Reid", "Vantongeren"]
+def name_pools():
+    """The synthetic Google Form exports' pools of given and family names, read from their generator."""
+    path = os.path.join(os.environ["SEED_PROJECT_DIR"], "back-end", "tests", "fixtures",
+                        "synthetic_form_exports.py")
+    spec = importlib.util.spec_from_file_location("synthetic_form_exports", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.GIVEN_NAMES, module.FAMILY_NAMES
+
+
+# A person's names come from the synthetic Google Form exports' pools of common names (test data), so
+# no seeded vendor reads as a real person.
+GIVEN_NAMES, FAMILY_NAMES = name_pools()
 STEMS = ["Ash", "Briar", "Cinder", "Dapple", "Ember", "Fen", "Gorse", "Hollow", "Ivy", "Juniper",
          "Kestrel", "Lark", "Moss", "Nettle", "Oak", "Pebble", "Quince", "Rook", "Sorrel", "Thistle",
          "Umber", "Vetch", "Willow", "Yarrow", "Bramble", "Clover", "Heron", "Marrow", "Sloe", "Tansy"]
@@ -362,9 +372,9 @@ def make_vendors():
             if business not in used:
                 used.add(business)
                 break
-        first, last = rng.choice(FIRST), rng.choice(LAST)
+        first, last = rng.choice(GIVEN_NAMES), rng.choice(FAMILY_NAMES)
         slug = stem.lower()
-        email = f"{first.lower().replace('é', 'e')}.{last.lower()}{n + 1}@{slug}.example.com"
+        email = f"{first.lower()}.{last.lower()}{n + 1}@{slug}.example.com"
         roll = rng.random()
         website = (f"https://{slug}.example.com" if roll < 0.55
                    else f"{slug}.example.com/shop" if roll < 0.7 else "")
@@ -521,9 +531,10 @@ def main():
         print(f"Vendor page: {FRONTEND}/{slug}/vendor")
 
 
-try:
-    main()
-except Refused as exc:
-    print(f"seed_walk_market: {exc}", file=sys.stderr)
-    sys.exit(1)
+if __name__ == "__main__":
+    try:
+        main()
+    except Refused as exc:
+        print(f"seed_walk_market: {exc}", file=sys.stderr)
+        sys.exit(1)
 PY

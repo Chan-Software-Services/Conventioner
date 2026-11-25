@@ -152,12 +152,21 @@ export function rowLabel(
   return labels[id] ?? id;
 }
 
+/** ", which they accepted" after a role or a place given or changed by an invitation accepted
+ * (T538): its actor is the inviter, at the moment the invitee accepted. */
+function accepted(detail: Detail): string {
+  return detail.by_invitation === true ? ', which they accepted' : '';
+}
+
 /** A role given, a market's or an organization's. */
 export function roleGiven(entry: MarketHistoryEntry, context: ReaderContext): MarketHistoryPart[] {
-  const { actor, text, after } = sentence(entry, context);
+  const { actor, text, after, detail } = sentence(entry, context);
   return [
     actor,
-    text(`gave ${str(entry.subject.email)} the ${getRoleDisplayName(str(after.role))} role`),
+    text(
+      `gave ${str(entry.subject.email)} the ${getRoleDisplayName(str(after.role))} role` +
+        accepted(detail),
+    ),
   ];
 }
 
@@ -166,14 +175,46 @@ export function roleChanged(
   entry: MarketHistoryEntry,
   context: ReaderContext,
 ): MarketHistoryPart[] {
-  const { actor, text, before, after } = sentence(entry, context);
+  const { actor, text, before, after, detail } = sentence(entry, context);
   return [
     actor,
     text(
       `changed ${str(entry.subject.email)} from ${getRoleDisplayName(str(before.role))} to ` +
-        getRoleDisplayName(str(after.role)),
+        getRoleDisplayName(str(after.role)) +
+        accepted(detail),
     ),
   ];
+}
+
+/** A role as an invitation offers it, with its article: "an Editor", "a Viewer", "a Member". */
+function asARole(role: unknown): string {
+  const name = getRoleDisplayName(str(role));
+  return `${/^[AEIOU]/.test(name) ? 'an' : 'a'} ${name}`;
+}
+
+/** An invitation sent, to a market's role or an organization's place (T538). Its subject is the
+ * address alone, whether or not it has an account. */
+export function invited(entry: MarketHistoryEntry, context: ReaderContext): MarketHistoryPart[] {
+  const { actor, text, detail } = sentence(entry, context);
+  return [actor, text(`invited ${str(entry.subject.email)} as ${asARole(detail.role)}`)];
+}
+
+/** An invitation withdrawn while it waited. */
+export function invitationWithdrawn(
+  entry: MarketHistoryEntry,
+  context: ReaderContext,
+): MarketHistoryPart[] {
+  const { actor, text } = sentence(entry, context);
+  return [actor, text(`withdrew the invitation to ${str(entry.subject.email)}`)];
+}
+
+/** An invitation declined: its actor is the address it was sent to. */
+export function invitationDeclined(
+  entry: MarketHistoryEntry,
+  context: ReaderContext,
+): MarketHistoryPart[] {
+  const { actor, text, detail } = sentence(entry, context);
+  return [actor, text(`declined the ${getRoleDisplayName(str(detail.role))} role`)];
 }
 
 /** A role taken, a market's or an organization's. */

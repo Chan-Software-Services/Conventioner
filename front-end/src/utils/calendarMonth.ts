@@ -10,7 +10,7 @@
  * Tokyo it is already the 1st while in Honolulu it is still October. Everything here is UTC, and
  * days are carried as strings so there is no instant to misread.
  *
- * `e2e/date-display-timezone.spec.ts` pins this across Honolulu, Los Angeles and Tokyo.
+ * `e2e/date-display-timezone.spec.ts` pins this in Honolulu and Tokyo, one zone each side of UTC.
  */
 
 /** A calendar day as `YYYY-MM-DD`, built without touching local time. */

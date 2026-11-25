@@ -11,6 +11,12 @@ The body that runs markets. Owns its markets and its members.
 _Avoid_: Team, account, tenant
 See [Organization and roles](docs/business/concepts/organization-and-roles.md).
 
+**Invitation**:
+An offer, sent to an address, of a role on one market or a place in one organization.
+It gives nothing until someone signed in with that address accepts it, and it ends after 14 days, on a decline or on a withdrawal; an accept finds it ended once its inviter can no longer give it.
+_Avoid_: pending member, pending role
+See [A person accepts before they join](docs/business/rules/a-person-accepts-before-they-join.md).
+
 **Organizer**:
 A person acting on behalf of an organization. The authenticated user of the main application.
 _Avoid_: Admin, owner (both name specific roles within an organization, not the general actor)

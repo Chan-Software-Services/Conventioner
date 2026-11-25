@@ -537,6 +537,25 @@ export interface Organization {
   marketsWithOwnRole: Record<string, number>;
 }
 
+/**
+ * An invitation waiting for the signed-in person's address (T538, ADR 0047), as `GET /invitations`
+ * serves it: a role on a market, or a place in an organization, offered by `invitedBy` until
+ * `endsAt`. It gives nothing until they accept it.
+ */
+export interface Invitation {
+  id: string;
+  kind: 'market' | 'organization';
+  /** The market's `id` (its uuid) or the organization's. */
+  targetId: string;
+  targetName: string;
+  /** A market's `admin`, `editor` or `viewer`; an organization's `admin` or `member`. */
+  role: string;
+  /** The inviter's address. */
+  invitedBy: string;
+  sentAt: string;
+  endsAt: string;
+}
+
 export interface VendorAttendance {
   marketId: string;
   vendorEmail: string;

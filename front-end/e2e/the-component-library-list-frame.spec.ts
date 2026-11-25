@@ -116,30 +116,6 @@ eachWindow('the list frame entry', (size) => {
     await expect(row.getByTestId('library-application-tick')).toBeFocused();
   });
 
-  test('a narrow filter leaves the field where it is, since the threshold counts the whole list', async ({
-    page,
-  }) => {
-    const { press } = inTheWindow(size);
-    const find = page.getByTestId('library-l2-find');
-    const count = countOf(page, 'library-l2');
-
-    await page.getByTestId('library-l2-assigned').click();
-    await press(page.getByTestId('library-l2-assigned-option').nth(2));
-    await press(page.getByTestId('library-l2-status-needs_follow_up'));
-    await expect(count).toHaveText(/^\d of 359 applications$/);
-    await expect(find).toBeVisible();
-  });
-
-  test('a change of filter folds the list back to its first page', async ({ page }) => {
-    const { press } = inTheWindow(size);
-    const rows = rowsOf(page, 'library-l2');
-    await press(page.getByTestId('library-l2-more'));
-    await expect(rows).toHaveCount(100);
-
-    await press(page.getByTestId('library-l2-status-reviewer_approved'));
-    await expect(rows).toHaveCount(50);
-  });
-
   test('"Assigned to" narrows to one reviewer\'s share, and the toggles count that share', async ({
     page,
   }) => {
@@ -166,32 +142,6 @@ eachWindow('the list frame entry', (size) => {
       `Filters: Any status, assigned to ${address}`,
     );
     await expect(rowsOf(page, 'library-l2').first()).toContainText(`Reviewer: ${address}`);
-  });
-
-  test('"Assigned to" finds a reviewer by their address, and not by a name no account holds', async ({
-    page,
-  }) => {
-    const field = page.getByTestId('library-l2-assigned-input');
-    const options = page.getByTestId('library-l2-assigned-option');
-    await expect(field).toHaveAttribute('placeholder', 'Type an address…');
-    await field.click();
-    const address = (await options.nth(2).innerText()).trim();
-
-    await field.fill(address.toUpperCase());
-    await expect(options).toHaveText([address]);
-
-    await field.fill('Chloe Walker');
-    await expect(options).toHaveCount(0);
-    await expect(page.getByTestId('library-l2-assigned-list')).toContainText(
-      'None match "Chloe Walker".',
-    );
-
-    // "Me" is the reader's own, so their address finds it, and the reader's rows say "you".
-    await field.fill('robert.bailey11@example.com');
-    await expect(options).toHaveText(['Me']);
-    await inTheWindow(size).press(options.first());
-    await expect(page.getByTestId('library-l2-count')).toHaveText('30 of 359 applications');
-    await expect(page.getByTestId('library-l2-row').first()).toContainText('Reviewer: you');
   });
 
   test("today's view chooses with the same picker: Me, Anyone, then addresses", async ({
@@ -227,35 +177,6 @@ eachWindow('the list frame entry', (size) => {
     await expect(today.getByTestId('library-application-row').first()).toContainText(
       `Reviewer: ${longest}`,
     );
-  });
-
-  test('words in "Assigned to" only search: the reviewer holds, and the field names them again', async ({
-    page,
-  }) => {
-    const { press } = inTheWindow(size);
-    const field = page.getByTestId('library-l2-assigned-input');
-    const count = countOf(page, 'library-l2');
-    const filters = page.getByTestId('read-out').filter({ hasText: 'Filters:' });
-    await field.click();
-    const reviewer = page.getByTestId('library-l2-assigned-option').nth(2);
-    const address = (await reviewer.innerText()).trim();
-    await press(reviewer);
-    await expect(count).toHaveText('30 of 359 applications');
-
-    await field.click();
-    await field.fill('zzz');
-    await expect(page.getByTestId('library-l2-assigned-list')).toContainText('None match "zzz".');
-    await expect(count).toHaveText('30 of 359 applications');
-    await expect(filters).toContainText(`assigned to ${address}`);
-
-    await field.press('Escape');
-    await expect(field).toHaveValue(address);
-
-    await field.fill('zzz');
-    await page.getByTestId('library-l2-status-all').focus();
-    await expect(field).toHaveValue(address);
-    await expect(filters).toContainText(`assigned to ${address}`);
-    await expect(rowsOf(page, 'library-l2').first()).toBeVisible();
   });
 
   test("a switch shows today's every row on the same filters, and back", async ({ page }) => {
