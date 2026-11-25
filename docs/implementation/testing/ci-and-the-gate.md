@@ -283,7 +283,7 @@ The first fix to try is a lazily loaded route or component, which keeps the code
 ## No string evaluated as script
 
 **CI fails a build any of whose JavaScript calls `eval` or the `Function` constructor.**
-The front end's [Content-Security-Policy](../conventions/security-invariants.md#security-headers) has no `'unsafe-eval'`, so the browser refuses such a call, and with no reporting endpoint a refusal in production shows only in the console of the tab it broke.
+The front end's [Content-Security-Policy](../conventions/security-invariants.md#security-headers) has no `'unsafe-eval'`, so the browser refuses such a call, and a refusal in production reaches Sentry only as a policy violation, after it has broken the tab it ran in ([error tracking](../modules/error-tracking.md#the-front-end)): the build is where a new one is caught first.
 [`front-end/scripts/no-eval.ts`](../../../front-end/scripts/no-eval.ts) (`npm run no-eval`, after `npm run build-only`) reads every `.js` file under `dist/assets/`, prints each call with its file and a little context, and exits non-zero on any; it runs right after the bundle budget, on the same build, in `frontend-lint-and-types` and in `nm-test.sh`.
 The first one it would have caught was vuedraggable's UMD build, whose bundled core-js finds the global object with `Function('return this')()` and whose `require("vue")` pulled in a second Vue with its template compiler; `vite.config.ts` resolves `vuedraggable` to the ES source the package publishes beside its builds, which has neither.
 

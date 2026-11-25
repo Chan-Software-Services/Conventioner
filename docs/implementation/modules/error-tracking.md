@@ -8,6 +8,8 @@ describes:
   - front-end/src/utils/errorTrackingClient.ts
   - front-end/src/__tests__/theErrorTrackerIsSentNoValue.test.ts
   - front-end/src/__tests__/theBuildChecksItsErrorTrackerDsn.test.ts
+  - front-end/src/__tests__/aPolicyViolationReachesTheErrorTracker.test.ts
+  - front-end/src/__tests__/support/recordedEnvelopes.ts
 verified: 2026-11-25
 sources:
   - T255
@@ -63,9 +65,11 @@ Two modules, so the SDK never weighs on the first page.
 [`front-end/src/utils/errorTracking.ts`](../../../front-end/src/utils/errorTracking.ts) is in the entry chunk: it catches each error, notes the route, and queues it.
 [`front-end/src/utils/errorTrackingClient.ts`](../../../front-end/src/utils/errorTrackingClient.ts) holds `@sentry/browser` and is reached only by the first module's `import()`, so it and the SDK are a chunk of their own, about 21 KB gzipped, never the entry and never a `modulepreload` of `index.html`.
 
-- `installErrorTracking(app, router)` sets Vue's `app.config.errorHandler` (which still calls `console.error`, as Vue's default does) and adds `error` and `unhandledrejection` listeners on `window`.
+- `installErrorTracking(app, router)` sets Vue's `app.config.errorHandler` (which still calls `console.error`, as Vue's default does), adds `error` and `unhandledrejection` listeners on `window`, and a `securitypolicyviolation` listener on `document`.
   `main.ts` calls it before `app.use(router)`, so an error in the first navigation is caught.
   Each error becomes an item: the error, how it was caught (`vue`, `onerror`, `unhandledrejection`), and the route at that moment (its pattern, its name, `marketId` and `marketSlug`).
+- **A policy violation** becomes an item caught as `csp`, reduced as it is caught (`violationOf`), so the browser's event, its `sample` and the page's address with it, is never held: the effective directive, the blocked resource's origin or the browser's keyword for it (`inline`, `eval`, `data`; `none` for an empty one, `unreadable` for anything else), whether the policy blocked it (`enforce`) or a report-only one would have (`report`), the script's address with no query or fragment, or a mark that it is the page itself, and its line and column.
+  The browser fires the event for every refused load, so the first of each pair of directive and blocked origin in a page load is kept and the rest dropped before they are queued; each kept one counts toward the 20.
 - `loadErrorTrackingAfterFirstPaint()`, called after `app.mount`, loads the client once the browser reports its `first-contentful-paint`, then one task later.
   The shell paints nothing until its session probe has answered, well after `mount`, so a frame after `mount` came before the paint in a walk of the build; a browser with no paint timing waits one frame and a task instead.
   An error loads the client at once, whichever comes first.
@@ -79,6 +83,7 @@ A client made by hand has no integrations but those it is given: `linkedErrorsIn
 Its `dataCollection` collects nothing, `sendClientReports` is off, and `beforeBreadcrumb` drops every breadcrumb.
 It reads `/version.json` once for the release, none if that fails, and sends each item, flushing it at once.
 `beforeSend` builds the event anew from the allowlist (`allowedEvent`): the exception's type, its message through `withoutAddresses` (the back end's address rule, and every URL's query taken off) cut at `MESSAGE_LIMIT`, 300, the frames' file, function, line, column and whether in the app, the route's pattern with only `marketId` and `marketSlug` filled in on the page's origin as the request's URL and the pattern as the transaction, `caught_by`, `route_name`, `market_id` and `market_slug` as tags, and the environment (`import.meta.env.MODE`), the release and the SDK's name and version.
+A violation is sent with `captureMessage` as a `warning` titled `Content-Security-Policy blocked <directive> from <origin>` (`would block` under a report-only policy, `violationTitle`), so Sentry makes one issue of each pair; `allowedEvent` gives it no exception (the SDK's attached stack is only the tracker's own frames), `csp_directive` and `csp_blocked` as tags, and a `violation` context with the script's `source_file` (with every address replaced, and for a violation in the page itself the route's filled pattern on the page's origin), `line` and `column`, none of them when the browser named no file.
 `location.href`, which holds a reset token or a vendor's address on some pages, is never read.
 
 **The build checks the DSN.**
@@ -87,6 +92,8 @@ So the DSN, the chunk and the policy agree by construction, and a mismatch fails
 
 **How it is tested.**
 [`theErrorTrackerIsSentNoValue.test.ts`](../../../front-end/src/__tests__/theErrorTrackerIsSentNoValue.test.ts) installs the tracker on a real app and router in happy-dom with `VITE_SENTRY_DSN` stubbed and the transport replaced, through `installErrorTracking`'s test-only third argument, by one that records each envelope; it proves one event per caught error, an error before the client loaded sent once it has, no address, token or query of the page's address or the message in any envelope, the event's exact fields, the caps, the after-deploy words, the rejected chunk, the load after the first paint, and nothing installed with no DSN.
+[`aPolicyViolationReachesTheErrorTracker.test.ts`](../../../front-end/src/__tests__/aPolicyViolationReachesTheErrorTracker.test.ts) dispatches the event the browser would, built by hand since happy-dom has none, and proves one warning with the directive, the origin and the exact fields, no `sample`, blocked address, page address or query in any envelope, each keyword's reduction, one event for five repeats and one for each directive and origin, the count toward the 20, and no listener with no DSN.
+Both read what was sent through [`support/recordedEnvelopes.ts`](../../../front-end/src/__tests__/support/recordedEnvelopes.ts), a transport that records each envelope.
 [`theBuildChecksItsErrorTrackerDsn.test.ts`](../../../front-end/src/__tests__/theBuildChecksItsErrorTrackerDsn.test.ts) loads `vite.config.ts` as a build does with a blank, a US, a malformed and an unallowed DSN.
 A DSN in a test is built from its parts (`` `https://${KEY}@...` ``), so no line reads as an email address to the real-data hooks.
 

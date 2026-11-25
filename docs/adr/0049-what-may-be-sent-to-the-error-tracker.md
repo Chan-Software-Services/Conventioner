@@ -42,7 +42,7 @@ The front end may send:
 - the route's pattern (`/markets/:marketId/vendors`) with only `marketId` and `marketSlug` filled in, as the request's URL on the page's origin, the pattern itself as the transaction, and the route's name, `marketId` and `marketSlug` as tags, an address in either replaced;
 - how the error was caught (`vue`, `onerror`, `unhandledrejection`, `csp`), as a tag;
 - the environment (the build's mode), the release (the build's commit, from its `version.json`), and the SDK's name and version, with the packages and settings the SDK adds as it writes the envelope, `infer_ip: never` among them;
-- for a policy violation: the effective directive, the blocked resource reduced to its origin (or the browser's own keyword, `inline` or `eval`), the violating script's address without its query, and its line and column.
+- for a Content-Security-Policy violation, as a warning: the effective directive, the blocked resource reduced to its origin (or the browser's own keyword, as `inline`, `eval` or `data`), whether the policy blocked it or a report-only policy only would have, the violating script's address without its query or fragment and with every address replaced (the page's route pattern, filled as above, when the violation is in the page itself), and its line and column; never the stack the SDK attaches to a message, which is only the tracker's own.
 
 Neither side ever sends a request or response body, a query string, a cookie, a header, the signed-in person or any user field, an IP address, a variable, a frame's source lines, a breadcrumb that is not a log line, a value of a URL variable other than the named ones, or a violation's `sample`, which may hold a script's first characters.
 Nor does a request the back end makes to another service carry anything of the tracker: the SDK's `sentry-trace` and `baggage` headers, which name the release and the environment, are never attached.
@@ -56,7 +56,7 @@ A DSN's key is Sentry's public client key, which every browser that loads the fr
 ## Consequences
 
 - [`back-end/error_tracking.py`](../../back-end/error_tracking.py) is the only back-end file that imports `sentry_sdk`, and only once a DSN is set; it builds every event, and [the error tracking module](../implementation/modules/error-tracking.md) says where each kind of event starts and how it is sent before Vercel freezes the function.
-- [`front-end/src/utils/errorTracking.ts`](../../front-end/src/utils/errorTracking.ts) catches the browser's errors and [`front-end/src/utils/errorTrackingClient.ts`](../../front-end/src/utils/errorTrackingClient.ts), a chunk of its own, builds and sends each event; with no `VITE_SENTRY_DSN` the build drops both.
+- [`front-end/src/utils/errorTracking.ts`](../../front-end/src/utils/errorTracking.ts) catches the browser's errors and its policy violations, reducing a violation to the fields above as it is caught, and [`front-end/src/utils/errorTrackingClient.ts`](../../front-end/src/utils/errorTrackingClient.ts), a chunk of its own, builds and sends each event; with no `VITE_SENTRY_DSN` the build drops both.
 - The front end's policy allows Sentry's US ingest hosts in `connect-src`, and a `VITE_SENTRY_DSN` on any other host fails the build.
 - A log line's words are sent, so a warning or error line names what it means to say, never a value it was not written to name; no log line formats an exception's message, and [`test_no_log_line_carries_an_exceptions_message.py`](../../back-end/tests/test_no_log_line_carries_an_exceptions_message.py) fails one that does.
 - Sentry keeps an event 30 days: what is sent outlives any log, so a new field is a change to this ADR first.
@@ -67,7 +67,7 @@ A DSN's key is Sentry's public client key, which every browser that loads the fr
 
 - **The SDKs' defaults with a scrubber after them**: a denylist, which an SDK upgrade defeats by adding a field; the prototype's defaults sent a fixture address, answer, cookie and token through Sentry Logs, frame variables and the log entry's arguments.
 - **Sentry's server-side data scrubbing alone**: it runs after the data has left Conventioner.
-- **A front-end `report-uri` or `report-to` for policy violations**: a browser's report carries the page's whole address, its tokens and a vendor's address with it.
+- **A front-end `report-uri` or `report-to` for policy violations**: a browser's report carries the page's whole address, its tokens and a vendor's address with it, and `vercel.json` is static, so it could not follow whether a DSN is set; the browser's `securitypolicyviolation` event, read by the tracker, is reduced before anything leaves.
 - **The exception's message on the back end**: a library's message may quote the document it refused or the address it was given.
 - **Sentry Logs, tracing, profiling, session replay**: none is needed to hear of an error, and each sends more of the request.
 
@@ -76,3 +76,4 @@ A DSN's key is Sentry's public client key, which every browser that loads the fr
 The back end's settings were prototyped against sentry-sdk 3.0.0 with a transport that recorded every envelope item: with the defaults, a fixture address, answer, cookie and token each reached an item; with these settings and the allowlist none did, while the exception's type, its frames and the route's rule did.
 [`back-end/tests/test_the_error_tracker_is_sent_no_value.py`](../../back-end/tests/test_the_error_tracker_is_sent_no_value.py) holds the back end to that through the real app: every item a request, a log line or a boot refusal makes is serialised and searched for each fixture value.
 [`front-end/src/__tests__/theErrorTrackerIsSentNoValue.test.ts`](../../front-end/src/__tests__/theErrorTrackerIsSentNoValue.test.ts) holds the front end to it the same way, through a real app and router: every envelope an error makes is searched for a fixture address and token in the page's address and the error's message.
+[`front-end/src/__tests__/aPolicyViolationReachesTheErrorTracker.test.ts`](../../front-end/src/__tests__/aPolicyViolationReachesTheErrorTracker.test.ts) does the same for a violation, whose `sample`, blocked address and page address hold fixture values; a production build walked in Chromium with a script from an unallowed origin injected sent one such warning and none of them.
