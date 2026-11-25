@@ -171,7 +171,7 @@ Covered by:
 
 **Status:** Works (walked live), on a first import, while the market is a draft.
 On a market whose form does ask the preference, it says the file has no column for it, not that the form never asked (bug 40).
-"Your form never asked <question>. It is a preference, not a constraint…" with "Stop asking it", which opens the same dialog as H2e to switch that essential question off.
+"No column in this file answers <question>. It is a preference, not a constraint…" with "Stop asking it", which opens the same dialog as H2e to switch that essential question off.
 
 ### H2h. Import a later export
 

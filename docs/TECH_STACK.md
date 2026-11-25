@@ -226,7 +226,7 @@ How each part of the code works is in the implementation layer of the [knowledge
   - Runs component and utility unit tests (`npm run test:unit`)
   - Uses the `happy-dom` environment (configured in `vitest.config.ts`)
 - **@vue/test-utils 2** - Vue component testing utilities
-  - Since 2.6 a prop given as a plain object or array is not made deeply reactive, so a test of a component that edits its prop in place, as the setup elements edit the plan, mounts it with the prop wrapped in `reactive()`, as the market screen hands it a reactive plan
+  - Since 2.6 a prop given as a plain object or array is not made deeply reactive, so a test that needs a setup element's in-place edit of the plan to re-render, as `assignmentPriority.test.ts` and `aRowAddedOnSetupHasAnId.test.ts` do, mounts it with the plan wrapped in `reactive()`, as the market screen hands it a reactive plan
 - **PostCSS 8** - Parses the design language's CSS in `src/__tests__/primitives.test.ts`, and the styles of the components `src/__tests__/everySelectWearsThePrimitive.test.ts` reads, which read every rule they check through it and no other way
 - **Playwright 1.65** - End-to-end browser testing
   - Drives Chromium against the running Docker stack (`npm run test:e2e`)
