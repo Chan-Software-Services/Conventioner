@@ -6,7 +6,7 @@ describes:
   - scripts/seed_fixture.sh
   - scripts/lib/stack-identity.sh
   - scripts/nm-test.sh
-verified: 2026-11-24
+verified: 2026-11-25
 sources:
   - E34/F03/S02
   - E35/F02/S01
@@ -309,8 +309,9 @@ a spec are the coverage map in [walking the flows](implementation/testing/walkin
 Coverage also includes tier-1 market operations journeys: public vendor check-in
 (`checkin.spec.ts`), vendor browsing with search (`vendors.spec.ts`), and table
 browsing with filtering (`tables.spec.ts`). The tier-2 suite (`tier2.spec.ts`)
-covers organization CRUD (create, add admin/member, remove member, rename,
-delete), market role management (add user with role, change role, remove user),
+covers organization CRUD (create, invite an admin and a member, withdraw an
+invitation, rename, delete), market role management (invite someone with a role,
+accepted, change role, remove user),
 assignment CSV export (download and verify columns), and publishing a market
 (verify the market's vendor page, where its vendors check in, is reachable). Tier-3 authentication and robustness
 journeys (`auth.spec.ts`) cover new-user registration, the full password reset
@@ -341,7 +342,7 @@ smuggle one past it (405). A location's layout's specs, which replaced the floor
 [the layout's E2E](implementation/testing/floorplan-e2e.md)'s.
 The access-control suite (`access-control.spec.ts`) covers who can see a market: an org
 member with no explicit market role, a user granted an explicit role but no org membership,
-membership changes taking effect (adding a user grants visibility, removing revokes it), and
+membership changes taking effect (a member who accepts an invitation gains visibility, removing revokes it), and
 org deletion revoking org-based access while explicit-role access survives. Each test pairs a
 positive assertion with a negative one **against the same market**, so a broken query that
 returns zero rows fails the positive assertion instead of vacuously satisfying an empty-list
@@ -368,6 +369,7 @@ A failed attempt's trace is `front-end/test-results/<test>/trace.zip`, and a ret
 A failed attempt also keeps its video (`video.webm`) and its final screenshot (`test-failed-1.png`) beside its trace, and an attempt that passes keeps neither (`video: 'retain-on-failure'`, `screenshot: 'only-on-failure'`), so on CI a flaky test's failed first attempt has both while its passing retry has only its trace.
 Open one with `npx playwright show-trace <path>` from `front-end/`, or from the HTML report (`npx playwright show-report`), which lists every attempt; on CI each has its own trace there, while on a local run only a failed attempt's opens, since a passing retry's trace file was removed when the retry passed.
 On CI a failed shard uploads `front-end/playwright-report/` and `front-end/test-results/` as the artifact `playwright-artifacts-shard-<n>`, kept 7 days; a flaky test fails its shard, so its failing attempt's trace is there too ([CI and the gate](implementation/testing/ci-and-the-gate.md#ci)).
+Which tests passed only on a retry over `dev`'s last runs is the nightly `e2e-retries` job's summary ([a flaky test fails the build](implementation/testing/ci-and-the-gate.md#ci)).
 A rerun empties `test-results/` before it starts, so read or copy a failure's output first, or give the rerun an output directory of its own with `--output=<a new directory>`.
 Reproducing a flake under load is [chasing a flake](implementation/testing/e2e-patterns.md#chasing-a-flake).
 

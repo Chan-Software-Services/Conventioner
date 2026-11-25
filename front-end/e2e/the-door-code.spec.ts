@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test';
 import { test, expect, TEST_USER, BACKEND_URL, APP_API } from './fixtures';
 import { seedPublishedMarketWithAssignments } from './helpers/seeds';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { AttendanceStatusPage } from './pages/AttendanceStatusPage';
 import { LoginPage } from './pages/LoginPage';
 import { vendorPagePath } from './helpers/marketScreens';
@@ -151,10 +152,7 @@ test.beforeAll(async ({ request }) => {
     [VIEWER, 'viewer'],
     [EDITOR, 'editor'],
   ] as const) {
-    const res = await request.post(`${BACKEND_URL}/markets/${marketId}/roles`, {
-      data: { user_email: person.email, role },
-    });
-    expect(res.ok(), await res.text()).toBeTruthy();
+    await grantMarketRole(request, marketId, person, role);
   }
   const read = await request.get(`${BACKEND_URL}/markets/${marketId}`);
   marketName = (await read.json()).market.name;

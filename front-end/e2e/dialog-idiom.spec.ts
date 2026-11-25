@@ -10,6 +10,7 @@ import {
 } from './fixtures';
 import {
   ensureTestOrg,
+  ensureTestOrgAuthenticated,
   ensureTestOrgs,
   loginViaApi,
   seedLayout,
@@ -18,6 +19,7 @@ import {
 import { LayoutPage } from './pages/LayoutPage';
 import { OrganizationsPage } from './pages/OrganizationsPage';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { acceptInvitation } from './helpers/invitations';
 import { MarketsPage } from './pages/MarketsPage';
 import { VendorsPage } from './pages/VendorsPage';
 
@@ -112,6 +114,21 @@ test.describe('The create-market dialog is the dialog idiom', () => {
   test('the name field reads as a field, and the error sits under it', async ({
     authenticatedPage: page,
   }) => {
+    // A name the server will refuse, so the error is a real one. Made before the dialog opens, and
+    // through the page's own sign-in: a new sign-in on `page.request` would end that one, and the
+    // dialog's read of the organizations, still out, would answer 401 and take the page to sign in.
+    const taken = `Duplicate Dialog ${Date.now()}`;
+    const orgId = await ensureTestOrgAuthenticated(page.request, APP_API);
+    const made = await page.request.post(`${APP_API}/markets`, {
+      headers: { 'Content-Type': 'application/json' },
+      data: {
+        name: taken,
+        creationDate: new Date().toISOString(),
+        organizationId: orgId,
+      },
+    });
+    expect(made.ok(), await made.text()).toBe(true);
+
     const dialog = await openTheDialog(page);
 
     // It was `all: unset` inside a container declaring a radius with no border and no background,
@@ -127,20 +144,6 @@ test.describe('The create-market dialog is the dialog idiom', () => {
     expect(parseFloat(dressed.border)).toBeGreaterThan(0);
     expect(dressed.background).not.toBe('rgba(0, 0, 0, 0)');
     expect(dressed.height).toBeGreaterThan(24);
-
-    // A name the server will refuse, so the error is a real one.
-    const taken = `Duplicate Dialog ${Date.now()}`;
-    // With the page's own cookies, so at the page's own address for the API (`APP_API`).
-    await loginViaApi(page.request, APP_API, TEST_USER.email, TEST_USER.password);
-    const orgId = await ensureTestOrg(page.request, APP_API, TEST_USER.email, TEST_USER.password);
-    await page.request.post(`${APP_API}/markets`, {
-      headers: { 'Content-Type': 'application/json' },
-      data: {
-        name: taken,
-        creationDate: new Date().toISOString(),
-        organizationId: orgId,
-      },
-    });
 
     await dialog.fillMarketName(taken);
     await dialog.selectFirstOrg();
@@ -221,15 +224,38 @@ test.describe('The create-market dialog with exactly one organization', () => {
  *
  * Three actions here each succeeded and then emitted the close event, and the PARENT treated
  * close as its refresh signal - so closing was the only thing that re-read the data, and adding
- * two people meant reopening the dialog between them.
+ * two people meant reopening the dialog between them. Adding someone is inviting them now (T538):
+ * the invitations a test never accepts go to addresses of its run's own, so a retry never meets the
+ * limit on invitations to one address.
  */
 test.describe('Manage organization stays open', () => {
   const SECOND = { email: 'e2e-dialog-second@example.com', password: 'e2edialog123' };
-  const THIRD = { email: 'e2e-dialog-third@example.com', password: 'e2edialog123' };
+  const runAddress = (who: string) => `e2e-dialog-${who}-${Date.now()}@example.test`;
 
   test.beforeAll(() => {
     ensureVerifiedUser(SECOND.email, SECOND.password);
-    ensureVerifiedUser(THIRD.email, THIRD.password);
+  });
+
+  /** The id of the fixture organizer's organization named `name`, as the API lists it. */
+  async function idOf(request: import('@playwright/test').APIRequestContext, name: string) {
+    await loginViaApi(request, BACKEND_URL, TEST_USER.email, TEST_USER.password);
+    const listed = await request.get(`${BACKEND_URL}/organizations`);
+    expect(listed.ok(), await listed.text()).toBe(true);
+    const { organizations } = (await listed.json()) as {
+      organizations: Array<{ id: string; name: string }>;
+    };
+    return organizations.find((org) => org.name === name)!.id;
+  }
+
+  // The organization a test left invitations waiting in, deleted after it, pass or fail: its
+  // invitations go with it, so no run leaves an invitation or an organization on the stack.
+  let leftWaiting = '';
+  test.afterEach(async ({ request }) => {
+    if (!leftWaiting) return;
+    const orgId = await idOf(request, leftWaiting);
+    leftWaiting = '';
+    const deleted = await request.delete(`${BACKEND_URL}/organizations/${orgId}`);
+    expect(deleted.ok(), await deleted.text()).toBe(true);
   });
 
   async function openAFreshOrg(page: import('@playwright/test').Page) {
@@ -246,59 +272,63 @@ test.describe('Manage organization stays open', () => {
     return { orgs, orgName, card };
   }
 
-  test('two people are added in a row, and the list behind learns about it', async ({
+  test('two people are invited in a row, with no reopening', async ({
     authenticatedPage: page,
   }) => {
-    const { orgs } = await openAFreshOrg(page);
+    const { orgs, orgName } = await openAFreshOrg(page);
+    leftWaiting = orgName;
+    const second = runAddress('second');
+    const third = runAddress('third');
 
-    await orgs.addAdmin(SECOND.email);
-    await expect(orgs.adminEmails.filter({ hasText: SECOND.email })).toBeVisible({
-      timeout: 5000,
-    });
+    await orgs.inviteAdmin(second);
+    await expect(orgs.invitation(second)).toBeVisible({ timeout: 5000 });
     await expect(orgs.manageWindow).toBeVisible();
 
-    // No reopening: the add form is still there with an empty field, ready for the next person.
+    // No reopening: the invite form is still there with an empty field, ready for the next person.
     await expect(orgs.addAdminInput).toBeVisible();
     await expect(orgs.addAdminInput).toHaveValue('');
 
     // Enter, not the button - the row is a native form, so both go through the same handler.
-    await orgs.addAdminInput.fill(THIRD.email);
+    await orgs.addAdminInput.fill(third);
     await orgs.addAdminInput.press('Enter');
-    await expect(orgs.adminEmails.filter({ hasText: THIRD.email })).toBeVisible({ timeout: 5000 });
+    await expect(orgs.invitation(third)).toBeVisible({ timeout: 5000 });
     await expect(orgs.manageWindow).toBeVisible();
 
-    // The list behind knows, through `changed` and not through close.
+    // Closed only by the person's own close.
     await orgs.manageCloseButton.click();
     await expect(orgs.manageWindow).toBeHidden();
   });
 
-  test('a failing add keeps the dialog open with what was typed still in the field', async ({
+  test('a refused invitation keeps the dialog open with what was typed still in the field', async ({
     authenticatedPage: page,
   }) => {
     const { orgs } = await openAFreshOrg(page);
 
-    const notAUser = `nobody-${Date.now()}@example.com`;
-    await orgs.addAdmin(notAUser);
+    // An address already in the organization: its owner's.
+    await orgs.inviteAdmin(TEST_USER.email);
 
-    await expect(page.getByTestId('manage-org-add-admin-error')).toBeVisible({ timeout: 5000 });
+    await expect(orgs.addAdminError).toHaveText(`${TEST_USER.email} owns this organization.`, {
+      timeout: 5000,
+    });
     await expect(orgs.manageWindow).toBeVisible();
-    await expect(orgs.addAdminInput).toHaveValue(notAUser);
+    await expect(orgs.addAdminInput).toHaveValue(TEST_USER.email);
   });
 
-  test('its controls are the product size, adding is one row with its own Cancel, and it opens on no Remove', async ({
+  test('its controls are the product size, inviting is one row with its own Cancel, and it opens on no Remove', async ({
     authenticatedPage: page,
+    request,
   }) => {
-    const { orgs, card } = await openAFreshOrg(page);
+    const { orgs, orgName, card } = await openAFreshOrg(page);
     const height = (button: import('@playwright/test').Locator) =>
       button.evaluate((el) => Math.round(el.getBoundingClientRect().height));
 
-    // Manage market's "Add user": the product's height, secondary.
+    // Manage market's "Invite someone": the product's height, secondary.
     for (const button of [orgs.addAdminButton, orgs.addMemberButton, orgs.deleteButton]) {
       expect(await height(button)).toBe(36);
     }
 
-    await orgs.addAdmin(SECOND.email);
-    await expect(orgs.adminEmails.filter({ hasText: SECOND.email })).toBeVisible();
+    await orgs.inviteAdmin(SECOND.email);
+    await expect(orgs.invitation(SECOND.email)).toBeVisible();
     await expect(orgs.addAdminButton).toHaveCount(0);
     const cancel = page.getByTestId('manage-org-add-admin-cancel');
     const add = await orgs.addAdminSubmit.boundingBox();
@@ -308,10 +338,12 @@ test.describe('Manage organization stays open', () => {
     await expect(orgs.addAdminInput).toHaveCount(0);
     await expect(orgs.addAdminButton).toBeVisible();
 
-    // Opened again with an admin listed, it starts on "Add admin", never on their Remove.
+    // Opened again with an admin listed, it starts on "Invite admin", never on their Remove.
+    await acceptInvitation(SECOND, await idOf(request, orgName));
     await orgs.manageCloseButton.click();
     await card.getByTestId('organizations-manage-button').click();
     await orgs.waitForManageOverlay();
+    await expect(orgs.adminEmails).toHaveText([SECOND.email]);
     await expect(orgs.addAdminButton).toBeFocused();
   });
 

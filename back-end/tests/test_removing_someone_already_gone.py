@@ -97,8 +97,7 @@ def people(monkeypatch):
 @pytest.fixture
 def organization(monkeypatch, people, history):
     return install_organizations(monkeypatch, FakeOrganizations({
-        "id": ORG_ID, "name": "Ember Markets", "owner": OWNER.id, "admins": [ADMIN.id],
-        "members": [MEMBER.id],
+        "id": ORG_ID, "name": "Ember Markets",
         "people": {OWNER.id: "owner", ADMIN.id: "admin", MEMBER.id: "member"},
         "markets": [], "theme": None,
     }))
@@ -137,7 +136,6 @@ class TestTheOrganization:
 
         assert response.status_code == 200
         assert organization.doc["people"] == {OWNER.id: "owner", ADMIN.id: "admin"}
-        assert organization.doc["members"] == []
         assert len(organization_entries(history)) == 1
 
     @pytest.mark.parametrize("remover", [OWNER, ADMIN], ids=["the owner", "an admin"])
@@ -146,8 +144,7 @@ class TestTheOrganization:
 
         assert response.status_code == 404
         assert response.get_json() == NO_LONGER_IN_THE_ORGANIZATION
-        assert organization.writes == []
-        assert organization.accounts.writes == [], "nothing is written before the refusal"
+        assert organization.writes == [], "nothing is written before the refusal"
         assert organization_entries(history) == []
 
     def test_removing_a_member_twice_answers_the_second_as_gone(self, organization, history):

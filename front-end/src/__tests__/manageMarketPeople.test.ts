@@ -378,56 +378,27 @@ describe('Users with access at 154 people', () => {
     expect((field(wrapper).element as HTMLInputElement).value).toBe(address(7));
   });
 
-  it('shows someone just added as the one row, and clearing the field shows everyone', async () => {
-    api.post.mockResolvedValue({ data: {} });
+  it('keeps the words, the shown count and every row after an invitation, which adds nobody', async () => {
     const served = market({ peopleWithAccess: people() });
     const wrapper = await open(served);
-    await showMore(wrapper);
-    const added = editor(155);
-    serves(served, [...people(), added]);
+    api.get.mockImplementation(async (url: string) => {
+      if (url === '/markets/market-1') return { data: { market: served } };
+      if (url === '/markets/market-1/invitations') return { data: { invitations: [] } };
+      return { data: { entries: [], next: null, vendorNames: {}, actors: [], groups: [] } };
+    });
+    api.post.mockResolvedValue({
+      data: {
+        invitation: { id: 'inv-1', email: 'newcomer@example.test', role: 'editor' },
+        emailed: true,
+      },
+    });
+    await find(wrapper, 'person-00');
 
-    await addUser(wrapper, ` ${added.email.toUpperCase()} `);
+    await addUser(wrapper, 'newcomer@example.test');
 
-    expect(addresses(wrapper)).toEqual([added.email]);
-    expect(count(wrapper)).toBe(`1 of 155 matches "${added.email.toUpperCase()}"`);
-
-    await find(wrapper, '');
-    expect(count(wrapper)).toBe('Showing 50 of 155');
-  });
-
-  it('shows the field for someone added as the list passes 12', async () => {
-    api.post.mockResolvedValue({ data: {} });
-    const served = market({ peopleWithAccess: people(12) });
-    const wrapper = await open(served);
-    serves(served, people(13));
-
-    await addUser(wrapper, address(13));
-
-    expect(addresses(wrapper)).toEqual([address(13)]);
-  });
-
-  it('leaves a short list whole when someone is added, with no field to appear', async () => {
-    api.post.mockResolvedValue({ data: {} });
-    const served = market({ peopleWithAccess: people(3) });
-    const wrapper = await open(served);
-    serves(served, people(4));
-
-    await addUser(wrapper, address(4));
-
-    expect(field(wrapper).exists()).toBe(false);
-    expect(rows(wrapper)).toHaveLength(4);
-  });
-
-  it('never keeps words that would hide someone added to a list now short', async () => {
-    api.post.mockResolvedValue({ data: {} });
-    const served = market({ peopleWithAccess: people(20) });
-    const wrapper = await open(served);
-    await find(wrapper, 'person-001');
-    serves(served, [...people(3), editor(155)]);
-
-    await addUser(wrapper, editor(155).email);
-
-    expect(addresses(wrapper)).toEqual([editor(155).email]);
+    expect((field(wrapper).element as HTMLInputElement).value).toBe('person-00');
+    expect(count(wrapper)).toBe('9 of 154 match "person-00"');
+    expect(addresses(wrapper)).not.toContain('newcomer@example.test');
   });
 
   it('forgets the words when the dialog closes', async () => {
@@ -445,7 +416,7 @@ describe('Users with access at 154 people', () => {
 });
 
 /**
- * Manage market's own writes, Add user, Rename and Delete market, belong to the opening they were
+ * Manage market's own writes, Invite someone, Rename and Delete market, belong to the opening they were
  * sent from (T411): a press while one is out sends nothing, nothing closes Manage market or the
  * delete's confirmation while one is out, and an answer that lands after Manage market was opened
  * on another market leaves that market's dialog alone.
@@ -504,7 +475,7 @@ describe("Manage market's writes belong to their opening", () => {
     await flushPromises();
   }
 
-  it('Add user sends once for two presses and holds Manage market until it lands', async () => {
+  it('Invite someone sends once for two presses and holds Manage market until it lands', async () => {
     const wrapper = await openOn(market());
     await typeAnAddress(wrapper, 'newcomer@example.com');
     const answer = held();
@@ -519,13 +490,13 @@ describe("Manage market's writes belong to their opening", () => {
     expect(wrapper.emitted('manageClose')).toBeUndefined();
     expect(byTestId('manage-market-close-button')!.hasAttribute('disabled')).toBe(true);
 
-    answer.resolve({ data: {} });
+    answer.resolve({ data: { invitation: { email: 'newcomer@example.com' }, emailed: true } });
     await flushPromises();
     await tryToCloseManageMarket();
     expect(wrapper.emitted('manageClose')).not.toBeUndefined();
   });
 
-  it("keeps an add's refusal out of Manage market opened on another market", async () => {
+  it("keeps an invitation's refusal out of Manage market opened on another market", async () => {
     const wrapper = await openOn(market());
     await typeAnAddress(wrapper, 'newcomer@example.com');
     const answer = held();
@@ -534,16 +505,16 @@ describe("Manage market's writes belong to their opening", () => {
     await flushPromises();
 
     await reopenOnTheOther(wrapper);
-    answer.reject(refused('User not found'));
+    answer.reject(refused('You have sent many invitations. Try again in 12 minutes.'));
     await flushPromises();
 
     expect(byTestId('manage-market-add-user-error')).toBeNull();
-    expect(wrapper.text()).not.toContain('User not found');
+    expect(wrapper.text()).not.toContain('You have sent many invitations');
     expect(wrapper.get('.market-name').text()).toBe('Lakeside');
     expect(wrapper.text()).not.toContain('Riverside');
   });
 
-  it("keeps an add's success out of Manage market opened on another market", async () => {
+  it("keeps an invitation's success out of Manage market opened on another market", async () => {
     const wrapper = await openOn(market());
     await typeAnAddress(wrapper, 'newcomer@example.com');
     const answer = held();
@@ -554,10 +525,11 @@ describe("Manage market's writes belong to their opening", () => {
     await reopenOnTheOther(wrapper);
     await typeAnAddress(wrapper, 'typed-here@example.com');
     const reads = api.get.mock.calls.length;
-    answer.resolve({ data: {} });
+    answer.resolve({ data: { invitation: { email: 'newcomer@example.com' }, emailed: true } });
     await flushPromises();
 
     expect(api.get.mock.calls.length).toBe(reads);
+    expect(byTestId('manage-market-add-user-sent')).toBeNull();
     expect(
       (wrapper.get('[data-testid="manage-market-add-user-input"]').element as HTMLInputElement)
         .value,
@@ -608,15 +580,15 @@ describe("Manage market's writes belong to their opening", () => {
 
   it('drops a re-read of the market it was open on once it is open on another', async () => {
     const reread = held<{ data: { market: Market } }>();
-    const wrapper = await openOn(market());
+    const wrapper = await openOn(market({ phase: MarketPhase.Draft }));
     api.get.mockImplementation(async (url: string) => {
       if (url === '/markets/market-1') return reread.promise;
       if (url === '/markets/market-2') return { data: { market: OTHER } };
       return { data: { entries: [], next: null, vendorNames: {}, actors: [], groups: [] } };
     });
-    await typeAnAddress(wrapper, 'newcomer@example.com');
-    api.post.mockResolvedValue({ data: {} });
-    await wrapper.get('.add-user-form').trigger('submit');
+    await wrapper.get('[data-testid="manage-market-rename-input"]').setValue('Autumn Market');
+    api.put.mockResolvedValue({ data: {} });
+    await wrapper.get('.rename-row').trigger('submit');
     await flushPromises();
 
     await reopenOnTheOther(wrapper);

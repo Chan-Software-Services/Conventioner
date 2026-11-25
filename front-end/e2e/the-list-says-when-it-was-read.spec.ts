@@ -5,6 +5,7 @@ import {
   transitionMarket,
 } from './helpers/seedPhaseMarket';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { withUser } from './helpers/withUser';
 import { ApplicationMonitorPage } from './pages/ApplicationMonitorPage';
 import { ApplicationsAllPage } from './pages/ApplicationsAllPage';
@@ -41,10 +42,7 @@ async function reviewingMarket(request: import('@playwright/test').APIRequestCon
   const nadia = seedApplicationWithStatus(marketId, 'open', 'nadia@ember.test');
   const theo = seedApplicationWithStatus(marketId, 'open', 'theo@thistle.test');
   const ines = seedApplicationWithStatus(marketId, 'open', 'ines@loom.test');
-  const granted = await request.post(`${BACKEND_URL}/markets/${marketId}/roles`, {
-    data: { user_email: SECOND.email, role: 'editor' },
-  });
-  expect(granted.ok(), await granted.text()).toBeTruthy();
+  await grantMarketRole(request, marketId, SECOND, 'editor');
   return { marketId, nadia, theo, ines };
 }
 

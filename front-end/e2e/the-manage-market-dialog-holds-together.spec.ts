@@ -3,15 +3,16 @@ import { test, expect, TEST_USER, BACKEND_URL } from './fixtures';
 import { ManageMarketPage } from './pages/ManageMarketPage';
 import { seedApplicantMarket } from './helpers/seedApplicantMarket';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 
 /**
  * Manage market holds together (bug 15, and items 14 and 15 of bug 43; E26/F10/S01).
  *
- * Its buttons were the compact size, smaller than every other button in the product. "Add user"
- * turned into a lone Cancel above the row it opened. The owner's own row offered a role select the
- * server refused every use of, and the refusal appeared at the foot of the dialog: it is said
- * under the person's row now, as `changing-a-role-asks-first.spec.ts` proves. Delete asked
- * "Are you sure?" inline, Confirm before Cancel, with focus left on the page.
+ * Its buttons were the compact size, smaller than every other button in the product. "Add user",
+ * now "Invite someone", turned into a lone Cancel above the row it opened. The owner's own row
+ * offered a role select the server refused every use of, and the refusal appeared at the foot of
+ * the dialog: it is said under the person's row now, as `changing-a-role-asks-first.spec.ts`
+ * proves. Delete asked "Are you sure?" inline, Confirm before Cancel, with focus left on the page.
  */
 test.use({ viewport: { width: 1440, height: 900 } });
 
@@ -30,7 +31,7 @@ async function openManage(page: Page, marketName: string): Promise<ManageMarketP
 const height = (locator: Locator) =>
   locator.evaluate((el) => Math.round(el.getBoundingClientRect().height));
 
-test('its controls are the product size, and adding someone is one row with its own Cancel', async ({
+test('its controls are the product size, and inviting someone is one row with its own Cancel', async ({
   authenticatedPage: page,
   request,
 }) => {
@@ -55,7 +56,7 @@ test('its controls are the product size, and adding someone is one row with its 
   await manage.clickAddUser();
   await expect(manage.addUserButton).toHaveCount(0);
   const cancel = page.getByTestId('manage-market-add-user-cancel');
-  // Cancel sits in the row it cancels, beside Add, at the same height.
+  // Cancel sits in the row it cancels, beside Send invitation, at the same height.
   const add = await manage.addUserSubmit.boundingBox();
   const cancelBox = await cancel.boundingBox();
   expect(Math.abs((add?.y ?? 0) - (cancelBox?.y ?? -100))).toBeLessThan(2);
@@ -66,12 +67,13 @@ test('its controls are the product size, and adding someone is one row with its 
   await expect(manage.addUserButton).toBeVisible();
 });
 
-test('on a phone, the email field takes the add row, with the role, Add and Cancel beneath it', async ({
+test('on a phone, the email field and the role each take the invite row, with its buttons beneath', async ({
   authenticatedPage: page,
   request,
 }) => {
   // Beside the role, Add and Cancel at 390, the field and the role were squeezed to 66px each,
-  // "User e" and "Edi" (T142).
+  // "User e" and "Edi" (T142); beside the role alone, Send invitation left Cancel a line of its
+  // own.
   await page.setViewportSize({ width: 390, height: 844 });
   const { marketName } = await seedApplicantMarket(
     request,
@@ -93,13 +95,22 @@ test('on a phone, the email field takes the add row, with the role, Add and Canc
 
   const role = page.getByTestId('manage-market-add-user-select');
   const cancel = page.getByTestId('manage-market-add-user-cancel');
-  const beneath = [await box(role), await box(manage.addUserSubmit), await box(cancel)];
-  for (const b of beneath) {
-    expect(b.y, 'beneath the field').toBeGreaterThanOrEqual(field.y + field.height);
-    expect(b.y, 'on one row').toBe(beneath[0].y);
+  const roleBox = await box(role);
+  expect(roleBox.y, 'the role beneath the field').toBeGreaterThanOrEqual(field.y + field.height);
+  expect(roleBox.width, 'the role takes the row').toBeGreaterThanOrEqual(form.width - 1);
+  const buttons = [await box(manage.addUserSubmit), await box(cancel)];
+  for (const b of [roleBox, ...buttons]) {
     expect(b.height, 'a 44px target').toBeGreaterThanOrEqual(44);
     expect(b.x + b.width, 'inside the window').toBeLessThanOrEqual(390);
   }
+  for (const b of buttons) {
+    expect(b.y, 'beneath the role').toBeGreaterThanOrEqual(roleBox.y + roleBox.height);
+    expect(b.y, 'on one row').toBe(buttons[0].y);
+  }
+  expect(
+    Math.abs(buttons[1].x + buttons[1].width - (form.x + form.width)),
+    'at the row’s end',
+  ).toBeLessThan(1);
 
   // The role reads whole: its name fits inside the select, beside its arrow.
   const fits = await role.evaluate((el) => {
@@ -149,7 +160,7 @@ test('deleting is a destructive dialog that opens on Cancel and says what goes',
   await expect(page.getByTestId('market-card')).toHaveCount(0);
 });
 
-test('adding someone already on the market says so and leaves their role as it was', async ({
+test('inviting someone already on the market says so and leaves their role as it was', async ({
   authenticatedPage: page,
   request,
 }) => {
@@ -159,17 +170,14 @@ test('adding someone already on the market says so and leaves their role as it w
     TEST_USER.email,
     TEST_USER.password,
   );
-  const added = await request.post(`${BACKEND_URL}/markets/${marketId}/roles`, {
-    data: { user_email: COLLEAGUE.email, role: 'editor' },
-  });
-  expect(added.ok(), await added.text()).toBeTruthy();
+  await grantMarketRole(request, marketId, COLLEAGUE, 'editor');
   const manage = await openManage(page, marketName);
 
   // "Add user" once overwrote whatever role the address held, the Owner's too: changing a role is
-  // its row's, where the Owner and the market's Admins are guarded.
-  await manage.addUser(COLLEAGUE.email, 'viewer');
+  // its row's, where the Owner and the market's Admins are guarded, and an invitation is refused.
+  await manage.invite(COLLEAGUE.email, 'viewer');
 
-  await expect(page.getByTestId('manage-market-add-user-error')).toHaveText(
+  await expect(manage.addUserError).toHaveText(
     `${COLLEAGUE.email} already has a role on this market. Change it in their row under Users with access.`,
   );
   const row = page.locator('.user-entry').filter({ hasText: COLLEAGUE.email });

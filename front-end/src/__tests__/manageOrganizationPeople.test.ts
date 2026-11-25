@@ -1,8 +1,9 @@
 /**
  * Manage organization's Admins and Members at 150 people (T204): each is a list frame, a find field
  * past 12 people, a count line, 50 rows and "Show N more", so the sections below stay near. A removal
- * or the re-read after it keeps the words and the rows shown; someone just added is found at once;
- * Remove after a search removes the row's own person. A short list stays as simple as it was.
+ * or the re-read after it keeps the words and the rows shown; Remove after a search removes the
+ * row's own person. A short list stays as simple as it was. Nobody is added from the dialog: an
+ * invitation (`manageOrganizationInvites.test.ts`) places them only once they accept.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { enableAutoUnmount, flushPromises, mount, type VueWrapper } from '@vue/test-utils';
@@ -56,7 +57,6 @@ const SECTIONS = [
     many: 'admins',
     one: 'admin',
     none: 'No admins',
-    route: 'admins',
   },
   {
     section: 'Members',
@@ -70,7 +70,6 @@ const SECTIONS = [
     many: 'members',
     one: 'member',
     none: 'No members',
-    route: 'members',
   },
 ] as const;
 
@@ -109,17 +108,6 @@ describe.each(SECTIONS)('Manage organization, $section at 150 people', (at) => {
     const input = field()!;
     input.value = words;
     input.dispatchEvent(new Event('input'));
-    await flushPromises();
-  }
-
-  async function addPerson(email: string) {
-    byTestId(`manage-org-${at.add}-button`)!.click();
-    await flushPromises();
-    const input = byTestId(`manage-org-${at.add}-input`) as HTMLInputElement;
-    input.value = email;
-    input.dispatchEvent(new Event('input'));
-    await flushPromises();
-    byTestId(`manage-org-${at.add}-submit`)!.click();
     await flushPromises();
   }
 
@@ -208,72 +196,6 @@ describe.each(SECTIONS)('Manage organization, $section at 150 people', (at) => {
 
     expect(api.delete).toHaveBeenCalledTimes(1);
     expect(api.delete).toHaveBeenCalledWith('/organizations/org-1/users/u-120');
-  });
-
-  it('finds someone just added, who falls past those shown, until the field is cleared', async () => {
-    api.post.mockImplementation(async () => {
-      serves([...people(150), person(151)]);
-      return { data: {} };
-    });
-    open(people(150));
-    await flushPromises();
-
-    await addPerson(address(151));
-
-    expect(api.post).toHaveBeenCalledWith(`/organizations/org-1/${at.route}`, {
-      user_email: address(151),
-    });
-    expect(field()!.value).toBe(address(151));
-    expect(addresses()).toEqual([address(151)]);
-    // Adding two in a row stays the case: the row stays open with its field empty.
-    expect((byTestId(`manage-org-${at.add}-input`) as HTMLInputElement).value).toBe('');
-
-    await find('');
-    expect(count()).toBe('Showing 50 of 151');
-  });
-
-  it('finds someone added over words already in the field', async () => {
-    api.post.mockImplementation(async () => {
-      serves([...people(150), person(151)]);
-      return { data: {} };
-    });
-    open(people(150));
-    await flushPromises();
-    await find('person-07');
-
-    await addPerson(address(151));
-
-    expect(field()!.value).toBe(address(151));
-    expect(addresses()).toEqual([address(151)]);
-  });
-
-  it('finds someone whose adding crosses the threshold, and the field appears with them', async () => {
-    api.post.mockImplementation(async () => {
-      serves(people(13));
-      return { data: {} };
-    });
-    open(people(12));
-    await flushPromises();
-    expect(field()).toBeNull();
-
-    await addPerson(address(13));
-
-    expect(field()!.value).toBe(address(13));
-    expect(addresses()).toEqual([address(13)]);
-  });
-
-  it('leaves a short list whole after someone is added: every row is already drawn', async () => {
-    api.post.mockImplementation(async () => {
-      serves(people(4));
-      return { data: {} };
-    });
-    open(people(3));
-    await flushPromises();
-
-    await addPerson(address(4));
-
-    expect(field()).toBeNull();
-    expect(addresses()).toEqual(people(4).map((p) => p.email));
   });
 
   it('forgets the words when the dialog closes', async () => {
@@ -371,10 +293,11 @@ describe('Manage organization, the two sections', () => {
 });
 
 /**
- * Manage organization's own writes, Add admin, Add member and Rename, belong to the opening they
- * were sent from (T411): a press while one is out sends nothing, nothing closes Manage organization
- * while one is out, and an answer that lands after it was opened on another organization leaves
- * that organization's dialog alone, though the list behind is still told of a change that landed.
+ * Manage organization's own writes, Invite admin, Invite member, Rename and Remove, belong to the
+ * opening they were sent from (T411): a press while one is out sends nothing, nothing closes Manage
+ * organization while one is out, and an answer that lands after it was opened on another
+ * organization leaves that organization's dialog alone. The invitations' own cases, a press sent
+ * once and a success kept to its opening, are `manageOrganizationInvites.test.ts`'s.
  */
 describe("Manage organization's writes belong to their opening", () => {
   function held<T = unknown>() {
@@ -393,7 +316,7 @@ describe("Manage organization's writes belong to their opening", () => {
       response: { status: 400, data: { error: sentence } },
     });
 
-  const FIRST = org();
+  const FIRST = org({ memberPeople: [person(1)] });
   const OTHER = org({ id: 'org-2', name: 'Lakeside Collective' });
 
   function openOn(first: Organization) {
@@ -431,33 +354,7 @@ describe("Manage organization's writes belong to their opening", () => {
   }
 
   it.each(['admin', 'member'] as const)(
-    'Add %s sends once for two presses and holds Manage organization until it lands',
-    async (row) => {
-      const wrapper = openOn(FIRST);
-      await flushPromises();
-      await typeAnAddress(wrapper, row, 'newcomer@example.com');
-      const answer = held();
-      api.post.mockReturnValue(answer.promise);
-
-      addForm(wrapper, row).requestSubmit();
-      addForm(wrapper, row).requestSubmit();
-      await flushPromises();
-      await tryToCloseManageOrganization();
-
-      expect(api.post).toHaveBeenCalledTimes(1);
-      expect(wrapper.emitted('manageClose')).toBeUndefined();
-      expect(byTestId('manage-org-close-button')!.hasAttribute('disabled')).toBe(true);
-
-      answer.resolve({ data: {} });
-      await flushPromises();
-      expect(wrapper.emitted('changed')).toHaveLength(1);
-      await tryToCloseManageOrganization();
-      expect(wrapper.emitted('manageClose')).not.toBeUndefined();
-    },
-  );
-
-  it.each(['admin', 'member'] as const)(
-    "keeps an add %s's refusal out of Manage organization opened on another organization",
+    "keeps an invitation to %s's refusal out of Manage organization opened on another organization",
     async (row) => {
       const wrapper = openOn(FIRST);
       await flushPromises();
@@ -469,37 +366,14 @@ describe("Manage organization's writes belong to their opening", () => {
 
       await reopenOnTheOther(wrapper);
       await typeAnAddress(wrapper, row, 'typed-here@example.com');
-      answer.reject(refused('User not found'));
+      answer.reject(refused('You have sent many invitations. Try again in 12 minutes.'));
       await flushPromises();
 
       expect(byTestId(`manage-org-add-${row}-error`)).toBeNull();
-      expect(wrapper.text()).not.toContain('User not found');
+      expect(wrapper.text()).not.toContain('You have sent many invitations');
       expect(wrapper.get('.org-name').text()).toBe('Lakeside Collective');
     },
   );
-
-  it("keeps an add's success and its re-read out of Manage organization opened on another, and still tells the list", async () => {
-    const wrapper = openOn(FIRST);
-    await flushPromises();
-    await typeAnAddress(wrapper, 'admin', 'newcomer@example.com');
-    const answer = held();
-    api.post.mockReturnValue(answer.promise);
-    addForm(wrapper, 'admin').requestSubmit();
-    await flushPromises();
-
-    await reopenOnTheOther(wrapper);
-    await typeAnAddress(wrapper, 'admin', 'typed-here@example.com');
-    const reads = api.get.mock.calls.length;
-    answer.resolve({ data: {} });
-    await flushPromises();
-
-    expect(api.get.mock.calls.length).toBe(reads);
-    expect(
-      (wrapper.get('[data-testid="manage-org-add-admin-input"]').element as HTMLInputElement).value,
-    ).toBe('typed-here@example.com');
-    expect(wrapper.get('.org-name').text()).toBe('Lakeside Collective');
-    expect(wrapper.emitted('changed')).toHaveLength(1);
-  });
 
   it('drops a re-read of the organization it was open on once it is open on another', async () => {
     const wrapper = openOn(FIRST);
@@ -508,15 +382,16 @@ describe("Manage organization's writes belong to their opening", () => {
     api.get.mockImplementation(async (url: string) =>
       url === '/organizations'
         ? { data: { organizations: await reread.promise } }
-        : { data: { entries: [], next: null } },
+        : { data: { entries: [], next: null, invitations: [] } },
     );
-    await typeAnAddress(wrapper, 'member', 'newcomer@example.com');
-    api.post.mockResolvedValue({ data: {} });
-    addForm(wrapper, 'member').requestSubmit();
+    api.delete.mockResolvedValue({ data: {} });
+    byTestId('manage-org-remove-member-button')!.click();
+    await flushPromises();
+    byTestId('manage-org-remove-submit-button')!.click();
     await flushPromises();
 
     await reopenOnTheOther(wrapper);
-    reread.resolve([{ ...FIRST, memberPeople: [person(1)] }, OTHER]);
+    reread.resolve([{ ...FIRST, memberPeople: [person(1), person(2)] }, OTHER]);
     await flushPromises();
 
     expect(wrapper.get('.org-name').text()).toBe('Lakeside Collective');

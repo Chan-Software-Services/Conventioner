@@ -24,7 +24,7 @@ describes:
   - front-end/e2e/helpers/mongoScript.ts
   - front-end/e2e/helpers/humanCheck.ts
   - front-end/e2e/helpers/signInLimits.ts
-verified: 2026-11-25
+verified: 2026-11-26
 sources:
   - E21/F02/S02
   - E22/F04/S02
@@ -63,6 +63,7 @@ sources:
   - T538
   - T539
   - T510
+  - T618
 ---
 
 # E2E patterns
@@ -202,6 +203,12 @@ Markets and Organizations show 50 cards at a time, in date order and in the orde
 `MarketsPage.narrowTo(name)` and `OrganizationsPage.findCard(name)` fill the search when the page draws it and use nothing when it does not, since the page then holds 12 or fewer and shows them all.
 Markets' search is drawn only past 12 markets or while the address holds words, so a spec that types into it gives its user 13 markets of its own, as [`finding-a-market.spec.ts`](../../../front-end/e2e/finding-a-market.spec.ts) does, or brings its words in the address (T223).
 
+**A test reads nothing an earlier test of its file left behind.**
+A failed test ends its worker, so its retry and the tests after it run in a new one, whose `beforeAll` seeds afresh, without what the earlier tests published or moved: a test that read it fails there on every try, as it does when run alone.
+Such a test seeds what it reads itself.
+In [`phase-rail.spec.ts`](../../../front-end/e2e/phase-rail.spec.ts)'s "The phase rail", the tests of the two addresses, a CSV market's chips and archiving each seed a published market with `seedPublishedMarket`.
+Prefer that to making the describe `serial`, which chains every test in it: one failure skips those after it, and a retry runs them all again.
+
 **A spec ends an organizer's session on the server**: `mongoEval` unsets the user's `login_id`, so the cookie names a login no account holds and the next request answers 401, as after a password reset; the next sign-in gives the account a new one.
 `context.clearCookies()` ends it only in the browser: the stack keeps its sessions on disk, where it stays until it lapses.
 A spec that ends it to have a press find it ended ends it as the press's request is sent, from that request's route, as [`a-failure-says-what-to-do.spec.ts`](../../../front-end/e2e/a-failure-says-what-to-do.spec.ts)'s "a session that ends mid-review" does: ended before the press, a read the page sent on its own, such as a drawer's on opening, can find it ended first and take the page to sign in, and the press then waits out the test on a control that is gone.
@@ -210,6 +217,7 @@ A spec that ends it to have a press find it ended ends it as the press's request
 `APP_API` is the address the app's pages call the API at, through the dev server's proxy, so such a call reaches the back end the way the page's do.
 Until T318 a `page.request` at `BACKEND_URL` was refused as signed out, since the back end held a session to the client's address as well as its browser; it holds it to the browser string alone now ([the cookies](../conventions/security-invariants.md#the-cookies)), so one there is taken too, but no spec relies on that.
 A seed that signs in with a page's cookies (`loginViaApi` on `page.request`) ends the page's own sign-in first, as every sign-in ends the one its browser held, so a read the page still has out answers 401 and the page goes to sign in; the fixture's sign-in therefore waits for Markets' reads before the test starts, since a fixture account's sign-in, hashed at bcrypt's lowest cost, takes a few milliseconds and lands among them.
+That wait covers only a seed made before the test opens anything, so a spec seeds before it opens a page, as [`phase-rail.spec.ts`](../../../front-end/e2e/phase-rail.spec.ts)'s "a CSV market carries the market's chips" seeds its two markets; a seed made with a page's cookies needs no sign-in of its own, since `page.request` carries the page's session to `ensureTestOrgAuthenticated` and to the spec's own calls to the API, as [`dialog-idiom.spec.ts`](../../../front-end/e2e/dialog-idiom.spec.ts)'s "the name field reads as a field" seeds, before it opens the dialog.
 A page of another browser context (`withUser()`'s) is a page too; a request context of its own (the `request` fixture, `playwright.request.newContext()`) is a client of its own, and may call either.
 A request with no cookie at all answers 401; [`a-failure-says-what-to-do.spec.ts`](../../../front-end/e2e/a-failure-says-what-to-do.spec.ts) holds that, from a page of the app's origin that runs none of its code.
 

@@ -80,6 +80,7 @@ const WRITES: Readonly<Record<string, Writer>> = {
   'components/application/AmendFormDialog.vue': { handle: 'here' },
   'components/DoorCodeScreen.vue': { handle: 'here' },
   'components/SignOutEverywhereDialog.vue': { handle: 'here' },
+  'components/InvitationsWaiting.vue': { handle: 'here' },
 
   'components/HandOnMarketDialog.vue': { handle: ['views/ManageMarketOverlay.vue'] },
   'components/application/FollowUpDialog.vue': {

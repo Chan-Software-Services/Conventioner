@@ -6,6 +6,7 @@ import { savePlan } from './helpers/savePlan';
 import { marketScreenPath } from './helpers/marketScreens';
 import { namelessControls } from './helpers/accessibleNames';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { withUser } from './helpers/withUser';
 import {
   ALUMNI,
@@ -167,16 +168,12 @@ test('an Editor reads the answers the prices read; an Admin changes them, and th
   request,
 }) => {
   const marketId = await seedPricedMarket(request);
-  const market = `${BACKEND_URL}/markets/${marketId}`;
   for (const [user, role] of [
     [EDITOR, 'editor'],
     [ADMIN, 'admin'],
   ] as const) {
     ensureVerifiedUser(user.email, user.password);
-    await ok(
-      await request.post(`${market}/roles`, { data: { user_email: user.email, role } }),
-      `make ${user.email} ${role}`,
-    );
+    await grantMarketRole(request, marketId, user, role);
   }
 
   await withUser(browser, EDITOR.email, EDITOR.password, async (page) => {

@@ -10,8 +10,9 @@ import {
 } from './fixtures';
 import { marketScreenPath, marketSetupPath, vendorPagePath } from './helpers/marketScreens';
 import { seedAssignedMarket } from './helpers/seedAssignedMarket';
-import { SEED_MARKET_DATE, ensureTestOrgAuthenticated } from './helpers/seeds';
+import { SEED_MARKET_DATE, ensureTestOrgAuthenticated, loginViaApi } from './helpers/seeds';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { acceptInvitation } from './helpers/invitations';
 import { MarketsPage } from './pages/MarketsPage';
 
 const SECOND_USER = {
@@ -19,19 +20,38 @@ const SECOND_USER = {
   password: 'e2esecond123',
 };
 
-const THIRD_USER = {
-  email: 'e2e-third@example.com',
-  password: 'e2ethird123',
-};
+/**
+ * An address no earlier run invited, in the fixture domain: this test never accepts the
+ * invitations it sends, so a retry never meets the limit on invitations to one address.
+ */
+const runAddress = (who: string) => `e2e-tier2-${who}-${Date.now()}@example.test`;
 
 test.describe('Tier 2 - Organization CRUD', () => {
-  test.beforeAll(() => {
-    for (const user of [SECOND_USER, THIRD_USER]) {
-      ensureVerifiedUser(user.email, user.password);
+  // The organization the test made, by the name it starts with (the test renames it), deleted after
+  // it when the test failed before deleting it: its invitation still waiting goes with it, so no
+  // run leaves one on the stack.
+  let made = '';
+  test.afterEach(async ({ request }) => {
+    if (!made) return;
+    const name = made;
+    made = '';
+    await loginViaApi(request, BACKEND_URL, TEST_USER.email, TEST_USER.password);
+    const listed = await request.get(`${BACKEND_URL}/organizations`);
+    expect(listed.ok(), await listed.text()).toBe(true);
+    const { organizations } = (await listed.json()) as {
+      organizations: Array<{ id: string; name: string }>;
+    };
+    for (const org of organizations.filter((one) => one.name.startsWith(name))) {
+      const deleted = await request.delete(`${BACKEND_URL}/organizations/${org.id}`);
+      expect(deleted.ok(), await deleted.text()).toBe(true);
     }
   });
 
-  test('create org, manage roles, rename, and delete', async ({ authenticatedPage: page }) => {
+  test('create org, invite and withdraw, rename, and delete', async ({
+    authenticatedPage: page,
+  }) => {
+    const admin = runAddress('admin');
+    const member = runAddress('member');
     const orgsPage = new OrganizationsPage(page);
     await orgsPage.goto();
     await orgsPage.waitForLoaded();
@@ -39,6 +59,7 @@ test.describe('Tier 2 - Organization CRUD', () => {
     const orgName = `E2E Org ${Date.now()}`;
 
     await orgsPage.createOrg(orgName);
+    made = orgName;
     const manageButton = (await orgsPage.findCard(orgName)).getByTestId(
       'organizations-manage-button',
     );
@@ -48,33 +69,29 @@ test.describe('Tier 2 - Organization CRUD', () => {
     await manageButton.click();
     await orgsPage.waitForManageOverlay();
 
-    await orgsPage.addAdmin(SECOND_USER.email);
-    await expect(orgsPage.adminEmails.filter({ hasText: SECOND_USER.email })).toBeVisible({
-      timeout: 5000,
-    });
+    // An admin and a member are invited (T538): each waits under Invited until they accept.
+    await orgsPage.inviteAdmin(admin);
+    await expect(orgsPage.addAdminSent).toHaveText(`Invitation sent to ${admin}.`);
+    await expect(orgsPage.invitation(admin)).toBeVisible();
     await expect(orgsPage.manageWindow).toBeVisible();
 
-    await orgsPage.addMember(THIRD_USER.email);
-    await expect(orgsPage.memberEmails.filter({ hasText: THIRD_USER.email })).toBeVisible({
-      timeout: 5000,
-    });
+    await orgsPage.inviteMember(member);
+    await expect(orgsPage.addMemberSent).toHaveText(`Invitation sent to ${member}.`);
+    await expect(orgsPage.invitation(member)).toBeVisible();
     await expect(orgsPage.manageWindow).toBeVisible();
 
-    const memberRemove = orgsPage.removeMemberButtons.first();
-    await expect(memberRemove).toBeVisible({ timeout: 5000 });
-    // Remove asks first (E38/F15/S01).
-    await memberRemove.click();
-    await orgsPage.confirmRemove();
-    await expect(orgsPage.memberEmails.filter({ hasText: THIRD_USER.email })).toHaveCount(0, {
-      timeout: 5000,
-    });
+    // Withdraw asks first, as Remove does (E38/F15/S01).
+    await orgsPage.withdraw(member);
+    await expect(orgsPage.invitation(member)).toHaveCount(0);
+    await expect(orgsPage.invitation(admin)).toBeVisible();
     await expect(orgsPage.manageWindow).toBeVisible();
 
     const newName = `${orgName} (renamed)`;
     await orgsPage.renameOrg(newName);
     await expect(orgsPage.manageWindow).toBeVisible();
 
-    // Deleting IS one of the three correct closes: the thing being managed no longer exists.
+    // Deleting IS one of the three correct closes: the thing being managed no longer exists, and
+    // the invitation still waiting goes with it.
     await orgsPage.deleteOrg();
     await expect(orgsPage.manageWindow).toBeHidden({ timeout: 5000 });
 
@@ -83,11 +100,13 @@ test.describe('Tier 2 - Organization CRUD', () => {
     ).not.toBeVisible({
       timeout: 5000,
     });
+    made = '';
   });
 });
 
 test.describe('Tier 2 - Market role management', () => {
   let marketName: string;
+  let marketId: string;
 
   test.beforeAll(async ({ request }) => {
     ensureVerifiedUser(SECOND_USER.email, SECOND_USER.password);
@@ -114,9 +133,10 @@ test.describe('Tier 2 - Market role management', () => {
     if (!marketRes.ok()) {
       throw new Error(`Market creation failed: ${marketRes.status()} ${await marketRes.text()}`);
     }
+    marketId = ((await marketRes.json()) as { market_id: string }).market_id;
   });
 
-  test('add user, change role, and remove user from market', async ({
+  test('invite a user who accepts, change their role, and remove them from the market', async ({
     authenticatedPage: page,
   }) => {
     const markets = new MarketsPage(page);
@@ -130,8 +150,15 @@ test.describe('Tier 2 - Market role management', () => {
     const manageMarket = new ManageMarketPage(page);
     await manageMarket.waitForOverlay();
 
-    await manageMarket.addUser(SECOND_USER.email, 'editor');
+    await manageMarket.invite(SECOND_USER.email, 'editor');
+    await expect(manageMarket.addUserSent).toHaveText(`Invitation sent to ${SECOND_USER.email}.`);
+    await expect(manageMarket.invitation(SECOND_USER.email)).toBeVisible();
 
+    // They join once they accept; Manage market reads who has access again as it opens.
+    await acceptInvitation(SECOND_USER, marketId);
+    await page.getByTestId('manage-market-close-button').click();
+    await manageButton.click();
+    await manageMarket.waitForOverlay();
     await expect(page.locator('.user-card').filter({ hasText: SECOND_USER.email })).toBeVisible({
       timeout: 5000,
     });

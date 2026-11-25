@@ -397,6 +397,44 @@ def test_scratch_symlinks_and_the_changelog_are_not_checked(repo, capsys):
     assert run(capsys, "check")[0] == 0
 
 
+DESIGN_MD = (
+    "---\n"
+    "version: alpha\n"
+    "name: Project\n"
+    'description: "Not a [link](gone.md) while it is front matter."\n'
+    "colors:\n"
+    '  primary: "{colors.green}" # the format\'s name for --green\n'
+    '  green: "#36826f" # white text on it: 4.59\n'
+    "typography:\n"
+    "  text-sm:\n"
+    "    fontFamily: Outfit\n"
+    "    fontSize: 14px\n"
+    "---\n"
+    "\n"
+    "# The design contract\n"
+    "\n"
+    "## Colors\n"
+    "\n"
+    "[Guards](docs/implementation/modules/guards.md#why) say why.\n"
+)
+
+
+def test_design_mds_front_matter_is_another_formats_and_never_read_as_a_nodes(repo, capsys):
+    commit(repo, {**graph(), "DESIGN.md": DESIGN_MD})
+    code, out = run(capsys, "check")
+    assert code == 0, out
+
+
+def test_design_mds_body_links_are_checked(repo, capsys):
+    design = DESIGN_MD.replace("guards.md#why", "guards.md#gone") + "\n[x](nowhere.md)\n"
+    commit(repo, {**graph(), "DESIGN.md": design})
+    code, lines = errors(capsys, "check")
+    assert lines == [
+        "DESIGN.md:18: broken fragment: docs/implementation/modules/guards.md#gone",
+        "DESIGN.md:20: broken link: nowhere.md",
+    ]
+
+
 # check: folders, reachability, back-links
 
 

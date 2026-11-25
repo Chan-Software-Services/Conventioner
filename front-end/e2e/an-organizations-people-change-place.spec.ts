@@ -3,6 +3,7 @@ import { test, expect, TEST_USER, BACKEND_URL, OrganizationsPage } from './fixtu
 import { loginViaApi } from './helpers/seeds';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
 import { uniqueMarketName } from './helpers/uniqueName';
+import { placeInOrganization } from './helpers/grantMarketRole';
 import { PHONE_AND_DESK, inTheWindow } from './helpers/phoneWindow';
 
 /**
@@ -29,15 +30,8 @@ async function seed(request: APIRequestContext): Promise<{ orgId: string; orgNam
   const org = await request.post(`${BACKEND_URL}/organizations`, { data: { name: orgName } });
   expect(org.ok(), await org.text()).toBeTruthy();
   const orgId = (await org.json()).organization_id as string;
-  for (const [place, email] of [
-    ['admins', ADMIN],
-    ['members', MEMBER],
-  ]) {
-    const added = await request.post(`${BACKEND_URL}/organizations/${orgId}/${place}`, {
-      data: { user_email: email },
-    });
-    expect(added.ok(), await added.text()).toBeTruthy();
-  }
+  await placeInOrganization(request, orgId, { email: ADMIN, password: PASSWORD }, 'admin');
+  await placeInOrganization(request, orgId, { email: MEMBER, password: PASSWORD }, 'member');
   return { orgId, orgName };
 }
 
@@ -121,7 +115,8 @@ for (const size of PHONE_AND_DESK) {
       await expect(orgs.historySentences.first()).toHaveText(
         `${me} changed ${ADMIN} from Member to Admin`,
       );
-      await expect(orgs.historySentences).toHaveCount(4);
+      // Each place given by an invitation is two entries, the invitation and its acceptance.
+      await expect(orgs.historySentences).toHaveCount(6);
 
       // The server holds it: a fresh read lists them where the screen does.
       await page.reload();

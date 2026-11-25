@@ -7,6 +7,7 @@ import {
 } from './helpers/seedPhaseMarket';
 import { marketScreenPath } from './helpers/marketScreens';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { withUser } from './helpers/withUser';
 import { ApplicationsAllPage } from './pages/ApplicationsAllPage';
 import { ReviewersPanel } from './pages/ReviewersPanel';
@@ -50,11 +51,8 @@ test.beforeAll(async ({ request }) => {
     [CAT, 'viewer'],
     [DEE, 'viewer'],
     [VIEWER, 'viewer'],
-  ]) {
-    const res = await request.post(`${BACKEND_URL}/markets/${marketId}/roles`, {
-      data: { user_email: email, role },
-    });
-    expect(res.ok(), await res.text()).toBeTruthy();
+  ] as const) {
+    await grantMarketRole(request, marketId, { email, password: PASSWORD }, role);
   }
 });
 

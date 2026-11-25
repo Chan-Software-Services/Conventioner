@@ -34,8 +34,9 @@ sources:
   - T317
   - T335
   - T452
-  - T584
   - T539
+  - T584
+  - T583
 ---
 
 # Operations
@@ -122,8 +123,8 @@ What a person may do is decided per organization and per market:
 
 **An organization's owner and admins run every market it holds, and its members read them.**
 A role given on a market is held beside the organization's, and the higher one counts; only the market's owner deletes it.
-Anyone outside the organization who must change a market, including a volunteer at the door, needs a role on that market: Markets, the market's card, **Manage**, "Users with access", **Add user**, their email and a role.
-The person must already have an account.
+Anyone outside the organization who must change a market, including a volunteer at the door, needs a role on that market: Markets, the market's card, **Manage**, "Users with access", **Invite someone**, their email and a role; they accept it signed in with that address.
+Someone with no account makes one with that address first, as the invitation's email tells them.
 
 ### Making an account
 
@@ -190,6 +191,7 @@ mongorestore --uri '<production URI>' --nsInclude 'conventioner.*' --drop ~/conv
 ```
 
 A dump holds every vendor's name, email and answers: keep it on your own machine, never in this repository, a shared drive or a CI artifact (the repository is public).
+**A backup taken before 2026-11-19 holds organizations with no people map**, which the release carrying T583 reads as holding nobody: fold them right after restoring it, as [a backup older than 2026-11-19](RELEASING.md#a-backup-older-than-2026-11-19) says.
 
 ### Starting a database, and migrations
 

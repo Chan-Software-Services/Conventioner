@@ -2,6 +2,8 @@ import type { APIRequestContext, Locator, Page } from '@playwright/test';
 import { test, expect, TEST_USER, BACKEND_URL } from './fixtures';
 import { ManageMarketPage } from './pages/ManageMarketPage';
 import { seedApplicantMarket } from './helpers/seedApplicantMarket';
+import { grantMarketRole } from './helpers/grantMarketRole';
+import { acceptInvitation, type MarketInvitationRole } from './helpers/invitations';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
 import { withUser } from './helpers/withUser';
 
@@ -21,18 +23,15 @@ test.beforeAll(() => {
   for (const email of [COLLEAGUE, EDITOR]) ensureVerifiedUser(email, PASSWORD);
 });
 
-/** A market of the test user's, with `email` holding `role` on it. */
-async function seed(request: APIRequestContext, email: string, role: string) {
+/** A market of the test user's, with `email` holding `role` on it, by an invitation accepted. */
+async function seed(request: APIRequestContext, email: string, role: MarketInvitationRole) {
   const { marketId, marketName } = await seedApplicantMarket(
     request,
     BACKEND_URL,
     TEST_USER.email,
     TEST_USER.password,
   );
-  const added = await request.post(`${BACKEND_URL}/markets/${marketId}/roles`, {
-    data: { user_email: email, role },
-  });
-  expect(added.ok(), await added.text()).toBeTruthy();
+  await grantMarketRole(request, marketId, { email, password: PASSWORD }, role);
   return { marketId, marketName };
 }
 
@@ -238,7 +237,7 @@ test.describe('at a desk', () => {
     await expect(people).toBeFocused();
   });
 
-  test('adding back someone whose write was refused brings their row back without the words', async ({
+  test('inviting back someone whose write was refused takes the words away, and their row is back once they accept', async ({
     authenticatedPage: page,
     request,
   }) => {
@@ -255,10 +254,19 @@ test.describe('at a desk', () => {
     await manage.roleChangeConfirmButton.click();
     await expect(page.getByTestId('manage-market-user-error')).toBeVisible();
 
-    await manage.addUser(COLLEAGUE, 'viewer');
+    await manage.invite(COLLEAGUE, 'viewer');
 
-    await expect(roleSelect(page, COLLEAGUE)).toHaveValue('viewer');
+    await expect(manage.addUserSent).toHaveText(`Invitation sent to ${COLLEAGUE}.`);
     await expect(page.getByTestId('manage-market-user-error')).toHaveCount(0);
+    await expect(person(page, COLLEAGUE)).toHaveCount(0);
+    await expect(manage.invitation(COLLEAGUE)).toHaveCount(1);
+
+    await acceptInvitation({ email: COLLEAGUE, password: PASSWORD }, marketId);
+    await page.getByTestId('manage-market-close-button').click();
+    await page.getByTestId('market-card-manage-button').click();
+    await manage.waitForOverlay();
+    await expect(roleSelect(page, COLLEAGUE)).toHaveValue('viewer');
+    await expect(manage.invited).toHaveCount(0);
   });
 
   test('a write refused because the role moved meanwhile states the role they hold now', async ({
@@ -266,10 +274,7 @@ test.describe('at a desk', () => {
     browser,
   }) => {
     const { marketId, marketName } = await seed(request, COLLEAGUE, 'viewer');
-    const added = await request.post(`${BACKEND_URL}/markets/${marketId}/roles`, {
-      data: { user_email: EDITOR, role: 'admin' },
-    });
-    expect(added.ok(), await added.text()).toBeTruthy();
+    await grantMarketRole(request, marketId, { email: EDITOR, password: PASSWORD }, 'admin');
 
     await withUser(browser, EDITOR, PASSWORD, async (page) => {
       const manage = await openManage(page, marketName);

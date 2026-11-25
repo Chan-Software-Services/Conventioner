@@ -221,9 +221,6 @@ def org_delete(monkeypatch):
     monkeypatch.setattr(
         OrgsApi, "organizations_collection", FakeOrganizations({"id": ORG_ID, "people": {USER_ID: "owner"}}))
     monkeypatch.setattr(
-        OrgsApi.users_collection, "update_many", lambda *_a, **_k: None, raising=False
-    )
-    monkeypatch.setattr(
         OrgsApi.UsersApi, "get_user", lambda _email: SimpleNamespace(id=USER_ID, email=USER_EMAIL)
     )
     monkeypatch.setattr(

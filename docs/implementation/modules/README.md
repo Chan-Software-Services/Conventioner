@@ -35,7 +35,7 @@ One line per node, sorted by file name.
 - [The autosave of the plan, a layout, the review lists and the form tab](plan-autosave.md) - `useAutosave`, one phase moved by one table, and Market Setup on it: one save out at a time, the newest copy when it answers, "Plan saved" only once the server holds the last edit, the hold, the flush
 - [The phase rail](phase-rail.md) - the lifecycle band: no before the click, the derived spine, the menu, where a move lands
 - [The phase record](phase-record.md) - `phaseHistory`: every phase a market entered, `phases_reached()`, and what an older market can prove
-- [The organization's people](organization-people.md) - `organization_people.py`: the one writer of an organization's people map, its table, one conditional write holding the places it judged, the lists as its mirror, the 409
+- [The organization's people](organization-people.md) - `organization_people.py`: the one writer of an organization's people map, its table, one conditional write holding the places it judged, the map alone, the 409
 - [Placements](placements.md) - the one writer of `assignmentObject`: four EDITOR doors, pins, the held seat, orphans, what a read shows
 - [The public map page](public-map-page.md) - `PublicMapView` and `components/publicmap/`, shown at `/<slug>` on the market page while the map is open: one sheet filling the window, the day, location, table and half in the query, the bubble at a desk and the card over the panel on a phone, the vendor search, the backdrop
 - [The public map](public-map.md) - `public_map.py`: the Public map card's settings, one gate beside the vendor page's, an allowlisted read and its image, `public_answers.py`'s cleaning

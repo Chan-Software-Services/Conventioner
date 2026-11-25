@@ -4,6 +4,7 @@ import { SEED_MARKET_DATE, seedMarketWithVendors } from './helpers/seeds';
 import { seedAssignedMarket } from './helpers/seedAssignedMarket';
 import { savePlan } from './helpers/savePlan';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { withUser } from './helpers/withUser';
 import { marketScreenPath, marketSetupPath } from './helpers/marketScreens';
 import { mongoEval } from './helpers/mongo';
@@ -74,10 +75,7 @@ test.describe('the Pricing card', () => {
         { $set: { 'form_data.essential_section_ranking': ['North Wing', 'Landing'] } })`,
     );
     await savePlan(request, BACKEND_URL, TEST_USER.email, marketId, PLAN);
-    await call(request, 'post', `/markets/${marketId}/roles`, {
-      user_email: EDITOR.email,
-      role: 'editor',
-    });
+    await grantMarketRole(request, marketId, EDITOR, 'editor');
 
     await withUser(browser, EDITOR.email, EDITOR.password, async (page) => {
       await page.goto(marketSetupPath(marketId, 'setup'));

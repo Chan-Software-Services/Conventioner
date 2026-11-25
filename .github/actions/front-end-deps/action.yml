@@ -13,6 +13,14 @@ inputs:
       a run saves, so the others do not race to write the same key.
     required: false
     default: "false"
+  fill-npm-cache:
+    description: >-
+      "true" to run `npm ci` whatever the cache holds, for the warm-caches job when npm's own cache
+      (setup-node's) missed, so its post step has that cache full to save. The restore then only
+      looks the key up, so a hit downloads nothing it would install over; the save still runs only
+      on a miss.
+    required: false
+    default: "false"
 
 runs:
   using: composite
@@ -26,8 +34,9 @@ runs:
       with:
         path: front-end/node_modules
         key: front-end-node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.nvmrc', 'front-end/package-lock.json') }}
+        lookup-only: ${{ inputs.fill-npm-cache == 'true' }}
     - name: Install with npm ci
-      if: steps.modules.outputs.cache-hit != 'true'
+      if: inputs.fill-npm-cache == 'true' || steps.modules.outputs.cache-hit != 'true'
       shell: bash
       working-directory: front-end
       run: npm ci

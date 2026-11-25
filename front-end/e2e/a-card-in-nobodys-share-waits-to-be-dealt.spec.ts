@@ -6,6 +6,7 @@ import {
   seedApplicantMarket,
 } from './helpers/seedApplicantMarket';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { withUser } from './helpers/withUser';
 import { ApplicationsAllPage } from './pages/ApplicationsAllPage';
 import { ManageMarketPage } from './pages/ManageMarketPage';
@@ -48,8 +49,7 @@ test('an application in nobody’s share reads "not dealt yet", warning of no on
     { setupObject: planSetupObject([DATE]) },
   );
   const api = `${BACKEND_URL}/markets/${market.marketId}`;
-  const role = await request.post(`${api}/roles`, { data: { user_email: ANA, role: 'viewer' } });
-  expect(role.ok(), await role.text()).toBeTruthy();
+  await grantMarketRole(request, market.marketId, { email: ANA, password: PASSWORD }, 'viewer');
   const chosen = await request.put(`${api}/reviewers`, { data: { reviewers: [ANA] } });
   expect(chosen.ok(), await chosen.text()).toBeTruthy();
 
