@@ -270,7 +270,8 @@ NOT_A_FLOORPLAN = "This file is not a PNG, JPG, WebP or PDF."
 
 class TestAnUploadIsReadByItsOwnBytes:
     """An upload's type is read from its own first bytes, never from the type or the name the
-    client sent with it: those only choose the words of a refusal."""
+    client sent with it: those choose only the words of a refusal, and the name is kept as the
+    stored file's name."""
 
     @pytest.mark.parametrize("data,expected", [
         (b"\x89PNG\r\n\x1a\n", "image/png"),
