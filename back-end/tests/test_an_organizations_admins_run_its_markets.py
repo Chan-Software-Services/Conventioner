@@ -81,6 +81,28 @@ def test_an_admin_of_another_organization_gets_nothing_here():
     assert PermissionsApi.get_user_market_role(ORG_ADMIN, market(), other) is None
 
 
+# A map stored in another order than its places: a member first, the owner last, and two admins.
+OUT_OF_ORDER_PEOPLE = {
+    ORG_MEMBER: "member", ORG_ADMIN: "admin", "org-admin-2": "admin", ORG_OWNER: "owner",
+}
+
+
+def test_an_organizations_people_are_named_owner_then_admins_then_members():
+    org = organization(people=OUT_OF_ORDER_PEOPLE)
+
+    assert PermissionsApi.organization_people_in_order(org) == [
+        ORG_OWNER, ORG_ADMIN, "org-admin-2", ORG_MEMBER,
+    ]
+
+
+def test_everyone_with_a_role_is_named_the_markets_roles_first_then_the_organizations_in_order():
+    org = organization(people=OUT_OF_ORDER_PEOPLE)
+
+    assert PermissionsApi.people_with_market_role(market({"market-editor": "editor"}), org) == [
+        MARKET_OWNER, "market-editor", ORG_OWNER, ORG_ADMIN, "org-admin-2", ORG_MEMBER,
+    ]
+
+
 def served(who):
     """The table's answers the market read serves this person, from the role it resolves."""
     role = PermissionsApi.get_user_market_role(who, market(), organization())
