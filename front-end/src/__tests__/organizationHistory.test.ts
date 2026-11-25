@@ -73,6 +73,59 @@ describe('what an organization’s entry says', () => {
     ).toBe('olive@ember.test took the Member role from ada@ember.test');
   });
 
+  it('words an invitation to a place, withdrawn and declined, as a market’s are (T538)', () => {
+    const invitation = (action: string, kind: string, role: string, actor = 'olive@ember.test') =>
+      sentence({ action, kind, actor, subject: { email: 'ada@ember.test' }, detail: { role } });
+    expect(invitation('manage-organization-admins', 'invited', 'admin')).toBe(
+      'olive@ember.test invited ada@ember.test as an Admin',
+    );
+    expect(invitation('manage-organization-members', 'invited', 'member')).toBe(
+      'olive@ember.test invited ada@ember.test as a Member',
+    );
+    for (const [action, role] of [
+      ['manage-organization-admins', 'admin'],
+      ['manage-organization-members', 'member'],
+    ]) {
+      expect(invitation(action, 'invitation_withdrawn', role)).toBe(
+        'olive@ember.test withdrew the invitation to ada@ember.test',
+      );
+    }
+    expect(
+      invitation('manage-organization-admins', 'invitation_declined', 'admin', 'ada@ember.test'),
+    ).toBe('ada@ember.test declined the Admin role');
+    expect(
+      invitation('manage-organization-members', 'invitation_declined', 'member', 'ada@ember.test'),
+    ).toBe('ada@ember.test declined the Member role');
+  });
+
+  it('words a place given or changed by an invitation accepted, which they accepted', () => {
+    expect(
+      sentence({
+        action: 'manage-organization-members',
+        kind: 'role_given',
+        subject: PERSON,
+        detail: { before: { role: null }, after: { role: 'member' }, by_invitation: true },
+      }),
+    ).toBe('olive@ember.test gave ada@ember.test the Member role, which they accepted');
+    expect(
+      sentence({
+        action: 'manage-organization-admins',
+        kind: 'role_given',
+        subject: PERSON,
+        detail: { before: { role: null }, after: { role: 'admin' }, by_invitation: true },
+      }),
+    ).toBe('olive@ember.test gave ada@ember.test the Admin role, which they accepted');
+    // A member who accepts an admin invitation becomes an admin: the place changed.
+    expect(
+      sentence({
+        action: 'manage-organization-admins',
+        kind: 'role_changed',
+        subject: PERSON,
+        detail: { before: { role: 'member' }, after: { role: 'admin' }, by_invitation: true },
+      }),
+    ).toBe('olive@ember.test changed ada@ember.test from Member to Admin, which they accepted');
+  });
+
   it('words ownership handed on by who has it now', () => {
     expect(
       sentence({
@@ -262,9 +315,6 @@ function serve(...pages: Array<{ entries: MarketHistoryEntry[]; next: string | n
 const ORG: Organization = {
   id: 'org-1',
   name: 'Ember Fairs',
-  owner: 'user-olive',
-  admins: [],
-  members: [],
   marketCount: 0,
   marketsWithOwnRole: {},
   ownerEmail: 'olive@ember.test',
@@ -472,7 +522,6 @@ describe('the History section of Manage organization', () => {
 describe('Manage organization holds together as Manage market does', () => {
   const WITH_AN_ADMIN: Organization = {
     ...ORG,
-    admins: ['user-ada'],
     adminPeople: [{ userId: 'user-ada', email: 'ada@ember.test' }],
   };
 

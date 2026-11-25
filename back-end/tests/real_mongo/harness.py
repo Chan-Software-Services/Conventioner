@@ -216,6 +216,7 @@ BOOT_INDEX_BUILDS: Tuple[Tuple[str, str], ...] = (
     ("organizer_sessions", "ensure_organizer_session_indexes"),
     ("api.attendance", "ensure_attendance_indexes"),
     ("payments", "ensure_payment_indexes"),
+    ("invitations", "ensure_invitation_indexes"),
     ("lookup_indexes", "ensure_lookup_indexes"),
 )
 

@@ -140,7 +140,7 @@ export class LoginPage {
 
   /**
    * Sign in from the login page, and return once Markets, where it lands, has the answers to its
-   * two reads, the account's markets and its organizations.
+   * three reads, the account's markets, its organizations and the invitations waiting for it.
    *
    * A seed that then signs in on this page's cookies (`page.request`) ends this sign-in first, as
    * every sign-in ends the one its browser held, so a read of Markets still out then answers 401
@@ -157,7 +157,11 @@ export class LoginPage {
     await this.goto();
     await this.fillEmail(email);
     await this.fillPassword(password);
-    const reads = Promise.all([answered('/api/markets'), answered('/api/organizations')]);
+    const reads = Promise.all([
+      answered('/api/markets'),
+      answered('/api/organizations'),
+      answered('/api/invitations'),
+    ]);
     // Set before the submit, so its timers end first: a sign-in that never lands fails on the
     // landing below, which says so, rather than on these waits.
     reads.catch(() => undefined);

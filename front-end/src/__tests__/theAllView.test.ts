@@ -15,8 +15,15 @@ import {
   selectAll,
 } from '@/utils/reviewQueue';
 import { statusLabel } from '@/utils/verdicts';
+import { servedReview } from './support/servedReview';
 
-const app = (id: string, status: ApplicationStatus, owner?: string): Application =>
+/** An application as stored, with the review the server serves it (`served`). */
+const app = (
+  id: string,
+  status: ApplicationStatus,
+  served: ReturnType<typeof servedReview>,
+  owner?: string,
+): Application =>
   ({
     id,
     applicantEmail: `${id}@x.test`,
@@ -24,15 +31,24 @@ const app = (id: string, status: ApplicationStatus, owner?: string): Application
     submittedAt: '2026-05-01',
     formData: {},
     followUpOwner: owner ? { email: owner } : null,
+    ...served,
   }) as Application;
 
+const OPEN = servedReview('open');
+const FOLLOW_UP = servedReview('follow_up');
+const APPROVED = servedReview('approved');
+const REJECTED = servedReview('rejected');
+
 const APPS = [
-  app('a', ApplicationStatus.Open),
-  app('b', ApplicationStatus.UnderReview),
-  app('c', ApplicationStatus.NeedsFollowUp, 'alex@market.test'),
-  app('d', ApplicationStatus.NeedsFollowUp, 'sam@market.test'),
-  app('e', ApplicationStatus.ReviewerApproved),
-  app('f', ApplicationStatus.ReviewerRejected),
+  app('a', ApplicationStatus.Open, OPEN),
+  app('b', ApplicationStatus.UnderReview, OPEN),
+  app('c', ApplicationStatus.NeedsFollowUp, FOLLOW_UP, 'alex@market.test'),
+  app('d', ApplicationStatus.NeedsFollowUp, FOLLOW_UP, 'sam@market.test'),
+  app('e', ApplicationStatus.ReviewerApproved, APPROVED),
+  app('f', ApplicationStatus.ReviewerRejected, REJECTED),
+  // The old offers flow's statuses, which the server serves as the verdicts they carried.
+  app('g', ApplicationStatus.Assigned, APPROVED),
+  app('h', ApplicationStatus.Cancelled, REJECTED),
 ];
 
 const ids = (filter: string, mine = false) =>
@@ -40,14 +56,14 @@ const ids = (filter: string, mine = false) =>
 
 describe('the All view', () => {
   it('lists every application by default', () => {
-    expect(ids('all')).toHaveLength(6);
+    expect(ids('all')).toHaveLength(8);
   });
 
-  it('filters by status, the undecided together', () => {
+  it('filters by the served state, whatever the stored spelling', () => {
     expect(ids('undecided')).toEqual(['a', 'b']);
     expect(ids('needs_follow_up')).toEqual(['c', 'd']);
-    expect(ids('reviewer_approved')).toEqual(['e']);
-    expect(ids('reviewer_rejected')).toEqual(['f']);
+    expect(ids('reviewer_approved')).toEqual(['e', 'g']);
+    expect(ids('reviewer_rejected')).toEqual(['f', 'h']);
   });
 
   it('narrows to the follow-ups the viewer owns with Mine', () => {
@@ -94,13 +110,17 @@ describe('which view the review opens on (E38/F05/S01)', () => {
 });
 
 describe('Select all (E38/F05/S02)', () => {
-  const held = (id: string, status: ApplicationStatus, holder: string): Application =>
-    ({ ...app(id, status), heldBy: { email: holder } }) as Application;
+  const held = (
+    id: string,
+    status: ApplicationStatus,
+    served: ReturnType<typeof servedReview>,
+    holder: string,
+  ): Application => ({ ...app(id, status, served), heldBy: { email: holder } }) as Application;
   const ROWS = [
-    app('a', ApplicationStatus.Open),
-    held('b', ApplicationStatus.Open, 'sam@market.test'),
-    held('c', ApplicationStatus.UnderReview, 'Alex@Market.test'),
-    app('d', ApplicationStatus.ReviewerApproved),
+    app('a', ApplicationStatus.Open, OPEN),
+    held('b', ApplicationStatus.Open, OPEN, 'sam@market.test'),
+    held('c', ApplicationStatus.UnderReview, OPEN, 'Alex@Market.test'),
+    app('d', ApplicationStatus.ReviewerApproved, APPROVED),
   ];
 
   it('ticks every row the filter shows, and nothing it hides', () => {
@@ -122,8 +142,19 @@ describe('Select all (E38/F05/S02)', () => {
       held: 1,
       decided: 1,
     });
-    // A row held elsewhere is said once, as held, whatever its verdict.
-    const heldAndDecided = held('e', ApplicationStatus.ReviewerRejected, 'sam@market.test');
+    // A row held elsewhere is said once, as held, whatever its verdict; an old offers status is
+    // the verdict it carried.
+    expect(selectAll([app('g', ApplicationStatus.Assigned, APPROVED)], 'alex', false)).toEqual({
+      ids: [],
+      held: 0,
+      decided: 1,
+    });
+    const heldAndDecided = held(
+      'e',
+      ApplicationStatus.ReviewerRejected,
+      REJECTED,
+      'sam@market.test',
+    );
     expect(selectAll([heldAndDecided], 'alex@market.test', false)).toEqual({
       ids: [],
       held: 1,
@@ -171,22 +202,45 @@ describe('what Select all left out, in words (E38/F05/S02, E38/F06/S01)', () => 
 });
 
 describe('the All view narrowed to a reviewer’s share (E38/F07/S04)', () => {
+  const ALEX = 'alex@market.test';
+  const SAM = 'sam@market.test';
+  /** Dealt to `reviewer`, in the share the server serves (`share`). */
   const dealt = (
     id: string,
     status: ApplicationStatus,
+    served: ReturnType<typeof servedReview>,
     reviewer: string | null,
     owner?: string,
   ): Application => ({
-    ...app(id, status, owner),
+    ...app(id, status, served, owner),
     reviewer: reviewer ? { userId: reviewer, email: reviewer } : null,
   });
   const SHARES = [
-    dealt('a', ApplicationStatus.Open, 'alex@market.test'),
-    dealt('b', ApplicationStatus.Open, 'Sam@Market.test'),
-    dealt('c', ApplicationStatus.NeedsFollowUp, 'alex@market.test', 'alex@market.test'),
-    dealt('d', ApplicationStatus.NeedsFollowUp, 'sam@market.test', 'alex@market.test'),
-    dealt('e', ApplicationStatus.ReviewerApproved, 'alex@market.test'),
-    dealt('f', ApplicationStatus.ReviewerRejected, null),
+    dealt('a', ApplicationStatus.Open, servedReview('open', { share: [ALEX] }), ALEX),
+    dealt('b', ApplicationStatus.Open, servedReview('open', { share: [SAM] }), 'Sam@Market.test'),
+    dealt(
+      'c',
+      ApplicationStatus.NeedsFollowUp,
+      servedReview('follow_up', { share: [ALEX] }),
+      ALEX,
+      ALEX,
+    ),
+    dealt(
+      'd',
+      ApplicationStatus.NeedsFollowUp,
+      servedReview('follow_up', { share: [SAM, ALEX] }),
+      SAM,
+      ALEX,
+    ),
+    dealt(
+      'e',
+      ApplicationStatus.ReviewerApproved,
+      servedReview('approved', { share: [ALEX] }),
+      ALEX,
+    ),
+    dealt('f', ApplicationStatus.ReviewerRejected, REJECTED, null),
+    // Dealt to Ben, since removed from the team: in nobody's share until the next deal.
+    dealt('w', ApplicationStatus.Open, servedReview('open', { waiting: true }), 'ben@market.test'),
   ];
   const shareIds = (reviewer: string | null, filter = 'all', mine = false) =>
     allViewApplications(SHARES, allViewFilter(filter), mine, 'alex@market.test', reviewer).map(
@@ -200,7 +254,13 @@ describe('the All view narrowed to a reviewer’s share (E38/F07/S04)', () => {
   it('counts a follow-up the reviewer named owns in their share, whoever reads it', () => {
     const owned = [
       ...SHARES,
-      dealt('g', ApplicationStatus.NeedsFollowUp, 'alex@market.test', 'sam@market.test'),
+      dealt(
+        'g',
+        ApplicationStatus.NeedsFollowUp,
+        servedReview('follow_up', { share: [ALEX, SAM] }),
+        ALEX,
+        SAM,
+      ),
     ];
     const ids = (reviewer: string) =>
       allViewApplications(owned, allViewFilter('all'), false, 'alex@market.test', reviewer).map(
@@ -217,7 +277,7 @@ describe('the All view narrowed to a reviewer’s share (E38/F07/S04)', () => {
   });
 
   it('lists every application for nobody named, those never dealt included', () => {
-    expect(shareIds(null)).toEqual(['a', 'b', 'c', 'd', 'e', 'f']);
+    expect(shareIds(null)).toEqual(['a', 'b', 'c', 'd', 'e', 'f', 'w']);
   });
 
   it('narrows together with the status filter and Mine', () => {
@@ -227,13 +287,14 @@ describe('the All view narrowed to a reviewer’s share (E38/F07/S04)', () => {
     expect(shareIds('sam@market.test', 'all', true)).toEqual(['d']);
   });
 
-  it('lists nothing for a reviewer dealt nothing', () => {
+  it('lists nothing for a reviewer dealt nothing, nor one removed with work still on their name', () => {
     expect(shareIds('ben@market.test')).toEqual([]);
+    expect(shareIds('cal@market.test')).toEqual([]);
   });
 
-  it('leaves the Stats tab’s test by status alone', () => {
+  it('leaves the Stats tab’s test by the served state alone', () => {
     expect(allViewLists.length).toBe(2);
-    expect(allViewLists('undecided', ApplicationStatus.Open)).toBe(true);
-    expect(allViewLists('undecided', ApplicationStatus.NeedsFollowUp)).toBe(false);
+    expect(allViewLists('undecided', 'open')).toBe(true);
+    expect(allViewLists('undecided', 'follow_up')).toBe(false);
   });
 });

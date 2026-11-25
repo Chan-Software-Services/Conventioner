@@ -95,40 +95,59 @@ async function reviewingMarket(request: APIRequestContext, status = 'open') {
 const openApplications = (marketId: string) =>
   `${marketScreenPath(marketId, 'applications')}?view=all&status=undecided`;
 
-/** Each screen's own read: where it is, what it reads, and the name its Try again goes by. */
-function reads(reviewing: string, published: string) {
+/**
+ * Each screen's own read: where it is, what it reads, the name its Try again goes by, and the kind
+ * of failure it is read under. Every screen says a kind through `getApiErrorMessage`, directly or
+ * through `useServerRead`, whose sentence for each kind `api.test.ts` pins; so each screen is read
+ * under one kind here, and each kind is read on three screens.
+ */
+function reads(
+  reviewing: string,
+  published: string,
+): { screen: string; at: string; url: RegExp; name: string; kind: Kind }[] {
   const list = /\/markets\/[^/]+\/applications(\?.*)?$/;
   return [
-    { screen: 'Markets', at: '/markets', url: /\/markets(\?.*)?$/, name: 'markets' },
+    {
+      screen: 'Markets',
+      at: '/markets',
+      url: /\/markets(\?.*)?$/,
+      name: 'markets',
+      kind: 'offline',
+    },
     {
       screen: 'Organizations',
       at: '/organizations',
       url: /\/organizations(\?.*)?$/,
       name: 'organizations',
+      kind: 'server',
     },
     {
       screen: 'Applications, All',
       at: `${marketScreenPath(reviewing, 'applications')}?view=all`,
       url: list,
       name: 'applications',
+      kind: 'server',
     },
     {
       screen: 'Applications, One by one',
       at: oneByOnePath(reviewing),
       url: list,
       name: 'applications',
+      kind: 'offline',
     },
     {
       screen: 'Assignments',
       at: marketScreenPath(published, 'assignments'),
       url: /\/markets\/[^/]+\/tables$/,
       name: 'tables',
+      kind: 'offline',
     },
     {
       screen: 'Attendance',
       at: marketScreenPath(published, 'attendance'),
       url: /\/markets\/[^/]+\/attendance$/,
       name: 'attendance',
+      kind: 'server',
     },
   ];
 }
@@ -138,7 +157,7 @@ test.describe('a failed read', () => {
     authenticatedPage: page,
     request,
   }) => {
-    test.setTimeout(180_000);
+    test.setTimeout(90_000);
     const { marketId: reviewing } = await reviewingMarket(request);
     const { marketId: published } = await seedPublishedMarketWithAssignments(
       request,
@@ -147,21 +166,19 @@ test.describe('a failed read', () => {
       TEST_USER.password,
     );
 
-    for (const { screen, at, url, name } of reads(reviewing, published)) {
-      for (const { kind, says } of KINDS) {
-        await test.step(`${screen}, ${kind}`, async () => {
-          await failUntilCleared(page, url, kind);
-          await page.goto(at);
+    for (const { screen, at, url, name, kind } of reads(reviewing, published)) {
+      await test.step(`${screen}, ${kind}`, async () => {
+        await failUntilCleared(page, url, kind);
+        await page.goto(at);
 
-          const failed = page.getByTestId(`${name}-read-failed`);
-          await expect(failed).toContainText(says);
-          await expect(page.getByText('Internal server error')).toHaveCount(0);
+        const failed = page.getByTestId(`${name}-read-failed`);
+        await expect(failed).toContainText(KINDS.find((each) => each.kind === kind)!.says);
+        await expect(page.getByText('Internal server error')).toHaveCount(0);
 
-          await page.unroute(url);
-          await page.getByTestId(`${name}-retry`).click();
-          await expect(failed).toHaveCount(0);
-        });
-      }
+        await page.unroute(url);
+        await page.getByTestId(`${name}-retry`).click();
+        await expect(failed).toHaveCount(0);
+      });
     }
   });
 

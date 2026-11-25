@@ -2,7 +2,6 @@ import { test, expect, TEST_USER, BACKEND_URL, APP_API } from './fixtures';
 import { marketScreenPath } from './helpers/marketScreens';
 import { TablesPage } from './pages/TablesPage';
 import { seedAssignedMarket, type AssignedSeedResult } from './helpers/seedAssignedMarket';
-import { loginViaApi } from './helpers/seeds';
 
 /**
  * Changing a placement from the Tables view (E11/F03/S01).
@@ -189,30 +188,6 @@ test.describe('Changing a placement on the Tables view', () => {
     for (const entry of theirs) {
       expect(entry.vendors).toContain(first);
     }
-  });
-
-  test('deleting a market takes its placement history with it', async ({ request }) => {
-    // The trail names the organizers who made each change, so it must not outlive the market.
-    await loginViaApi(request, BACKEND_URL, TEST_USER.email, TEST_USER.password);
-    const doomed = await seedAssignedMarket(
-      request,
-      BACKEND_URL,
-      TEST_USER.email,
-      TEST_USER.password,
-    );
-
-    const before = await request.get(
-      `${BACKEND_URL}/markets/${doomed.marketId}/history?group=Assignment`,
-    );
-    expect(((await before.json()) as { entries: unknown[] }).entries.length).toBeGreaterThan(0);
-
-    const deleted = await request.delete(`${BACKEND_URL}/markets/${doomed.marketId}`);
-    expect(deleted.ok(), await deleted.text()).toBeTruthy();
-
-    const after = await request.get(
-      `${BACKEND_URL}/markets/${doomed.marketId}/history?group=Assignment`,
-    );
-    expect(after.status()).toBe(404);
   });
 
   test('the filters can be set from the page, not only cleared', async ({

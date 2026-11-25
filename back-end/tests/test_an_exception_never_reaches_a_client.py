@@ -40,6 +40,7 @@ import api.applicants as ApplicantsApi
 import api.attendance as AttendanceApi
 import api.discord_connection as DiscordConnectionApi
 import api.door as DoorApi
+import api.invitees as InviteesApi
 import api.markets as MarketsApi
 import api.organizations as OrgsApi
 import application_status as ReviewState
@@ -199,8 +200,7 @@ def organization(monkeypatch):
     """One organization, owned by whoever ``owner`` names, holding the markets given."""
     def install(owner=OWNER_ID, markets=()):
         install_organizations(monkeypatch, FakeOrganizations({
-            "_id": "org-object-id", "id": ORG_ID, "name": ORG_NAME, "owner": owner,
-            "admins": [], "members": [],
+            "_id": "org-object-id", "id": ORG_ID, "name": ORG_NAME, "people": {owner: "owner"},
         }))
         monkeypatch.setattr(OrgsApi, "markets_collection", FakeOrganizationMarkets(*markets))
     return install
@@ -421,11 +421,24 @@ ORGANIZATION_AND_ROLE_ROUTES = [
      OrgsApi, "reset_default_permissions"),
     ("get", f"/organizations/{ORG_ID}/default-permission-history", None,
      OrgsApi, "get_default_permission_history"),
+    ("post", f"/organizations/{ORG_ID}/invitations",
+     {"email": "member@example.com", "place": "member"}, OrgsApi, "invite_to_organization"),
+    ("get", f"/organizations/{ORG_ID}/invitations", None, OrgsApi, "organization_invitations"),
+    ("delete", f"/organizations/{ORG_ID}/invitations/invitation-1", None,
+     OrgsApi, "withdraw_organization_invitation"),
     ("post", "/markets/market-123/roles", {"user_email": "editor@example.com", "role": "editor"},
      MarketsApi, "add_market_role"),
     ("delete", "/markets/market-123/roles/user-2", None, MarketsApi, "remove_market_role"),
     ("put", "/markets/market-123/roles/user-2", {"role": "viewer"},
      MarketsApi, "update_market_role"),
+    ("post", "/markets/market-123/invitations", {"email": "editor@example.com", "role": "editor"},
+     MarketsApi, "invite_to_market"),
+    ("get", "/markets/market-123/invitations", None, MarketsApi, "market_invitations"),
+    ("delete", "/markets/market-123/invitations/invitation-1", None,
+     MarketsApi, "withdraw_market_invitation"),
+    ("get", "/invitations", None, InviteesApi, "waiting"),
+    ("post", "/invitations/invitation-1/accept", None, InviteesApi, "accept"),
+    ("post", "/invitations/invitation-1/decline", None, InviteesApi, "decline"),
 ]
 
 
@@ -459,6 +472,10 @@ class TestTheOrganizationAndRoleRoutes:
         ("post", "/organizations/org-missing/members", {"user_email": "member@example.com"}),
         ("delete", "/organizations/org-missing/users/user-2", None),
         ("post", "/organizations/org-missing/transfer", {"new_owner_email": "next@example.com"}),
+        ("post", "/organizations/org-missing/invitations",
+         {"email": "member@example.com", "place": "member"}),
+        ("get", "/organizations/org-missing/invitations", None),
+        ("delete", "/organizations/org-missing/invitations/invitation-1", None),
     ])
     def test_an_organization_that_does_not_exist_is_not_found(
         self, client, organization, method, path, body,
@@ -479,7 +496,7 @@ class TestTheOrganizationAndRoleRoutes:
             id="user-member", email=email) if email == "member@example.com" else owner(email))
         stored = OrgsApi.organizations_collection
         # The owner's own place changes between the read and the write.
-        stored.before_write = lambda: stored.doc.update(owner="someone-else")
+        stored.before_write = lambda: stored.doc.update(people={"someone-else": "owner"})
         raised = refusals_raised_by(monkeypatch, OrgsApi, "add_org_member")
 
         response = client.post(
@@ -515,6 +532,9 @@ class TestTheOrganizationAndRoleRoutes:
         ("post", "/markets/market-missing/roles", {"user_email": OWNER_EMAIL, "role": "editor"}),
         ("delete", "/markets/market-missing/roles/user-2", None),
         ("put", "/markets/market-missing/roles/user-2", {"role": "viewer"}),
+        ("post", "/markets/market-missing/invitations", {"email": OWNER_EMAIL, "role": "editor"}),
+        ("get", "/markets/market-missing/invitations", None),
+        ("delete", "/markets/market-missing/invitations/invitation-1", None),
     ])
     def test_a_role_on_a_market_that_does_not_exist_is_not_found(self, client, method, path, body):
         response = call(client, method, path, body)
@@ -1340,8 +1360,10 @@ REQUIRED_BODIES = [
     ("post", "/organizations/<org_id>/members", None),
     ("put", "/organizations/<org_id>/users/<user_id>", None),
     ("post", "/organizations/<org_id>/transfer", None),
+    ("post", "/organizations/<org_id>/invitations", None),
     ("post", "/markets/<market_id>/roles", None),
     ("put", "/markets/<market_id>/roles/<user_id>", None),
+    ("post", "/markets/<market_id>/invitations", None),
     ("post", "/markets", None),
     ("put", "/markets/<market_id>/plan", None),
     ("post", "/markets/<market_id>/discord/connection", None),
@@ -1409,6 +1431,12 @@ READS_NO_BODY = [
     ("delete", "/organizations/<org_id>", [(OrgsApi, "delete_organization", DELETED)]),
     ("delete", "/organizations/<org_id>/users/<user_id>", [(OrgsApi, "remove_org_user", True)]),
     ("delete", "/markets/<market_id>/roles/<user_id>", [(MarketsApi, "remove_market_role", True)]),
+    ("delete", "/markets/<market_id>/invitations/<invitation_id>",
+     [(MarketsApi, "withdraw_market_invitation", None)]),
+    ("delete", "/organizations/<org_id>/invitations/<invitation_id>",
+     [(OrgsApi, "withdraw_organization_invitation", None)]),
+    ("post", "/invitations/<invitation_id>/accept", [(InviteesApi, "accept", {})]),
+    ("post", "/invitations/<invitation_id>/decline", [(InviteesApi, "decline", None)]),
     ("delete", "/markets/<market_id>/permissions/<action_id>",
      [(MarketsApi, "reset_permission", [])]),
     ("delete", "/markets/<market_id>/permissions", [(MarketsApi, "reset_permissions", [])]),
@@ -2020,7 +2048,7 @@ class TestTheCopyIsOurs:
     ):
         use_market(monkeypatch, stored_market(phase=MarketPhase.APPLICATIONS, organizationId=ORG_ID))
         unreadable = FakeOrganizations({
-            "_id": "mongo-org", "id": ORG_ID, "name": ORG_NAME, "owner": "user-9",
+            "_id": "mongo-org", "id": ORG_ID, "name": ORG_NAME, "people": {"user-9": "owner"},
             "markets": "unreadable-markets",
         })
         monkeypatch.setattr(OrgsApi, "organizations_collection", unreadable)

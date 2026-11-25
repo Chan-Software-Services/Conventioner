@@ -47,7 +47,7 @@ What each state and event leads to, and the owner's interface: [the assignment's
 - The phase stays the market's only lifecycle state ([ADR 0005](0005-phase-is-the-only-lifecycle-state.md)): where the assignment stands is a fact the phase cannot hold, so it is its own field with its own writer, as that ADR asks of such a fact.
 - The applicant-facing reads keep the `resultsPublished` flag, since they ask whether applicants were told, not where the allocation stands.
 - Which rows applicants were told is not kept, only the revision; each change after results is in the history, which says it came after them.
-- Running the migration against production is a release step ([`docs/OPERATIONS.md`](../OPERATIONS.md#starting-a-database-and-migrations)).
+- Running the migration against production is a release step ([`docs/RELEASING.md`](../RELEASING.md#migrate_assignment_statepy)).
 
 ## Considered and rejected
 

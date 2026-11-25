@@ -10,9 +10,6 @@ import { api } from '@/utils/api';
 export type RawOrganization = {
   id: string;
   name: string;
-  owner: string;
-  admins?: string[];
-  members?: string[];
   ownerEmail?: string;
   owner_email?: string;
   adminPeople?: OrganizationPerson[];
@@ -30,9 +27,6 @@ export function parseOrgFromApi(org: RawOrganization): Organization {
   return {
     id: org.id,
     name: org.name,
-    owner: org.owner,
-    admins: org.admins || [],
-    members: org.members || [],
     ownerEmail: org.ownerEmail ?? org.owner_email,
     adminPeople: org.adminPeople ?? [],
     memberPeople: org.memberPeople ?? [],

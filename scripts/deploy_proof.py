@@ -141,7 +141,7 @@ PROJECTS = {
         name="back end",
         path="/healthz",
         serving=lambda data: data.get("status") == "ok",
-        headers=("x-content-type-options", "referrer-policy"),
+        headers=("x-content-type-options", "referrer-policy", "strict-transport-security"),
         says=deployed_with_the_hatch_off,
     ),
     # The headers front-end/vercel.json declares.

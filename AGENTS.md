@@ -51,10 +51,10 @@ Conventioner runs a vendor market from applications to the door, in production a
 - The whole back-end suite: `cd back-end && python -m pytest tests/ -v`, with both `requirements.txt` and `requirements-dev.txt` installed.
   Its real-MongoDB suite, which skips there: `scripts/real-mongo-test.sh`, which starts a MongoDB of its own and removes it; never start one for it by hand with `docker run` ([why](docs/TESTING.md#the-real-mongodb-suite)).
   The whole front-end unit suite: `cd front-end && npm run test:unit`.
-- **Before delivering, run only the tests your change reaches** ([what a builder runs](docs/TESTING.md#what-a-builder-runs)): the whole suites above are CI's, which runs them on every pull request and every push to `dev` and `main`, or a person's.
+- **Before delivering, run only the tests your change reaches** ([what a builder runs](docs/TESTING.md#what-a-builder-runs)): the whole suites above are CI's, which runs them on every pull request, every merge queue trial commit and every push to `main`, and on a push to `dev` only when the queue did not test it, or a person's.
 - **Run `npm run format` in `front-end/` before committing**: CI's `format:check` fails unformatted front-end code, `docs/` and the root Markdown files.
 - `scripts/nm-test.sh --skip-e2e` runs every suite but Playwright; without the flag it adds Playwright, on an isolated stack of its own.
-  The no-mistakes gate runs only its real-data checks (`--real-data-only`), and leaves the suites to CI, where alone Playwright runs before a merge ([CI and the gate](docs/implementation/testing/ci-and-the-gate.md#the-no-mistakes-gate)).
+  The no-mistakes gate runs only its real-data checks (`--real-data-only`) and a lint of the changed front-end, docs and root Markdown files, and leaves the suites to CI, where alone Playwright runs before a merge ([CI and the gate](docs/implementation/testing/ci-and-the-gate.md#the-no-mistakes-gate)).
 - [Setting up a machine](docs/STARTUP.md); [every suite and its gotchas](docs/TESTING.md).
 
 ## Knowledge graph

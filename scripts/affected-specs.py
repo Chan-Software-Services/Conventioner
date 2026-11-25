@@ -10,10 +10,13 @@ From the worktree root, on the worktree's stack (`team-stack up`, `team-stack se
 `eval "$(~/agent-team/bin/team-stack env)"`, so Playwright reaches it). The change is the diff from
 the merge-base with `origin/dev` to the worktree, uncommitted and untracked files included
 (`--base` and `--head` name two commits instead, for `--list`). The map is the newest `test-map`
-artifact of a push to `dev`, downloaded once a run to `.stack-logs/test-map/<run id>/` beside that
-run's shard results (`--map` and `--results` name files instead). A spec is chosen:
+artifact of a run on `dev`, which the nightly Test run makes on `dev`'s tip (or one started by hand,
+`gh workflow run test.yml --ref dev`), so up to a day behind `dev`; it is downloaded once a run to
+`.stack-logs/test-map/<run id>/` beside that run's shard results (`--map` and `--results` name
+files instead). A spec is chosen:
 
-1. when the change edits it, or a file it imports, transitively (scores 1);
+1. when the change edits it, or a file it imports, transitively, or deletes a file it imported at
+   the base (scores 1);
 2. when its pages loaded a changed file under `front-end/src/` (scores 1 / the specs that did); a
    `.ts` or `.vue` file there that reads the same at both sides with its comments out, by `Words`,
    reaches no spec by any rule;
@@ -27,9 +30,11 @@ run's shard results (`--map` and `--results` name files instead). A spec is chos
    rule places: not a spec, not imported by one at the head or the base, in no spec's modules and
    no endpoint's files (a stylesheet Vite inlines, a module no endpoint ran, a config no rule
    reads); docs, Markdown, the suites that are not E2E and their configs, the lint and format
-   configs, the scripts that deal, repeat or measure the specs, the back end's deploy config,
-   `back-end/vercel.json`, and the advisory scan's lock, `back-end/requirements-audit.in` and its
-   `.txt` (`DRIVES_NO_SPEC`), choose nothing.
+   configs, the scripts that deal or measure the specs, the back end's deploy config,
+   `back-end/vercel.json`, the advisory scan's lock, `back-end/requirements-audit.in` and its
+   `.txt`, and the migrations, `back-end/migrations/` (`DRIVES_NO_SPEC`), choose nothing, and so
+   does a file the change deletes no rule places, since what read it changes with it and is placed
+   on its own.
 
 The chosen specs run by score, the shorter first on a tie, until the next would pass the cap
 (`--minutes`, 30 by default) of CI minutes, by the map's run's shard results, then
@@ -84,15 +89,16 @@ RUN_EVERY_SPEC = re.compile(
 
 # The changed files that drive no spec, wherever the map places them: the docs, Markdown, the
 # suites the E2E run does not run and their configs, the lint and format configs, the scripts that
-# deal, repeat or measure the specs (or that nothing runs), the back end's deploy config, and the
-# advisory scan's lock, which only CI's python-advisories job installs, none of which the stack or a
-# page reads.
+# deal or measure the specs (or that nothing runs), the back end's deploy config, the
+# advisory scan's lock, which only CI's python-advisories job installs, and the migrations, which an
+# operator runs by hand, none of which the stack or a page reads.
 DRIVES_NO_SPEC = re.compile(
-    r"^(?:docs/|back-end/tests/|front-end/src/__tests__/|scripts/tests/)|\.md$|\.test\.ts$"
+    r"^(?:docs/|back-end/tests/|back-end/migrations/|front-end/src/__tests__/|scripts/tests/)"
+    r"|\.md$|\.test\.ts$"
     r"|^front-end/src/.*\.(?:test|spec)\.tsx?$"
     r"|^front-end/(?:vitest\.config\.ts|tsconfig\.vitest\.json|eslint\.config\.ts"
     r"|stylelint\.config\.js|\.prettierrc\.json|\.prettierignore|\.editorconfig"
-    r"|scripts/(?:e2e-shard-timings\.json|e2e-shards\.ts|e2e-repeat\.ts|bundle-budget\.ts"
+    r"|scripts/(?:e2e-shard-timings\.json|e2e-shards\.ts|bundle-budget\.ts"
     r"|no-eval\.ts|brand-icons\.ts))$"
     r"|^back-end/(?:pytest\.ini|vercel\.json|requirements-audit\.(?:in|txt))$"
 )
@@ -567,8 +573,13 @@ def select(
     changes = {p: lines for p, lines in changes.items() if not words_only(p, head, base)}
     at_head = {short(p) for p in head.files(E2E) if p.endswith(".spec.ts")}
     deleted = {short(p) for p in changes if p.startswith(E2E) and short(p) not in at_head}
+    # The files the change deletes: at the base, gone at the head.
+    gone = {p for p in changes if head.read(p) is None and base.read(p) is not None}
+    at_base = {short(p) for p in base.files(E2E) if p.endswith(".spec.ts")}
+    imported_at_base = {spec: import_closure(E2E + spec, base) for spec in sorted(at_base)}
 
-    # Rule 1: a changed spec, and every spec importing a changed file.
+    # Rule 1: a changed spec, every spec importing a changed file, and every spec that imported a
+    # file the change deletes, which its imports at the head no longer name.
     imported_at_head: Set[str] = set()
     for spec in sorted(at_head):
         path = E2E + spec
@@ -580,6 +591,8 @@ def select(
         for imported in sorted(closure):
             if imported in changes:
                 selection.add(spec, 1, f"imports {short(imported)}")
+        for imported in sorted((imported_at_base.get(spec, set()) & gone) - closure):
+            selection.add(spec, 1, f"imported {short(imported)}, which the change deletes")
     if test_map is None:
         return selection, at_head
 
@@ -598,18 +611,20 @@ def select(
     # a file a spec imports at the head or the base (so a deleted helper too), a module a spec's
     # pages loaded, a back-end file an endpoint ran, or a file every spec stands on.
     placed = set(imported_at_head) | set(by_module) | in_endpoints
-    for spec in {short(p) for p in base.files(E2E) if p.endswith(".spec.ts")}:
+    for spec, closure in imported_at_base.items():
         placed.add(E2E + spec)
-        placed |= import_closure(E2E + spec, base)
+        placed |= closure
     placed |= {E2E + spec for spec in at_head | set(test_map["specs"])}
 
     for path, lines in sorted(changes.items()):
-        # Rule 5: a file no rule places may drive any spec.
+        # Rule 5: a file no rule places may drive any spec, unless the change deletes it: what
+        # read it changes with it, and is placed on its own.
         if (
             path.startswith(("front-end/", "back-end/"))
             and not DRIVES_NO_SPEC.search(path)
             and not RUN_EVERY_SPEC.match(path)
             and path not in placed
+            and path not in gone
         ):
             for spec in sorted(universe):
                 selection.add(spec, 0, f"{path} is not in the map")
@@ -734,8 +749,9 @@ def gh(root: Path, *args: str) -> Optional[str]:
 
 
 def newest_map(root: Path) -> Tuple[Optional[dict], Optional[dict], Optional[Path]]:
-    """(the map, where it came from, its run's shard results) of the newest push to `dev` that
-    made one, downloaded once a run; offline, the newest one downloaded before."""
+    """(the map, where it came from, its run's shard results) of the newest run on `dev` that
+    made one (a nightly run's, or an older push's), downloaded once a run; offline, the newest one
+    downloaded before."""
     cache = root / CACHE
     listing = gh(root, "api", "repos/{owner}/{repo}/actions/artifacts?name=test-map&per_page=50")
     run_id: Optional[int] = None
@@ -811,7 +827,7 @@ def escape(text: str) -> str:
 def describe_source(source: Optional[dict]) -> str:
     if source is None:
         return (
-            "affected-specs: no test map (no `gh`, offline, or no push to dev has made one yet): "
+            "affected-specs: no test map (no `gh`, offline, or no run on dev has made one yet): "
             "choosing only the changed specs and those importing a changed file, as Playwright's "
             "--only-changed would"
         )

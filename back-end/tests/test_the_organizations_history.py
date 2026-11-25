@@ -55,7 +55,9 @@ def history(monkeypatch):
 def org(monkeypatch, history):
     organizations = install_organizations(monkeypatch, FakeOrganizations({
         "_id": "org-object-id", "id": ORG, "name": "Ember Markets", "owner": OWNER.id, "admins": [ADMIN.id],
-        "members": [MEMBER.id], "markets": [], "theme": None,
+        "members": [MEMBER.id],
+        "people": {OWNER.id: "owner", ADMIN.id: "admin", MEMBER.id: "member"},
+        "markets": [], "theme": None,
     }))
     by_email = {person.email: person for person in PEOPLE}
     by_id = {person.id: person for person in PEOPLE}
@@ -204,6 +206,7 @@ class TestWhatIsRecorded:
         with pytest.raises(BadRequestError):
             OrgsApi.transfer_org_ownership(ORG, OWNER.email, OWNER.email)
 
+        assert org.doc["people"] == {OWNER.id: "owner", ADMIN.id: "admin", MEMBER.id: "member"}
         assert org.doc["owner"] == OWNER.id
         assert org.doc["admins"] == [ADMIN.id], "the owner was added to its own admins"
         assert entries(history) == []
@@ -387,6 +390,9 @@ RECORDED = {
     ("PUT", "/organizations/<org_id>/default-permissions/<action_id>"): "a default row set",
     ("DELETE", "/organizations/<org_id>/default-permissions/<action_id>"): "a default row reset",
     ("DELETE", "/organizations/<org_id>/default-permissions"): "every default row reset",
+    # Sent in ``test_inviting_someone_to_an_organization.py`` (T538).
+    ("POST", "/organizations/<org_id>/invitations"): "an address invited",
+    ("DELETE", "/organizations/<org_id>/invitations/<invitation_id>"): "an invitation withdrawn",
     # Sent in ``test_floorplan_template_access.py``; one of no organization records nothing.
     ("POST", "/floorplans/templates"): "a template added",
     ("PUT", "/floorplans/templates/<template_id>"): "a template changed",

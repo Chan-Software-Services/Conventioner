@@ -31,9 +31,13 @@ import api.vendor_check_in as VendorCheckInApi
 import api.applications as ApplicationsApi
 import api.applicant_auth as ApplicantAuthApi
 import api.applicants as ApplicantsApi
+import api.invitees as InviteesApi
 import api.market_actions as Actions
 import history as History
+import invitations as Invitations
+import organization_people as OrganizationPeople
 import review_team as ReviewTeam
+import sign_in_limits
 from api.floorplans import floorplans_bp
 from api.floorplans_placement import floorplans_placement_bp
 from api.floorplans_templates import floorplans_templates_bp
@@ -109,11 +113,14 @@ from utils.security_headers import install_security_headers
 from client_errors import BadRequestError, install_error_answers
 import error_tracking as ErrorTracking
 from utils.secret_key import (
+    ORGANIZER_SESSIONS,
     SecretKeyNotConfiguredError,
+    derived_key,
     signing_secret,
 )
 from utils.identity import authenticated_email
 from utils.request_body import json_object, string_field
+from utils.email_address import normalized_email
 from utils.session_storage import (
     ON_DISK,
     SESSION_FOLDER,
@@ -279,6 +286,24 @@ def verify_payment_indexes() -> None:
 verify_payment_indexes()
 
 
+def verify_invitation_indexes() -> None:
+    """Refuse to boot unless one address can hold only one invitation to one target (T538).
+
+    An invitation is an upsert by target and address, and two at once could store two, so one
+    withdrawal left the other to be accepted. The unique index is the referee, built here beside
+    the invitee's index and the TTL that removes an ended invitation; a process that cannot hold
+    them says so before it takes a request (``unique_indexes``).
+    """
+    try:
+        Invitations.ensure_invitation_indexes()
+    except (UniqueIndexError, Invitations.InvitationIndexError) as e:
+        logger.critical("Refusing to start: %s", e)
+        raise
+
+
+verify_invitation_indexes()
+
+
 def build_lookup_indexes() -> None:
     """Index every field a document is looked up by (``lookup_indexes``), once, at boot.
 
@@ -427,7 +452,8 @@ def check_public_endpoint_defenses() -> PublicEndpointDefenses:
 def configure_public_endpoint_defenses(
     flask_app: Flask, defenses: PublicEndpointDefenses,
 ) -> None:
-    """Install what the check confirmed: the signing key, the origins it may be spent from (which
+    """Install what the check confirmed: the organizer session's signing key, derived from the
+    secret (``utils.secret_key``), the origins it may be spent from (which
     are also the origins a write is taken from), the store it is kept in, and the hops a caller's
     address may be read back through.
 
@@ -435,7 +461,7 @@ def configure_public_endpoint_defenses(
     interface is built against the app's ``SECRET_KEY``, which the first line here is what puts
     there.
     """
-    flask_app.config["SECRET_KEY"] = defenses.signing_secret
+    flask_app.config["SECRET_KEY"] = derived_key(defenses.signing_secret, ORGANIZER_SESSIONS)
     install_cors(flask_app, defenses.origins)
     install_request_origin_check(flask_app, defenses.origins)
     logger.info(
@@ -948,6 +974,130 @@ def add_market_role(market_id: str) -> Response:
 
     MarketsApi.add_market_role(market_id, user_email, role, authenticated_email())
     return jsonify({"message": "Role added successfully"}), 200
+
+#: Said of an invitation that names no address or no role, or names either as anything but text.
+EMAIL_AND_ROLE_REQUIRED = "email and role required"
+#: Said of an invitation whose address is not one: the sign-up's check, an "@" and then a domain
+#: holding a ".".
+TYPE_AN_ADDRESS = "Type an email address, such as name@example.com."
+#: Said of an invitation to the Owner role, which is never given: it changes hands only when
+#: ownership is transferred (``hand-on``).
+OWNER_ONLY_BY_TRANSFER = "A market's Owner changes only when ownership is transferred."
+
+
+def _an_address(address: str) -> bool:
+    """Whether a normalized address reads as one, by the sign-up's check (``api/users.py``)."""
+    return "@" in address and "." in address.split("@")[1]
+
+
+@app.route('/markets/<market_id>/invitations', methods=['POST'])
+@login_required
+def invite_to_market(market_id: str) -> Response:
+    """Invite an address to a role on a market (T538): body ``{"email", "role"}``. Answers the
+    invitation and whether its email was sent, alike for every address (``api.markets``)."""
+    data = json_object(required=True)
+
+    email = string_field(data, 'email')
+    role_str = string_field(data, 'role')
+    if not email or not role_str:
+        return jsonify({"error": EMAIL_AND_ROLE_REQUIRED}), 400
+    address = normalized_email(email)
+    if not _an_address(address):
+        return jsonify({"error": TYPE_AN_ADDRESS}), 400
+
+    role = _named_market_role(role_str)
+    if role is None:
+        return jsonify({"error": f"Invalid role: {role_str}"}), 400
+    if role is MarketRole.OWNER:
+        return jsonify({"error": OWNER_ONLY_BY_TRANSFER}), 400
+
+    try:
+        invitation, emailed = MarketsApi.invite_to_market(
+            market_id, address, role, authenticated_email())
+    except Invitations.TooManyInvitations as refused:
+        return sign_in_limits.too_many(refused.retry_after, Invitations.TOO_MANY, key="error")
+    return jsonify({"invitation": invitation, "emailed": emailed}), 200
+
+@app.route('/markets/<market_id>/invitations', methods=['GET'])
+@login_required
+def get_market_invitations(market_id: str) -> Response:
+    """The invitations waiting on a market, newest first, for whoever may give a role on it."""
+    return jsonify({
+        "invitations": MarketsApi.market_invitations(market_id, authenticated_email()),
+    }), 200
+
+@app.route('/markets/<market_id>/invitations/<invitation_id>', methods=['DELETE'])
+@login_required
+def withdraw_market_invitation(market_id: str, invitation_id: str) -> Response:
+    """Withdraw a waiting invitation, as whoever may give its role."""
+    MarketsApi.withdraw_market_invitation(market_id, invitation_id, authenticated_email())
+    return jsonify({"message": "Invitation withdrawn"}), 200
+
+#: Said of an invitation to an organization that names no address or no place, or names either as
+#: anything but text.
+EMAIL_AND_PLACE_REQUIRED = "email and place required"
+
+
+@app.route('/organizations/<org_id>/invitations', methods=['POST'])
+@login_required
+def invite_to_organization(org_id: str) -> Response:
+    """Invite an address to a place in an organization (T538): body ``{"email", "place"}``, the
+    place ``"admin"`` or ``"member"``. Answers the invitation and whether its email was sent,
+    alike for every address (``api.organizations``)."""
+    data = json_object(required=True)
+
+    email = string_field(data, 'email')
+    place = string_field(data, 'place')
+    if not email or not place:
+        return jsonify({"error": EMAIL_AND_PLACE_REQUIRED}), 400
+    address = normalized_email(email)
+    if not _an_address(address):
+        return jsonify({"error": TYPE_AN_ADDRESS}), 400
+    if place not in OrganizationPeople.INVITED_TO:
+        return jsonify({"error": OrganizationPeople.NOT_A_PLACE}), 400
+
+    try:
+        invitation, emailed = OrgsApi.invite_to_organization(
+            org_id, address, place, authenticated_email())
+    except Invitations.TooManyInvitations as refused:
+        return sign_in_limits.too_many(refused.retry_after, Invitations.TOO_MANY, key="error")
+    return jsonify({"invitation": invitation, "emailed": emailed}), 200
+
+@app.route('/organizations/<org_id>/invitations', methods=['GET'])
+@login_required
+def get_organization_invitations(org_id: str) -> Response:
+    """The invitations waiting on an organization, newest first, for its owner and its admins."""
+    return jsonify({
+        "invitations": OrgsApi.organization_invitations(org_id, authenticated_email()),
+    }), 200
+
+@app.route('/organizations/<org_id>/invitations/<invitation_id>', methods=['DELETE'])
+@login_required
+def withdraw_organization_invitation(org_id: str, invitation_id: str) -> Response:
+    """Withdraw a waiting invitation, as whoever may invite to its place."""
+    OrgsApi.withdraw_organization_invitation(org_id, invitation_id, authenticated_email())
+    return jsonify({"message": "Invitation withdrawn"}), 200
+
+# The invitee's side (T538): the invitations waiting for the signed-in address, and their answers.
+
+@app.route('/invitations', methods=['GET'])
+@login_required
+def get_my_invitations() -> Response:
+    """Every invitation waiting for the signed-in address, newest first."""
+    return jsonify({"invitations": InviteesApi.waiting(authenticated_email())}), 200
+
+@app.route('/invitations/<invitation_id>/accept', methods=['POST'])
+@login_required
+def accept_invitation(invitation_id: str) -> Response:
+    """Accept an invitation sent to the signed-in address, judged again as its inviter's act."""
+    return jsonify({"accepted": InviteesApi.accept(invitation_id, authenticated_email())}), 200
+
+@app.route('/invitations/<invitation_id>/decline', methods=['POST'])
+@login_required
+def decline_invitation(invitation_id: str) -> Response:
+    """Decline an invitation sent to the signed-in address: it ends, and gives nothing."""
+    InviteesApi.decline(invitation_id, authenticated_email())
+    return jsonify({"message": "Invitation declined"}), 200
 
 @app.route('/markets/<market_id>/roles/<user_id>', methods=['DELETE'])
 @login_required
@@ -1884,7 +2034,8 @@ def list_market_applications(market_id: str) -> Response:
     if refused:
         return jsonify({"error": refused}), 403
 
-    result, status_code = ApplicantsApi.list_market_applications(market_id)
+    result, status_code = ApplicantsApi.list_market_applications(
+        market_id, ReviewTeam.review_view(context.market, context.organization))
     return jsonify(result), status_code
 
 
@@ -1951,6 +2102,12 @@ def _reviewing(reviewer: Reviewer) -> ApplicantsApi.Reviewing:
     return ApplicantsApi.Reviewing(giving=reviewer.giving, changing=changing)
 
 
+def _view(reviewer: Reviewer) -> ReviewTeam.ReviewView:
+    """The one view of the market a review route serves each application's review state over
+    (``ReviewTeam.review_view``), from the market and organization ``_reviewer_on`` loaded."""
+    return ReviewTeam.review_view(reviewer.context.market, reviewer.context.organization)
+
+
 def _named_status(name: Any) -> Optional[ApplicationStatus]:
     """The application status a request names, or None when it names none."""
     return next((status for status in ApplicationStatus if status.value == name), None)
@@ -1985,7 +2142,7 @@ def review_application(market_id: str, application_id: str) -> Response:
             context.market, context.organization, person, data['ownerEmail'])
     result, status_code = ApplicantsApi.review_application(
         market_id, application_id, new_status, by=person.as_giver(),
-        reviewing=_reviewing(reviewer), owner=owner,
+        reviewing=_reviewing(reviewer), view=_view(reviewer), owner=owner,
         seen=ApplicantsApi.seen_from(data.get('seen')),
     )
     return jsonify(result), status_code
@@ -2060,7 +2217,8 @@ def undo_review(market_id: str, application_id: str) -> Response:
     result, status_code = ApplicantsApi.undo_verdict(
         reviewer.context.market, reviewer.context.organization, asked,
         by=reviewer.person.as_giver(),
-        owner_offered=_owner_offered(reviewer.context, reviewer.person), giving=reviewer.giving)
+        owner_offered=_owner_offered(reviewer.context, reviewer.person), giving=reviewer.giving,
+        view=_view(reviewer))
     return jsonify(result), status_code
 
 
@@ -2115,8 +2273,9 @@ def next_for_review(market_id: str) -> Response:
         market_id, person, data.get('after'), bool(data.get('includeFollowUps')),
         want=data.get('want'), chosen=Actions.is_chosen(person.email, context.market),
         mine_only=data.get('mineOnly') is True)
-    return jsonify({"application": ApplicantsApi.organizer_view(doc) if doc else None,
-                    "dealt": dealt}), 200
+    # The card is claimed after the deal, so its served share is what the deal left.
+    card = ApplicantsApi.organizer_view(doc, _view(reviewer)) if doc else None
+    return jsonify({"application": card, "dealt": dealt}), 200
 
 
 @app.route('/markets/<market_id>/applications/<application_id>/claim', methods=['PUT', 'DELETE'])
@@ -2153,7 +2312,7 @@ def reassign_follow_up(market_id: str, application_id: str) -> Response:
         data.get('ownerEmail'))
     result, status_code = ApplicantsApi.reassign_follow_up(
         reviewer.context.market, reviewer.context.organization, application_id, owner,
-        reviewer.giving)
+        reviewer.giving, _view(reviewer))
     return jsonify(result), status_code
 
 

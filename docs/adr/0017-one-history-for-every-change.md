@@ -4,7 +4,7 @@ kind: adr
 describes:
   - back-end/history.py
   - back-end/migrations/migrate_placement_history.py
-verified: 2026-11-19
+verified: 2026-11-25
 sources:
   - E40/F01/S01
   - E40/F02/S01
@@ -14,6 +14,7 @@ sources:
   - T316
   - T318
   - T422
+  - T452
 status: accepted
 ---
 
@@ -37,6 +38,7 @@ An entry is the market (or, from E40/F02, the organization), the actor (an organ
 **The `assign` action's placement kinds are the one exception**: their details keep the shapes they always had (the seat taken, the seat freed, the two seats swapped, a run's counts), with no before, because the entries moved from `placement_history` have none to give and the placement endpoint answers as it did; a `placed` entry written since E40/F01/S02 adds the seat the vendor left as `before`, and an older one, lacking the key, leaves it unknown.
 Flags added since sit beside those shapes and are absent on every entry written before them, so it reads as it did: `after_results` (T316), and `while_here`, a change of a vendor who had checked in that day (T318).
 **A market change's action is an [E39 action](../implementation/modules/market-actions.md) id**, the verb the write's check asked, with a finer kind beside it where one action covers several changes, so "may this person take this action" and "this person took this action" share one vocabulary; an organization's own change uses one of the history's own verbs, since an organization has no table, but for a market deleted from it, which keeps the table's `delete-market`.
+A market change no row asks uses one of the history's own verbs too: `apply` for an applicant's own change, and `review_state_migrated` for the deal of what the application status migration marked ([the migration](../implementation/data/application-document.md#the-migration)).
 The placement history's sharp edges hold for every entry: structured, never a sentence (the wording is the screen's); a run is one entry; writing an entry never fails the change it records; the history is deleted with its market or organization.
 
 What stays where it is:

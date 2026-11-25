@@ -56,6 +56,7 @@ A bug the status once named is cited where its fix changed what a step says.
 - [L. Ending and managing a market](business/flows/ending-and-managing-a-market.md) - L1 to L5, with P6; [reading the market's history](business/flows/reading-the-markets-history.md) - L6
 - [M. Offers and outcomes (planned)](#m-offers-and-outcomes-planned) - M1 to M5; planned but M5, below
 - [N. The market's statistics](business/flows/stats.md) - N1 to N7
+- [O. Answering an invitation](business/flows/answering-an-invitation.md) - O1 to O4
 
 ## Planned, not built
 

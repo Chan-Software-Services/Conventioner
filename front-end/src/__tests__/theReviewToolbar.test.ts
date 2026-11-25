@@ -22,6 +22,7 @@ import {
 import { MarketAction } from '@/utils/marketActions';
 import { applicationsAllSeed } from '@/utils/vendorExport';
 import { answersRefusing } from './support/servedAnswers';
+import { answeredWith, servedReview } from './support/servedReview';
 
 const ME = 'ana@example.com';
 
@@ -58,6 +59,7 @@ function application(id: string): Application {
     formData: {},
     submittedAt: '2026-09-15T14:20:18.000Z',
     reviewer: null,
+    ...servedReview('open'),
   } as unknown as Application;
 }
 
@@ -99,7 +101,10 @@ beforeEach(() => {
       verdictAnswers.push(() =>
         resolve({
           data: {
-            application: { ...STORED.find((app) => app.id === id), status: body.status },
+            application: answeredWith(
+              STORED.find((app) => app.id === id)!,
+              body.status!,
+            ),
             undoSeconds: 120,
           },
         }),

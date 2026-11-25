@@ -6,6 +6,7 @@ import { getApiErrorMessage } from '@/utils/api';
 import { fetchMarkets, openMarket } from '@/utils/market';
 import { forgetLastMarket, lastMarketId } from '@/utils/lastMarket';
 import { fetchOrganizations } from '@/utils/organizations';
+import { fetchInvitations, waitingLine } from '@/utils/invitations';
 import { phaseLabel } from '@/utils/phase';
 import {
   FILTERABLE_PHASES,
@@ -89,7 +90,26 @@ const goneNote = computed(() => {
     : 'The market you last opened is no longer available, and there are no others.';
 });
 
+/**
+ * How many invitations wait for this address (T538), read beside the markets and again with them,
+ * so the line follows an invitation answered on the Invitations page. A read that fails says
+ * nothing: the line is a pointer, and the markets load as before. The newest read wins.
+ */
+const invitationsWaiting = ref(0);
+let latestInvitationsRead = 0;
+async function readInvitations() {
+  const thisRead = ++latestInvitationsRead;
+  let count = 0;
+  try {
+    count = (await fetchInvitations()).length;
+  } catch {
+    count = 0;
+  }
+  if (thisRead === latestInvitationsRead) invitationsWaiting.value = count;
+}
+
 async function loadMarkets() {
+  void readInvitations();
   loading.value = true;
   errorMessage.value = '';
   today.value = localToday();
@@ -237,6 +257,14 @@ function handleNewClose() {
     </div>
 
     <div class="markets-block">
+      <p
+        v-if="invitationsWaiting > 0"
+        class="note opening-line"
+        data-testid="markets-invitations-waiting"
+      >
+        {{ waitingLine(invitationsWaiting) }}
+        <RouterLink to="/invitations">See invitations</RouterLink>
+      </p>
       <!-- With the list, so nothing moves when the answer lands; the finder arrives under it. -->
       <p v-if="goneNote" class="note opening-line" data-testid="markets-last-market-gone">
         {{ goneNote }}

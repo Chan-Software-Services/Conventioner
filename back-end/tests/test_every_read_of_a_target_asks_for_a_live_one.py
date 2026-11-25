@@ -51,6 +51,9 @@ EXCEPTIONS: Dict[Tuple[str, str], str] = {
     ("api.organizations", "_mark_deleting"): _THE_DELETION,
     ("api.organizations", "_take_its_markets"): _THE_DELETION,
     ("api.organizations", "_taken"): _THE_DELETION,
+    ("api.organizations", "_kept_only_while_live"): (
+        "an invitation written beside an organization asks whether the organization's deletion is "
+        "decided, which only a read of its tombstone answers"),
     ("market_write", "write_market"): (
         "the refused write reads the market again whatever its state, to answer a market being "
         "deleted as absent and any other as changed"),

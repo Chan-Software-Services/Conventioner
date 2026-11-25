@@ -7,6 +7,7 @@ describes:
   - back-end/tests/test_an_organizations_people_stay_one_map.py
   - back-end/tests/real_mongo/test_an_organizations_people_on_the_server.py
   - back-end/tests/test_the_shared_organizations_fake.py
+  - back-end/tests/test_answering_an_organization_invitation.py
   - back-end/tests/test_every_module_imports_first.py
   - front-end/src/views/ManageOrgOverlay.vue
   - front-end/src/utils/api.ts#isOrganizationChanged
@@ -14,11 +15,12 @@ describes:
   - front-end/src/__tests__/changingAPlaceAsksFirst.test.ts
   - front-end/src/__tests__/manageOrganizationPeople.test.ts
   - front-end/e2e/an-organizations-people-change-place.spec.ts
-verified: 2026-11-16
+verified: 2026-11-25
 sources:
   - T283
   - T315
   - T411
+  - T538
 ---
 
 # The organization's people
@@ -33,6 +35,13 @@ It also builds the one filter that finds the organizations a person is in, `of_p
 - `change_place(org_id, user_id, place, requester)`: the owner makes an admin a member or a member an admin, `place` being the request's `"admin"` or `"member"` and anything else refused before the organization is read, 400 "A place is admin or member.".
   `api/organizations.py`'s `change_org_place` calls it, for `PUT /organizations/<org_id>/users/<user_id>`, which answers `{"message": "Place changed"}`.
   The account's copy is left alone, since the person was in the organization before and is after.
+- `place_by_invitation(invitation, invitee)` (T538): someone signed in with an invited address accepts an invitation to be an admin or a member ([invitations](invitations.md#answering-an-invitation)).
+  It is judged as the inviter's act: the organization live, the inviter's account the one that sent it, `may` with the place's event (`INVITED_TO`: `admin` asks "Add admin", `member` "Add member") of the inviter's place as read, and `next_people` on the invitee's.
+  The first three refused end the invitation, 404 `InvitationEnded`; the table refusing the invitee (the owner, an admin, a member invited as a member) ends it, 400 "You are already in this organization, so this invitation has ended."; a member invited as an admin becomes one.
+  The invitation is claimed before the write (`Invitations.claim`), so one withdrawn, declined or sent again to another place meanwhile answers ended and gives nothing ([invitations](invitations.md#answering-an-invitation), steps 4 and 5).
+  The write is `_change`'s, holding the inviter's key and the invitee's as read; an `OrganizationChanged` judges again and writes again in the same request, never putting the invitation back, and its entry is `_record_role`'s, the inviter its actor and `"by_invitation": true` in its detail.
+  [`test_answering_an_organization_invitation.py`](../../../back-end/tests/test_answering_an_organization_invitation.py) pins each step.
+  `already_placed(address, place, held)` is the sentence an invite to an address already holding a place answers, which `api/organizations.py`'s `invite_to_organization` says.
 - `transfer(org_id, requester, new_owner_email)`: the owner transfers the organization's ownership to one of its admins or members, and stays on it as an admin.
   `api/organizations.py`'s `transfer_org_ownership` calls it, for `POST /organizations/<org_id>/transfer`, which answers `{"message": "Ownership transferred successfully"}`.
   Anyone but the owner is refused first, 403 "Only current owner can transfer ownership", then an address with no account, 400 "New owner user not found".

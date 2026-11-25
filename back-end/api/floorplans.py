@@ -5,6 +5,7 @@ Uses GridFS for storage and pypdfium2 for PDF-to-image conversion.
 
 import io
 import logging
+from typing import Optional
 
 from bson import ObjectId
 from flask import Blueprint, Response, request, jsonify, send_file
@@ -17,7 +18,7 @@ from client_errors import traceback_without_messages
 import floorplan_limits as Limits
 import history as History
 from services.gridfs_service import delete_image, get_image, upload_image
-from utils.pdf_converter import TooManyPages, UnreadablePdf, pdf_to_images, is_pdf
+from utils.pdf_converter import TooManyPages, UnreadablePdf, pdf_to_images
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,36 @@ def detect_mimetype(image_data: bytes) -> str:
     return "image/png"
 
 
+PDF = "application/pdf"
+
+# Where a PDF's header may stand: PDF readers look for it within a file's first 1024 bytes.
+PDF_HEADER_WITHIN = 1024
+
+NOT_A_FLOORPLAN = "This file is not a PNG, JPG, WebP or PDF."
+
+
+def uploaded_type(data: bytes) -> Optional[str]:
+    """The floorplan type ``data`` is by its own first bytes: PNG, JPEG, WebP or PDF, else None.
+
+    The type and the name a client sends with a file are its word, not the file's, so the upload
+    reads neither to decide what it stores or how it draws it.
+    """
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if data.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    if b"%PDF-" in data[:PDF_HEADER_WITHIN]:
+        return PDF
+    return None
+
+
+def _sent_as_pdf(file) -> bool:
+    """Whether the client called the file a PDF: it chooses only the words of a refusal."""
+    return (file.content_type or "").lower() == PDF or (file.filename or "").lower().endswith(".pdf")
+
+
 # ── POST /api/floorplans/upload ──────────────────────────────────────────────
 
 @floorplans_bp.route("/upload", methods=["POST"])
@@ -59,6 +90,10 @@ def upload_floorplan():
 
     The ``market_id`` form field names the market the image is for: the caller must be an editor
     of it, on a market that is not archived, and every stored image remembers it.
+
+    The file's type is read from its own first bytes (``uploaded_type``), never from the type or
+    the name the client sent: bytes that are none of PNG, JPEG, WebP or PDF are refused 400
+    ``NOT_A_FLOORPLAN``, or the unreadable PDF's sentence when the client called the file a PDF.
 
     - Image: stores directly in GridFS, returns ``{gridfs_id, width, height}``.
     - PDF: converts each page via ``pdf_to_images``, stores each page
@@ -82,15 +117,6 @@ def upload_floorplan():
         if not file:
             return jsonify({"error": "No file provided"}), 400
 
-        # ── MIME type whitelist ───────────────────────────────────────────
-        _ALLOWED_MIMES = {"image/png", "image/jpeg", "image/webp", "application/pdf"}
-        content_type = file.content_type or ""
-        if content_type not in _ALLOWED_MIMES:
-            return jsonify({
-                "error": f"Unsupported file type: {content_type}. "
-                         "Allowed: image/png, image/jpeg, image/webp, application/pdf"
-            }), 400
-
         file_bytes = file.read()
         if not file_bytes:
             return jsonify({"error": "Empty file"}), 400
@@ -98,9 +124,14 @@ def upload_floorplan():
             return jsonify({"error": Limits.UPLOAD_TOO_LARGE}), 413
 
         filename = file.filename or "floorplan"
+        kind = uploaded_type(file_bytes)
+        if kind is None:
+            if _sent_as_pdf(file):
+                return jsonify({"error": Limits.unreadable_pdf(filename)}), 400
+            return jsonify({"error": NOT_A_FLOORPLAN}), 400
 
         # ── PDF path ───────────────────────────────────────────────────
-        if is_pdf(content_type) or filename.lower().endswith(".pdf"):
+        if kind == PDF:
             try:
                 page_images = pdf_to_images(
                     file_bytes, max_pages=Limits.MAX_PDF_PAGES,

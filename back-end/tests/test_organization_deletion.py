@@ -104,7 +104,7 @@ def org(monkeypatch):
         markets = Markets(list(docs))
         monkeypatch.setattr(OrgsApi, "markets_collection", markets)
         monkeypatch.setattr(OrgsApi, "organizations_collection", FakeOrganizations(
-            {"id": ORG_ID, "name": "Ember Markets", "owner": OWNER_ID}))
+            {"id": ORG_ID, "name": "Ember Markets", "people": {OWNER_ID: "owner"}}))
         monkeypatch.setattr(
             OrgsApi.users_collection, "update_many", lambda *_a, **_k: None, raising=False
         )
@@ -211,6 +211,33 @@ class TestWhatGoesWithIt:
         OrgsApi.delete_organization(ORG_ID, OWNER_EMAIL)
 
         assert pulls == [{"$pull": {"organizations": ORG_ID}}]
+
+    def test_its_invitations_go_with_it(self, org, market_records):
+        """Nobody accepts their way into an organization that is gone (T538)."""
+        invitations = market_records.invitations
+        org(_market("m-1", MarketPhase.DRAFT))
+        for invitation_id, kind, target in (("to-it", "organization", ORG_ID),
+                                            ("to-another", "organization", "org-2")):
+            invitations.insert_one({
+                "id": invitation_id, "target_kind": kind, "target_id": target,
+                "email": "invited@example.com"})
+
+        OrgsApi.delete_organization(ORG_ID, OWNER_EMAIL)
+
+        assert [doc["id"] for doc in invitations.documents] == ["to-another"]
+
+    def test_an_invitation_to_one_of_its_markets_goes_with_the_market(self, org, market_records):
+        invitations = market_records.invitations
+        org(_market("m-1", MarketPhase.ARCHIVED), _market("m-2", MarketPhase.DRAFT))
+        for invitation_id, target in (("to-m-1", "m-1"), ("to-m-2", "m-2"),
+                                      ("to-another", "m-3")):
+            invitations.insert_one({
+                "id": invitation_id, "target_kind": "market", "target_id": target,
+                "email": "invited@example.com"})
+
+        OrgsApi.delete_organization(ORG_ID, OWNER_EMAIL)
+
+        assert [doc["id"] for doc in invitations.documents] == ["to-another"]
 
 
 class TestTheConfirmationCanSayWhatItDestroys:

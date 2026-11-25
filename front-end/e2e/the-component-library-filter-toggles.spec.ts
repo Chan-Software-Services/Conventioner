@@ -5,10 +5,11 @@ import { inTheWindow } from './helpers/phoneWindow';
 
 /**
  * The component library's `filter-toggles` entry (T200): `FilterToggles` on the fixture's counts, at
- * a desk and on a phone. Application statuses read their counts and choose one at a time, a view
- * switch has no counts, and several phases press in and out; pressing the chosen toggle again lets
- * it go, in every row, by pointer and by keyboard; the row wraps and a label longer than the row
- * wraps inside its toggle, so nothing scrolls sideways, and a phone's toggle is a 44px target.
+ * a desk and on a phone. Application statuses read their counts and choose one at a time; pressing
+ * the chosen toggle again by keyboard lets it go, in every row, the focus staying put; the row wraps
+ * and a label longer than the row wraps inside its toggle, so nothing scrolls sideways, and a
+ * phone's toggle is a 44px target. What a view switch, a row with no All toggle and several phases
+ * choose by a press, and a count of nothing, are `filterToggles.test.ts`'s.
  */
 
 const readOutOf = (toggles: Locator): Locator =>
@@ -89,52 +90,6 @@ eachWindow('the filter toggles entry', (size) => {
     );
   });
 
-  test('one choice: a view switch has no counts', async ({ page }) => {
-    const view = page.getByTestId('library-toggles-view');
-    await expect(view.getByRole('button')).toHaveText(['All', 'One by one']);
-
-    await inTheWindow(size).press(page.getByTestId('library-toggles-view-one'));
-    await expect(pressedIn(view)).toHaveText(['One by one']);
-    await expect(readOutOf(view)).toHaveText('View: One by one');
-
-    await inTheWindow(size).press(page.getByTestId('library-toggles-view-one'));
-    await expect(pressedIn(view)).toHaveText(['All']);
-  });
-
-  test('one choice with no All toggle: letting go presses nothing and reads as all', async ({
-    page,
-  }) => {
-    const { press } = inTheWindow(size);
-    const nothing = page.getByTestId('library-toggles-zero');
-    await expect(pressedIn(nothing)).toHaveText(['Approved 160']);
-
-    await press(nothing.getByRole('button', { name: 'Approved 160' }));
-    await expect(pressedIn(nothing)).toHaveCount(0);
-    await expect(readOutOf(nothing)).toHaveText('Showing: All');
-  });
-
-  test('several: a press takes a phase in and out, and none reads as all', async ({ page }) => {
-    const { press } = inTheWindow(size);
-    const phases = page.getByTestId('library-toggles-phases');
-    const phase = (id: string) => page.getByTestId(`library-toggles-phases-${id}`);
-    await expect(pressedIn(phases)).toHaveText(['Applications / Review', 'Assignment']);
-    await expect(readOutOf(phases)).toHaveText('Phases: Applications / Review, Assignment');
-
-    await press(phase('draft'));
-    await expect(pressedIn(phases)).toHaveText(['Draft', 'Applications / Review', 'Assignment']);
-    await expect(readOutOf(phases)).toHaveText('Phases: Draft, Applications / Review, Assignment');
-
-    // Each press lands before the next: a row rewraps as a toggle's weight changes.
-    await press(phase('assignment'));
-    await expect(phase('assignment')).toHaveAttribute('aria-pressed', 'false');
-    await press(phase('draft'));
-    await expect(phase('draft')).toHaveAttribute('aria-pressed', 'false');
-    await press(phase('applications'));
-    await expect(phase('applications')).toHaveAttribute('aria-pressed', 'false');
-    await expect(pressedIn(phases)).toHaveCount(0);
-    await expect(readOutOf(phases)).toHaveText('Phases: All phases');
-  });
-
   // A key press lands on the toggle in focus, so each kind of row keeps focus there as it lets go.
   test('by keyboard, a row with an All toggle lets go to it, focus staying put', async ({
     page,
@@ -171,15 +126,6 @@ eachWindow('the filter toggles entry', (size) => {
     await assignment.press('Enter');
     await expect(pressedIn(phases)).toHaveText(['Applications / Review']);
     await expect(assignment).toBeFocused();
-  });
-
-  test('a count of nothing reads as 0', async ({ page }) => {
-    const nothing = page.getByTestId('library-toggles-zero');
-    await expect(nothing.getByRole('button')).toHaveText([
-      'Approved 160',
-      'Refused 0',
-      'Cancelled 0',
-    ]);
   });
 
   test('every toggle is a target, and every row stays inside its panel', async ({ page }) => {

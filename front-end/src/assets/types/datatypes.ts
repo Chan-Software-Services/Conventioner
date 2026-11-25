@@ -520,12 +520,9 @@ export interface OrganizationPerson {
 export interface Organization {
   id: string;
   name: string;
-  owner: string; // User id (uuid)
-  admins: string[]; // 0+ admin user ids
-  members: string[]; // 0+ member user ids
   ownerEmail?: string; // Resolved display (from API)
   /** Its admins and members, each with their id, in the stored order, an account that is gone left
-   *  out (T204): a row is keyed and removed by its own `userId`, never by its place in `admins`. */
+   *  out (T204): a row is keyed and removed by its own `userId`, never by its place in the list. */
   adminPeople: OrganizationPerson[];
   memberPeople: OrganizationPerson[];
   theme?: ThemeObject; // Organization theming
@@ -538,6 +535,25 @@ export interface Organization {
   /** For each admin and member who holds a role of their own on some of its markets, how many:
    *  removing them from it leaves those. */
   marketsWithOwnRole: Record<string, number>;
+}
+
+/**
+ * An invitation waiting for the signed-in person's address (T538, ADR 0047), as `GET /invitations`
+ * serves it: a role on a market, or a place in an organization, offered by `invitedBy` until
+ * `endsAt`. It gives nothing until they accept it.
+ */
+export interface Invitation {
+  id: string;
+  kind: 'market' | 'organization';
+  /** The market's `id` (its uuid) or the organization's. */
+  targetId: string;
+  targetName: string;
+  /** A market's `admin`, `editor` or `viewer`; an organization's `admin` or `member`. */
+  role: string;
+  /** The inviter's address. */
+  invitedBy: string;
+  sentAt: string;
+  endsAt: string;
 }
 
 export interface VendorAttendance {
@@ -667,6 +683,33 @@ export interface ReviewTeam {
   reviewers: Array<{ email: string; able: boolean }>;
 }
 
+/**
+ * Where a vendor came from, as the server reads it (ADR 0037): the market's page, a form file, or
+ * added by an organizer, who may later import their answers, which makes them imported.
+ */
+export type ApplicationOrigin = 'applied' | 'imported' | 'added';
+
+/**
+ * An application's review state, as the server serves it on every application an organizer reads
+ * (ADR 0037, `review_team.review_of`): what every screen reads to decide anything, never the stored
+ * `status`, which keeps old spellings and stays only for the labels and for comparing with the
+ * status a write would give.
+ */
+export interface ApplicationReview {
+  state: 'open' | 'follow_up' | 'approved' | 'rejected';
+  /** Open or a follow-up: no verdict yet. */
+  undecided: boolean;
+  /** The addresses whose share it is in, its reviewer first; empty with no reviewers chosen. */
+  share: string[];
+  /**
+   * Undecided, reviewers are chosen, and the next deal would move it: open in nobody's share, or a
+   * follow-up whose owner holds no role on the market, still in its chosen reviewer's share if any.
+   */
+  waiting: boolean;
+}
+
+export type ReviewState = ApplicationReview['state'];
+
 export interface Application {
   id: string;
   marketId: string;
@@ -707,7 +750,14 @@ export interface Application {
    * already reads each update in its place; this says who made it, when, and what the vendor wrote.
    */
   answerUpdates?: Record<string, AnswerUpdate>;
+  /** Organizer's only: where the vendor came from. */
+  origin: ApplicationOrigin;
+  /** Organizer's only: the review state every screen reads. */
+  review: ApplicationReview;
 }
+
+/** An application as its applicant reads it: never where the review stands (no early verdict). */
+export type ApplicantApplication = Omit<Application, 'origin' | 'review'>;
 
 /** One seat an applicant holds, as their page lists it once results are published (E36/F05/S02). */
 export interface ApplicantSeat {
@@ -763,7 +813,6 @@ export interface TransitionBlockedResponse {
 export interface User {
   id: string;
   email: string;
-  organizations?: string[]; // Organization ids
 }
 
 /** One of the market's table types (`setupObject.tableTypes`, T257). It has no colour: the

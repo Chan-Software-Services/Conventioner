@@ -10,9 +10,10 @@ This module builds the one filter that finds the organizations a person is in, `
 either shape; nothing else spells that query. ``people_key`` is the one spelling of a person's path
 in the map.
 
-It is also the only writer of a person's place: adding an admin or a member, the owner making an
-admin a member or a member an admin (``change_place``), removing someone, transferring the
-organization's ownership (``transfer``), and forgetting a deleted account. ``TABLE`` says what
+It is also the only writer of a person's place: adding an admin or a member, placing someone who
+accepts an invitation (``place_by_invitation``, T538), the owner making an admin a member or a
+member an admin (``change_place``), removing someone, transferring the organization's ownership
+(``transfer``), and forgetting a deleted account. ``TABLE`` says what
 each change does to the target's place as read, ``AUTHORITY`` who may ask for it, and
 ``next_people`` answers the map a change leaves, or its refusal, without a database. Each change is
 then one conditional write (``_write``) that lands only on the places it judged: on an organization
@@ -29,6 +30,7 @@ from enum import Enum
 from typing import Any, Dict, FrozenSet, Optional, Tuple, Type, Union
 
 import api.users as UsersApi
+import invitations as Invitations
 from client_errors import (
     BadRequestError, ClientError, ConflictError, ForbiddenError, NotFoundError,
 )
@@ -60,6 +62,10 @@ NOT_A_PLACE = "A place is admin or member."
 ALREADY_OWNS_IT = "They already own this organization"
 HAND_IT_ONLY_TO_ITS_PEOPLE = (
     "Transfer ownership only to one of the organization's admins or members.")
+#: Said to an invitee accepting an invitation to an organization they already hold a place in:
+#: accepting never changes a place, so the invitation ends.
+ALREADY_IN_IT = "You are already in this organization, so this invitation has ended."
+
 #: Said of removing the organization's owner. No screen transfers an organization's ownership yet
 #: (organizations flow B6), so the sentence names no fix.
 THE_OWNER_STAYS = "They own this organization, so they can't be removed from it."
@@ -145,6 +151,24 @@ class Move:
 
 #: The place change each place a request may name asks for.
 PLACE_CHANGES = {ADMIN: Event.CHANGE_TO_ADMIN, MEMBER: Event.CHANGE_TO_MEMBER}
+
+#: The change inviting to each place asks for, judged when it is sent and again when it is
+#: accepted, as adding asked it (T538).
+INVITED_TO = {ADMIN: Event.ADD_ADMIN, MEMBER: Event.ADD_MEMBER}
+
+
+def already_placed(address: str, place: str, held: str) -> str:
+    """Said of inviting ``address`` to ``place`` when its account already holds ``held``: the
+    inviter reads them among the organization's people, so it tells nothing they cannot see. A
+    member invited as an admin is pointed at their row, where the owner makes them one."""
+    if held == OWNER:
+        return f"{address} owns this organization."
+    if held == ADMIN:
+        return f"{address} is already an admin of this organization."
+    if place == MEMBER:
+        return f"{address} is already a member of this organization."
+    return (f"{address} is already a member of this organization. Make them an admin from their "
+            "row.")
 
 #: An account deletion never reaches an owner: ``delete_user`` refuses one before it forgets them.
 NEVER_REACHED = "never reached"
@@ -370,10 +394,11 @@ def _met_a_change(org_id: str, event: Event, target_id: str) -> ClientError:
 
 def _record_role(
     org_id: str, requesting_user_email: str, user_id: str,
-    before: Optional[str], after: Optional[str],
+    before: Optional[str], after: Optional[str], by_invitation: bool = False,
 ) -> None:
     """A person given, changed or taken a place in the organization, under the admins' action
-    when an admin is either side of it, as the market's role changes are recorded."""
+    when an admin is either side of it, as the market's role changes are recorded. A place given
+    by an invitation accepted says so in its detail, its actor the inviter."""
     # Imported here: ``history`` reads ``api.market_actions``, which reads ``api.permissions``,
     # which reads this module's ``of_person``, so a module-level import is a cycle at boot.
     import history as History
@@ -387,10 +412,12 @@ def _record_role(
         user = UsersApi.get_user_by_id(user_id)
         return {"user_id": user_id, "email": user.email if user else None}
 
+    def detail() -> Dict[str, Any]:
+        changed = History.changes({"role": before}, {"role": after})
+        return {**changed, "by_invitation": True} if by_invitation else changed
+
     History.record_for_organization(
-        org_id, requesting_user_email, action, kind=kind, subject=person,
-        detail=lambda: History.changes({"role": before}, {"role": after}),
-    )
+        org_id, requesting_user_email, action, kind=kind, subject=person, detail=detail)
 
 
 def _requester(org_id: str, requesting_user_email: str) -> Tuple[Dict[str, Any], Any]:
@@ -418,7 +445,7 @@ def _judged_and_written(org: Dict[str, Any], event: Event, requester: Any,
 
 
 def _change(org: Dict[str, Any], event: Event, requester: Any, target_id: str,
-            requesting_user_email: str) -> None:
+            requesting_user_email: str, by_invitation: bool = False) -> None:
     """Judge ``event`` on the organization as read and write it, then keep the account's copy of
     its organizations and record it. A change that changes nothing writes and records nothing."""
     before_place, after_place = _judged_and_written(org, event, requester, target_id)
@@ -431,7 +458,8 @@ def _change(org: Dict[str, Any], event: Event, requester: Any, target_id: str,
             {"id": target_id},
             {"$pull" if after_place is None else "$addToSet": {"organizations": org["id"]}},
         )
-    _record_role(org["id"], requesting_user_email, target_id, before_place, after_place)
+    _record_role(org["id"], requesting_user_email, target_id, before_place, after_place,
+                 by_invitation)
 
 
 def _add(org_id: str, email: str, requesting_user_email: str, event: Event) -> None:
@@ -453,6 +481,90 @@ def add_member(org_id: str, email: str, requesting_user_email: str) -> None:
     """Make the account at ``email`` a member of the organization: its owner's or an admin's to
     do. A member, an admin, the owner, or an address with no account is refused."""
     _add(org_id, email, requesting_user_email, Event.ADD_MEMBER)
+
+
+def _ended(invitation: Dict[str, Any]) -> Invitations.InvitationEnded:
+    """End an invitation that can no longer be accepted, and the refusal that says so."""
+    Invitations.end(invitation)
+    return Invitations.InvitationEnded()
+
+
+def _judged_for_placing(invitation: Dict[str, Any], invitee: Any) -> Tuple[Dict[str, Any], Any]:
+    """The organization an invitation offers a place in, and its inviter, judged as the inviter's
+    act at this moment, in this order: the organization live, the inviter's account still the one
+    that sent it, the inviter's place still one that may add to that place (``AUTHORITY``), and the
+    invitee's place as the table judges adding them (``TABLE``).
+
+    Raises:
+        Invitations.InvitationEnded: one of the first three refused; the invitation is ended.
+        BadRequestError: the table refuses the invitee (``ALREADY_IN_IT``); the invitation is
+            ended.
+    """
+    org = organizations_collection.find_one(live({"id": invitation["target_id"]}))
+    if not org:
+        raise _ended(invitation)
+
+    # By the address it was sent from, and the id it was sent by: an account deleted, or deleted
+    # and made again, is no longer the one that invited.
+    inviter = UsersApi.get_user(invitation["invited_by_email"])
+    if inviter is None or inviter.id != invitation["invited_by"]:
+        raise _ended(invitation)
+
+    event = INVITED_TO[invitation["role"]]
+    people = organization_people_of(org)
+    try:
+        may(people, event, inviter.id)
+    except ForbiddenError:
+        raise _ended(invitation) from None
+    try:
+        next_people(people, event, inviter.id, invitee.id)
+    except BadRequestError:
+        Invitations.end(invitation)
+        raise BadRequestError(ALREADY_IN_IT) from None
+    return org, inviter
+
+
+def place_by_invitation(invitation: Dict[str, Any], invitee: Any) -> Dict[str, Any]:
+    """Place ``invitee``, the signed-in account the invitation is addressed to, in the place it
+    offers (T538, ADR 0047): what they accepted, to show them.
+
+    Judged again, at the moment it is accepted, as the inviter's act (``_judged_for_placing``); the
+    table refusing the invitee (the owner, an admin, a member invited as a member) says they are
+    already in it, and a member accepting an invitation to be an admin becomes one, as "Add admin"
+    of a member does, recorded as their place changed. Then the invitation is claimed as read
+    (``Invitations.claim``): whichever came first wins, so one withdrawn, declined or sent again to
+    another place meanwhile answers ended and gives nothing. Only then is the write made,
+    ``_change``'s, holding both keys as read, recording the inviter's giving it, by an invitation
+    accepted, and its limit counts taken back.
+
+    The claim is never put back, since a withdrawal or a decline landing after it is told the
+    invitation has ended: an ``OrganizationChanged`` judges again and writes again in this request,
+    up to ``Invitations.ACCEPT_TRIES`` writes, and a judgement that now refuses answers as it does
+    above. A conflict that keeps coming back, like a cut between the claim and the write, loses the
+    invitation, and the person is invited again.
+
+    Raises:
+        Invitations.InvitationEnded: it can no longer be accepted, and is ended.
+        BadRequestError: the invitee is already in the organization, and it is ended.
+    """
+    org, inviter = _judged_for_placing(invitation, invitee)
+    place = invitation["role"]
+    if not Invitations.claim(invitation):
+        raise Invitations.InvitationEnded()
+    for _ in range(Invitations.ACCEPT_TRIES):
+        try:
+            _change(org, INVITED_TO[place], inviter, invitee.id, inviter.email,
+                    by_invitation=True)
+        except OrganizationChanged:
+            org, inviter = _judged_for_placing(invitation, invitee)
+            continue
+        except NotFoundError:
+            # The organization went between the read and the write.
+            raise Invitations.InvitationEnded() from None
+        Invitations.take_back(invitation)
+        return {"kind": Invitations.ORGANIZATION, "targetId": org["id"],
+                "targetName": org.get("name") or "", "role": place}
+    raise Invitations.InvitationEnded()
 
 
 def remove(org_id: str, user_id: str, requesting_user_email: str) -> None:

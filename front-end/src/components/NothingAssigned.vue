@@ -23,8 +23,7 @@ const refusal = computed(() => props.market.assignRefusalReason ?? null);
          "phase." into "Set the rules" (E30/F01/S01). -->
     <template v-if="refusal">{{ `${refusal} ` }}</template>
     <RouterLink :to="marketPath(market.id, 'settings')">
-      {{ refusal ? 'Set the rules' : 'Set the rules and allocate tables' }}</RouterLink
-    >.
+      {{ refusal ? 'Set the rules' : 'Set the rules and allocate tables' }}</RouterLink>.
     <slot />
   </p>
 </template>

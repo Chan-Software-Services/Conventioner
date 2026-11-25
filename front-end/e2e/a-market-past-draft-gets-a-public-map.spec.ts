@@ -85,6 +85,9 @@ test('a market past Draft with no layout gets a public map a visitor reads a ven
   // Signed out, the map is not there until the results are out: the market page says
   // applications are closed, as it does for any market in Assignment before its results.
   const visitor = await browser.newContext({ viewport: PHONE, hasTouch: true, isMobile: true });
+  // Held at the seed's instant, since the map opens on the browser's today: a run past midnight
+  // would open it on the seed's next day, where Kiln & Co has no table.
+  await visitor.clock.setFixedTime(seed.seededAt);
   const visitorPage = await visitor.newPage();
   const marketPage = new MarketPage(visitorPage);
   const map = new PublicMapPage(visitorPage);
@@ -119,6 +122,9 @@ test('a market past Draft with no layout gets a public map a visitor reads a ven
   const door = new AttendanceStatusPage(page);
   await door.goto(seed.marketId);
   await setup.advancePhaseTo('market_days', 'Market Days');
+  // The move lands on the door with no day in its address, so it opens on the browser's today:
+  // named the seed's day, so a run past midnight does not read the seed's next day's seats.
+  await door.goto(seed.marketId, seed.today);
   await door.viewMap.click();
   await expect(door.map).toBeVisible();
   await expect(door.mapTable('Aisle A 2')).toBeVisible();

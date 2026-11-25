@@ -19,6 +19,7 @@ sources:
   - T317
   - T345
   - T584
+  - T588
 ---
 
 # Technology Stack
@@ -101,7 +102,7 @@ How each part of the code works is in the implementation layer of the [knowledge
 ### Utilities
 
 - **Python's `secrets`** - Email verification and password reset links, and sign-in codes, each stored only as its hash (`back-end/account_secrets.py`)
-- **PyJWT 2.15** - The applicant's sign-in token, signed with `SECRET_KEY`
+- **PyJWT 2.15** - The applicant's sign-in token, signed with its own key derived from `SECRET_KEY`
 - **Cryptography 50** - Lets the local stack's `flask run --cert=adhoc` make its certificate; no module imports it
 - **Requests 2.34** - HTTP library
   - Used for reCAPTCHA verification API calls
@@ -127,7 +128,7 @@ How each part of the code works is in the implementation layer of the [knowledge
 - **pytest 9.1** - Python test framework
   - Runs the back-end test suite (`python -m pytest tests/`), from `back-end/requirements-dev.txt`
   - Configured via `back-end/pytest.ini`
-  - `tests/conftest.py` points PyMongo at a port nothing listens on and the tests use in-memory fakes, so no database connection is required
+  - `tests/conftest.py` points PyMongo at a port nothing listens on, whatever database the shell's `MONGODB_*` variables name, and the tests use in-memory fakes, so no database connection is required
   - The exception is [the real-MongoDB suite](implementation/testing/real-mongo-suite.md), `tests/real_mongo/`, which runs on a MongoDB server in CI's `backend` job and skips where `REAL_MONGODB_URI` is unset
 
 ## Frontend
@@ -147,14 +148,14 @@ How each part of the code works is in the implementation layer of the [knowledge
 
 ### Core Framework
 
-- **Vue 3.5.44** - Progressive JavaScript framework
+- **Vue 3.5.46** - Progressive JavaScript framework
   - Composition API (`<script setup>`)
   - Reactive data binding
   - Component-based architecture
 
 ### Build Tool
 
-- **Vite 8.3.5** - Next-generation frontend build tool, bundling with Rolldown
+- **Vite 8.3.8** - Next-generation frontend build tool, bundling with Rolldown
   - CI holds the entry JavaScript of a build to a gzipped limit, the [bundle budget](implementation/testing/ci-and-the-gate.md#the-bundle-budget), and fails a build that calls `eval` or `Function`, which the [Content-Security-Policy](implementation/conventions/security-invariants.md#security-headers) refuses ([the eval check](implementation/testing/ci-and-the-gate.md#no-string-evaluated-as-script)), and the build itself fails when it holds any module of the development-only [component library](implementation/modules/component-library.md) ([no development page in the build](implementation/testing/ci-and-the-gate.md#no-development-page-in-the-build))
   - `vite preview` serves `front-end/vercel.json`'s security headers, so a production build runs locally under the policy production sends
   - Minifying keeps legal comments (`/*!` and `@license`, in [`vite.config.ts`](../front-end/vite.config.ts)), so the licence notices of copied icons and bundled libraries reach the shipped bundle ([ADR 0015](adr/0015-the-app-owns-its-components.md))
@@ -190,14 +191,14 @@ How each part of the code works is in the implementation layer of the [knowledge
 
 ### Routing
 
-- **Vue Router 5.4.0** - Official router for Vue.js
+- **Vue Router 5.5.1** - Official router for Vue.js
   - Client-side routing
   - Route guards for authentication
   - Public and protected routes
 
 ### HTTP Client
 
-- **Axios 1.21.0** - Promise-based HTTP client
+- **Axios 1.21.1** - Promise-based HTTP client
   - API communication through one instance, `src/utils/api.ts`
   - Cookie-based authentication support
 
@@ -215,14 +216,14 @@ How each part of the code works is in the implementation layer of the [knowledge
 
 ### Development Tools
 
-- **ESLint 10.13.0** - JavaScript/TypeScript linter
+- **ESLint 10.15.0** - JavaScript/TypeScript linter
   - Code quality enforcement
   - `npm run lint` fixes what it can; `npm run lint:check` verifies without fixing and refuses a warning as it does an error, and CI's `frontend-lint-and-types` and `scripts/nm-test.sh` run it
   - Vue-specific linting rules from `eslint-plugin-vue` 10 (its `flat/essential` set, plus `vue/no-v-html` as an error, so no template renders raw HTML)
 - **minimatch 11, held by `overrides` in `front-end/package.json`** - the glob matcher under ESLint, typescript-eslint and `@vue/test-utils`'s js-beautify, all development-only
-  - Each of them still asks for minimatch 10, so the override holds every copy at `^11.0.8`, the line that has upstream's hardening
-  - Drop the entry once ESLint, `@eslint/config-array`, `@typescript-eslint/typescript-estree` and js-beautify's `editorconfig` and `glob` all ask for 11
-- **Prettier 3.9.10** - Code formatter, configured in `front-end/.prettierrc.json` (semicolons, single quotes, a 100-character line, trailing commas everywhere)
+  - ESLint and `@eslint/config-array` ask for minimatch 11 themselves, but typescript-eslint's `@typescript-eslint/typescript-estree` and js-beautify's `editorconfig` and `glob` still ask for 10, so the override holds every copy at `^11.0.8`, the line that has upstream's hardening
+  - Drop the entry once `@typescript-eslint/typescript-estree` and js-beautify's `editorconfig` and `glob` all ask for 11
+- **Prettier 3.10.1** - Code formatter, configured in `front-end/.prettierrc.json` (semicolons, single quotes, a 100-character line, trailing commas everywhere)
   - `npm run format` fixes and `npm run format:check` verifies; both cover `front-end/`, `docs/` and the Markdown files at the repository's root (`"../*.md"`) with that config, leaving out the generated `docs/schema.d.ts`, which its test compares byte for byte, and `CHANGELOG.md`, which release-please writes (`front-end/.prettierignore`); the root glob is quoted so Prettier expands it, passing over the `CLAUDE.md` link to `AGENTS.md`, which it refuses when the shell names it; CI runs the check in `frontend-lint-and-types`, so unformatted front-end code or docs fail the build: run `npm run format` before committing
   - The one-time reformat commits, of the front end, of `docs/` and of the root Markdown, are listed in `.git-blame-ignore-revs`, which `git blame` skips once `git config blame.ignoreRevsFile .git-blame-ignore-revs` is set
 - **Stylelint 17** - The design language's gate (`npm run lint:css`, which refuses a warning as it does an error), configured in `stylelint.config.js`
@@ -235,8 +236,9 @@ How each part of the code works is in the implementation layer of the [knowledge
   - Runs component and utility unit tests (`npm run test:unit`)
   - Uses the `happy-dom` environment (configured in `vitest.config.ts`)
 - **@vue/test-utils 2** - Vue component testing utilities
+  - Since 2.6 a prop given as a plain object or array is not made deeply reactive, so a test that needs a setup element's in-place edit of the plan to re-render, as `assignmentPriority.test.ts` and `aRowAddedOnSetupHasAnId.test.ts` do, mounts it with the plan wrapped in `reactive()`, as the market screen hands it a reactive plan
 - **PostCSS 8** - Parses the design language's CSS in `src/__tests__/primitives.test.ts`, and the styles of the components `src/__tests__/everySelectWearsThePrimitive.test.ts` reads, which read every rule they check through it and no other way
-- **Playwright 1.64** - End-to-end browser testing
+- **Playwright 1.65** - End-to-end browser testing
   - Drives Chromium against the running Docker stack (`npm run test:e2e`)
   - Configured in `playwright.config.ts`
   - Page Object Model + fixtures under `front-end/e2e/`; selectors use
@@ -281,7 +283,7 @@ the ports, caps each service's memory, CPU and processes, and starts mongo-expre
 ### Continuous Integration
 
 - **GitHub Actions** - CI pipeline (`.github/workflows/test.yml`)
-  - Runs on pushes and pull requests to `main` or `dev`, and on a merge queue's trial commit for `dev`
+  - Runs on pushes and pull requests to `main` or `dev`, on a merge queue's trial commit for `dev`, and nightly on `dev`'s tip or when started by hand
   - Its jobs, what each runs and which checks the rules of `dev` and `main` require: [CI and the gate](implementation/testing/ci-and-the-gate.md)
 - **GitHub Actions** - CodeQL's analysis (`.github/workflows/codeql.yml`)
   - Runs on pushes and pull requests to `main` or `dev`, on a merge queue's trial commit for `dev`, and weekly on `dev`; its three `Analyze (<language>)` checks are required on `dev`: [CodeQL](implementation/testing/ci-and-the-gate.md#codeql)
@@ -333,9 +335,9 @@ the ports, caps each service's memory, CPU and processes, and starts mongo-expre
 - **Password Hashing**: Bcrypt with secure salt generation
 - **Email Verification**: Required before account activation
 - **CAPTCHA Protection**: reCAPTCHA v3 on registration
-- **Rate Limiting**: every sign-in, code, reset-link, verification-link and sign-up request, counted per address and per caller in the database (`back-end/sign_in_limits.py`), before the account is looked up; a try that signs in is taken back; OTP and password reset requests also wait on the last
+- **Rate Limiting**: every sign-in, code, reset-link, verification-link and sign-up request is counted in the database before the account is looked up, per address and per caller, and an invitation per inviter and per address, with the limits in one table (`LIMITS` in `back-end/sign_in_limits.py`); a try that signs in, and an invitation accepted, is taken back; OTP and password reset requests also wait on the last
 - **Token Expiration**: Time-limited tokens for verification and reset
-- **Secure Sessions**: HTTP-only, `Secure`, `SameSite=Lax` cookies, signed with a `SECRET_KEY` that has no fallback
+- **Secure Sessions**: HTTP-only, `Secure`, `SameSite=Lax` cookies, signed with a key derived from a `SECRET_KEY` that has no fallback
 - **CORS Protection**: An explicit origin allowlist (`CORS_ALLOWED_ORIGINS`); `*` is refused, because the session cookie is credentialed
 - **Boot-Time Defenses**: The app refuses to start unless every variable its public surface rests on is configured (see [RELEASING.md](./RELEASING.md#pre-deploy-required-production-environment))
 - **Input Validation**: Pydantic models for type safety
@@ -349,7 +351,7 @@ the ports, caps each service's memory, CPU and processes, and starts mongo-expre
 - `FROM_EMAIL` - Email address to send from. **Required**: outside the hatch the app refuses to boot without it or with Resend's shared `onboarding@resend.dev`, the default under the hatch
 - `RECAPTCHA_SECRET_KEY` - Google reCAPTCHA v3 secret key. **Required**: the app refuses to boot without it
 - `CORS_ALLOWED_ORIGINS` - Comma-separated browser origins allowed to make credentialed requests (e.g., `https://app.example.com`). **Required**: the app refuses to boot without it, and `*` is refused
-- `SECRET_KEY` - Signs the Flask session cookie. **Required**: there is no fallback, and the app refuses to boot without it. Must be at least 32 characters, and every value this repository has published (the old `TEMP_KEY_CHANGE_IN_PRODUCTION` fallback, the env-template and deploy-guide placeholders) is refused by name - it is readable by anyone who can read the repo. Rotating it ends every session signed with the old key
+- `SECRET_KEY` - Every signing key is derived from it: the Flask session cookie's, and the vendor's sign-in token's. **Required**: there is no fallback, and the app refuses to boot without it. Must be at least 32 characters, and every value this repository has published (the old `TEMP_KEY_CHANGE_IN_PRODUCTION` fallback, the env-template and deploy-guide placeholders) is refused by name - it is readable by anyone who can read the repo. Rotating it ends every session signed with the old key
 - `TRUSTED_PROXY_HOPS` - How many proxies of this deployment's own a request passes through before it reaches Flask (Vercel: `1`; Flask exposed directly: `0`). **Required**: there is no default, because unset is not zero but unknown. It decides whose address organizer signup reports to reCAPTCHA, which scores on it - behind an unnamed ingress that is the ingress's address, for every caller in the world
 - `ALLOW_INSECURE_LOCAL_DEV` - Local-development escape hatch for the [boot requirements](./RELEASING.md#pre-deploy-required-production-environment) (default OFF; set `true`/`1`). Never set it on a deployment: a back end that sees a platform variable (`VERCEL`, `VERCEL_ENV`, `VERCEL_REGION`, `AWS_LAMBDA_FUNCTION_NAME`) refuses to boot with it, or with any of the three test flags below, on
 - `DISABLE_CAPTCHA` - Test-only flag to skip reCAPTCHA verification (default OFF; set `true`/`1`). Honored only when `ALLOW_INSECURE_LOCAL_DEV` is also set

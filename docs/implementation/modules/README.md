@@ -24,6 +24,7 @@ One line per node, sorted by file name.
 - [A location's layout](floorplan-placement.md) - its page, its drawing, its editor and Fill an area, its save, its routes and who may use them; geometry, not AI; no `pyckingsolver` in production
 - [The form amendment](form-amendment.md) - fixing the form from inside the first import through the one form writer, in draft; the phase walk is gone
 - [The guards and the phase move](guards.md) - `guards.py`: every precondition, the validated registry, the one stage's two ways in, the one phase writer
+- [Invitations](invitations.md) - `invitations.py`: the one owner of `invitations`, one per address and target by a unique upsert, its 14 days and TTL, the market's invite, list and withdrawal, its email and its two limits
 - [What an assignment was made from](made-from.md) - `madeFrom` fingerprints: the one place they are computed, written only by a run
 - [The market's actions](market-actions.md) - `market_actions.py`: the table of who may do what, one row per action, every check asking a row, each route's row
 - [Market deletion, and the deletion trail](market-deletion.md) - every record a market keeps goes with it by either door; the trail written before anything is destroyed

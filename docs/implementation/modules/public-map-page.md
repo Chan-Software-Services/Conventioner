@@ -25,7 +25,7 @@ describes:
   - front-end/e2e/the-public-map-vendors.spec.ts
   - front-end/e2e/the-public-map-draws-its-floorplan-in-step.spec.ts
   - front-end/e2e/pages/PublicMapPage.ts
-verified: 2026-11-18
+verified: 2026-11-24
 sources:
   - T422
   - T465
@@ -153,17 +153,19 @@ The unit tests share the answer they mount on, [`support/publicMapAnswer.ts`](..
 
 The E2E specs open the page signed out on [the seeded market day](../testing/e2e-seeds.md), on a phone and at a desk:
 
-- [`the-public-map.spec.ts`](../../../front-end/e2e/the-public-map.spec.ts): the allowlist on the page (every table and half of both halls on both days pressed, and the page's text and every link's address holding no email address and none of the seed's personal markers, every request to the market page's read, the map's two public routes or the app's own files), a press on a table, each half of the shared table, the selects, the legend, the phone's legend on one line for two short names and wrapped whole for a long one, a deep link and its fallback, a market with its map off reading the market page's notice and an unknown slug "Page not found", an organizer's bar, the sheet filling the window with the document never scrolling, and a pinch on a phone that zooms the map and never the page.
+- [`the-public-map.spec.ts`](../../../front-end/e2e/the-public-map.spec.ts): the allowlist on the page (every table and half of both halls on both days pressed, and the page's text and every link's address holding no email address and none of the seed's personal markers, every request to the market page's read, the map's two public routes or the app's own files), a press on a table, the selects, the phone's legend on one line for two short names and wrapped whole for a long one, a market with its map off reading the market page's notice and an unknown slug "Page not found", an organizer's bar, the sheet filling the window with the document never scrolling, and a pinch on a phone that zooms the map and never the page.
 - [`the-public-map-backdrop.spec.ts`](../../../front-end/e2e/the-public-map-backdrop.spec.ts): the backdrop past every edge, painted in the sections' mixes, taking no press.
 - [`the-public-map-bubble.spec.ts`](../../../front-end/e2e/the-public-map-bubble.spec.ts), at a desk: the bubble up and right, under a table near the top, to the left near the right edge, following a zoom, hidden when panned away, Close and Escape giving the focus back, a table under it closing it when the arrow keys reach it, a vendor out of view fitting the map, in a short window, the bubble clear of the zoom, which a press and Tab from its table pass without closing it, and on a touch screen at a desk width a tap on a zoom button the bubble partly covers leaving it open.
 - [`the-public-map-phone-card.spec.ts`](../../../front-end/e2e/the-public-map-phone-card.spec.ts): the phone's card over the panel's top, the hall wholly in view, a row below it pressable, the focus never under it (Tab out of it to the field, Enter on each row, Shift+Tab after), a tall card scrolling in its own box, Close and Escape, every target 44px tall, `100dvh` under the window's class, the bubble at a desk, and the card and the focus in sight as the window narrows past 1,000px and widens again.
-- [`the-public-map-half.spec.ts`](../../../front-end/e2e/the-public-map-half.spec.ts): a half pressed, outlined and kept through a reload and a fresh link, a stale half and `half=middle` showing the whole table.
+- [`the-public-map-half.spec.ts`](../../../front-end/e2e/the-public-map-half.spec.ts): a half pressed, outlined and kept through a reload and a fresh link.
+  What the card reads for each half, a vendor opened from the list opening their half, a stale half and `half=middle` showing the whole table, the legend's items on each day and hall, and a deep link and its fallback are `thePublicMapPage.test.ts`'s, above.
 - [`the-public-map-draws-its-floorplan-in-step.spec.ts`](../../../front-end/e2e/the-public-map-draws-its-floorplan-in-step.spec.ts): every frame of a switch between the halls with one image held, never one hall's tables over the other's image, each hall's tables first drawn with its image, the other hall's image asked for with no click and neither asked for again, the image with no `opacity` and no filter, a held image drawing its tables on the floor after two seconds and a failed one drawing them at once, with nothing said, and a link to a table whose bubble stands beside it once drawn.
 - [`the-public-map-vendors.spec.ts`](../../../front-end/e2e/the-public-map-vendors.spec.ts): the answer as received holding no private detail, the search finding by each public field and never by a private one, a pick, the whole list, the first row's room under the field and its fade.
 
 [`PublicMapPage.ts`](../../../front-end/e2e/pages/PublicMapPage.ts) is their page object; the map's tables are found by their accessible names, as a layout's are ([E2E patterns](../testing/e2e-patterns.md)).
 The three public map screens of the screen sweeps walk the page before a pick, with the shared table picked whole, and with its right half picked (`SCREENS` in `e2e/helpers/screens.ts`).
 Each opens the seed's first day by its address (`publicMapAt`), since the page opens on the browser's today, and a sweep seeded before midnight would otherwise open on the seed's second day, where the shared table seats nobody.
+Five of the public map's specs (`the-public-map`, `-vendors`, `-half`, `-bubble` and `-phone-card`) hold each page's clock at the seed's instant (`seededAt`) for the same reason, since several of them read the day the page opens on by itself.
 
 ## Why
 

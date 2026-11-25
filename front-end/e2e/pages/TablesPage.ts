@@ -22,7 +22,6 @@ export class TablesPage {
 
   readonly dateFilterChip: Locator;
   readonly sectionFilterChip: Locator;
-  readonly tierFilterChip: Locator;
   readonly choiceFilterChip: Locator;
   readonly clearAllFilterButton: Locator;
   readonly tableRows: Locator;
@@ -30,7 +29,6 @@ export class TablesPage {
   readonly countAssigned: Locator;
   readonly countPartial: Locator;
   readonly countEmpty: Locator;
-  readonly dateGroups: Locator;
   readonly dialog: Locator;
   readonly dialogWarning: Locator;
   readonly dialogError: Locator;
@@ -49,7 +47,6 @@ export class TablesPage {
   readonly historyMarketDay: Locator;
   readonly historyDays: Locator;
   readonly historyClear: Locator;
-  readonly historyEmpty: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -59,11 +56,9 @@ export class TablesPage {
     this.countEmpty = page.getByTestId('tables-count-empty');
     this.dateFilterChip = page.getByTestId('tables-filter-chip-date');
     this.sectionFilterChip = page.getByTestId('tables-filter-chip-section');
-    this.tierFilterChip = page.getByTestId('tables-filter-chip-tier');
     this.choiceFilterChip = page.getByTestId('tables-filter-chip-choice');
     this.clearAllFilterButton = page.getByTestId('tables-filter-chip-clear-all');
     this.tableRows = page.locator('.table-row');
-    this.dateGroups = page.locator('.date-group');
     this.dialog = page.getByTestId('placement-dialog-window');
     this.dialogWarning = page.getByTestId('placement-dialog-warning');
     this.dialogError = page.getByTestId('placement-dialog-error');
@@ -78,7 +73,6 @@ export class TablesPage {
     this.historyMarketDay = this.historyDialog.getByTestId('market-history-market-day');
     this.historyDays = this.historyDialog.getByTestId('market-history-day');
     this.historyClear = this.historyDialog.getByTestId('market-history-clear');
-    this.historyEmpty = this.historyDialog.getByTestId('market-history-empty');
   }
 
   async goto(marketId: string): Promise<void> {

@@ -160,6 +160,13 @@ PERMISSION_TABLE_COPIED = "permission_table_copied"
 #: The market's ownership transferred by its Owner to someone with access, who becomes its Owner
 #: while the old Owner stays on it as an Admin (T283).
 HANDED_ON = "handed_on"
+#: An address invited to a role (T538, ``invitations``), recorded under the row that gives the role;
+#: its subject is the address alone, whether or not it has an account.
+INVITED = "invited"
+#: An invitation withdrawn while it waited, under the row that gives its role.
+INVITATION_WITHDRAWN = "invitation_withdrawn"
+#: An invitation declined by the person it was sent to, its actor their address.
+INVITATION_DECLINED = "invitation_declined"
 
 # The organization's own: its verbs and its template kinds are with its changes, below.
 
@@ -169,6 +176,12 @@ HANDED_ON = "handed_on"
 APPLY = "apply"
 SUBMITTED = "submitted"
 EDITED = "edited"
+
+# An operator's own
+#: The action an application ``migrations/migrate_application_status.py`` found waiting for the
+#: deal is marked for it under (T277 ticket 02), with no actor: no row of the table asked it, so
+#: the deal that takes the mark records it under this, and the Applications group reads it.
+REVIEW_STATE_MIGRATED = "review_state_migrated"
 
 
 def _now() -> str:
@@ -668,9 +681,13 @@ def permission_entries(market_id: str) -> List[Dict[str, Any]]:
 
 #: Renaming the organization; its kind is ``renamed``, as a market's rename is.
 CHANGE_ORGANIZATION = "change-organization"
-#: An admin added, removed, or a member made one: ``role_given``, ``role_changed``, ``role_taken``.
+#: An admin added, removed, or a member made one: ``role_given``, ``role_changed``, ``role_taken``;
+#: and an invitation to be an admin sent, withdrawn or declined (T538): ``invited``,
+#: ``invitation_withdrawn``, ``invitation_declined``. A place given by an invitation accepted is a
+#: ``role_given`` or ``role_changed`` by the inviter, ``"by_invitation": True`` in its detail.
 MANAGE_ORGANIZATION_ADMINS = "manage-organization-admins"
-#: A member added or removed: ``role_given``, ``role_taken``.
+#: A member added or removed: ``role_given``, ``role_taken``; and an invitation to be a member, as
+#: for an admin.
 MANAGE_ORGANIZATION_MEMBERS = "manage-organization-members"
 #: Ownership handed to someone else, one entry for the one act; no kind.
 TRANSFER_ORGANIZATION = "transfer-organization"

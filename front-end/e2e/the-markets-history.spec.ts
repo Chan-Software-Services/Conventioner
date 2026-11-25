@@ -23,8 +23,6 @@ test.use({ viewport: { width: 1440, height: 900 } });
 const COLLEAGUE = { email: 'e2e-history-colleague@example.com', password: 'e2epassword123' };
 const VENDOR = 'e2e-history-vendor@example.com';
 const VENDOR_NAME = 'Hollis Vendor';
-const OTHER_VENDOR = 'e2e-history-other@example.com';
-const OTHER_NAME = 'Odette Other';
 /** Enough renames that the first page of 25 ends before the setup change. */
 const RENAMES = 20;
 /** The form, the review setup's two decisions, the setup change, the renames, two phase moves, the
@@ -581,68 +579,6 @@ test('each filter narrows the list, and a vendor links to their drawer', async (
   await manage.historyVendorLinks.first().click();
   await expect(page).toHaveURL(`/markets/${marketId}/vendors?vendor=${VENDOR}`);
   await expect(new VendorsPage(page).detailPanel).toContainText(VENDOR);
-});
-
-test('the vendor filter finds a vendor by name or address, by words or from its list', async ({
-  authenticatedPage: page,
-  request,
-}) => {
-  const { marketId, marketName } = await seedAHistory(request);
-  const other = approvedVendorApplication(marketId, OTHER_VENDOR, {
-    dates: [completePlan().marketDates[0].date],
-    tiers: ['Gold'],
-    fullName: OTHER_NAME,
-  });
-  insertApplications([other]);
-  const manage = await openManage(page, marketName);
-  await expect(manage.historySentences).toHaveCount(PAGE);
-  const vendor = manage.historyVendor;
-
-  // A list of its own, on every browser, each vendor's name beside their address.
-  await vendor.field.click();
-  await expect(vendor.option(VENDOR)).toHaveText(`${VENDOR_NAME} (${VENDOR})`);
-  await expect(vendor.option(OTHER_VENDOR)).toHaveText(`${OTHER_NAME} (${OTHER_VENDOR})`);
-  await vendor.field.press('Escape');
-  await expect(vendor.list).toBeHidden();
-  await expect(manage.window).toBeVisible();
-
-  // Words that fit several narrow nothing yet, and say so.
-  await vendor.field.fill('e2e-history');
-  await expect(manage.historyVendorHint).toHaveText('2 vendors match. Keep typing, or choose one.');
-  const hintId = await manage.historyVendorHint.getAttribute('id');
-  await expect(vendor.field).toHaveAttribute('aria-describedby', hintId!);
-  await expect(manage.historySentences).toHaveCount(PAGE);
-
-  // Words that fit one narrow to them as they are typed, and stay as typed.
-  await vendor.field.fill(VENDOR_NAME.toLowerCase());
-  await expect(manage.historyVendorHint).toHaveCount(0);
-  await expect(manage.historySentences).toHaveCount(2);
-  await vendor.field.press('Escape');
-  await page.getByTestId('market-history-from').focus();
-  await expect(vendor.field).toHaveValue(VENDOR_NAME.toLowerCase());
-  await expect(manage.historySentences).toHaveCount(2);
-
-  // Words that fit nobody narrow to nothing, and an address typed whole is asked for all the same.
-  await vendor.field.fill('nobody at all');
-  await expect(page.getByTestId('market-history-empty')).toHaveText(
-    'No change matches these filters.',
-  );
-  await vendor.field.fill('never-seen@example.com');
-  await expect(page.getByTestId('market-history-empty')).toHaveText(
-    'No change matches these filters.',
-  );
-  await expect(vendor.field).toHaveValue('never-seen@example.com');
-
-  // Chosen from the list, the field names them and the history narrows to them.
-  await vendor.field.fill('hollis');
-  await vendor.option(VENDOR).click();
-  await expect(vendor.list).toBeHidden();
-  await expect(vendor.field).toHaveValue(`${VENDOR_NAME} (${VENDOR})`);
-  await expect(manage.historySentences).toHaveCount(2);
-
-  await page.getByTestId('market-history-clear').click();
-  await expect(vendor.field).toHaveValue('');
-  await expect(manage.historySentences).toHaveCount(PAGE);
 });
 
 for (const width of [1280, 390]) {

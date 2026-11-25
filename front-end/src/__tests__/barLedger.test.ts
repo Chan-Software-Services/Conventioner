@@ -96,6 +96,7 @@ describe('BarLedger with fold', () => {
 
   it('says one more answer in the singular', () => {
     const wrapper = mountLedger(11, 10);
+    expect(drawn(wrapper)).toHaveLength(10);
     expect(button(wrapper).text()).toBe('1 more answer to Kinds of work');
     wrapper.unmount();
   });
@@ -106,11 +107,13 @@ describe('BarLedger with fold', () => {
     wrapper.unmount();
   });
 
-  it('draws no button at the fold or under it, still by count', () => {
+  it('draws every row and no button at the fold or under it, still by count', () => {
     for (const rows of [10, 3]) {
       const wrapper = mountLedger(rows, 10);
       expect(button(wrapper).exists()).toBe(false);
-      expect(drawn(wrapper)[0]).toBe(`answer-${rows}`);
+      expect(drawn(wrapper)).toEqual(
+        Array.from({ length: rows }, (_, at) => `answer-${rows - at}`),
+      );
       wrapper.unmount();
     }
   });
