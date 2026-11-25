@@ -22,8 +22,9 @@ request's shard is run again, and the test is forgotten. This gathers them, over
   are about 250, a quarter of the 1,000 an hour a run's GITHUB_TOKEN may make for the repository,
   which the Test, Promote and Deploy runs' reads share
 - a 403 or a 429 (the rate limit, or a 403 for a token that may not read Actions, which every later
-  read would get too) stops the walk: the report holds the runs read before it and names where it
-  stopped; the run it stopped in is left out whole
+  read would get too) on a run's artifacts, a zip or a later page of runs stops the walk: the report
+  holds the runs read before it and names where it stopped, and the run it stopped in is left out
+  whole; on the first page of runs it fails with the reason, having read nothing
 
 It writes the report, in Markdown, to stdout and, when GITHUB_STEP_SUMMARY is set, to the run's
 summary: each test with how many of the runs it passed only on a retry in, and a link to each run,

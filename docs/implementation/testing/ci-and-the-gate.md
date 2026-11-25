@@ -143,7 +143,7 @@ Each job is one block, what it runs one item a line ([two features never share a
 - the summary is a table of each such test, by its spec file and title, how many of the runs it passed only on a retry in, and a link to each run, most first; a run whose artifacts it could not all read is named under the table with the reason
 - the runner's own `python3`, since the script needs only the standard library, with the run's read-only token, which it never sends to the storage an artifact's zip redirects to
 - each counted run costs about a dozen requests of GitHub's API (its artifacts' list, a zip for each of the ten shards, and the list of about one run passed over, its warm push), so 20 runs are about 250, a quarter of the 1,000 an hour the run's token may make for the repository, which the Test, Promote and Deploy runs' reads share: more would leave those reads rate-limited, and they fail closed, a push's `suite` to `full` and Promote's and Deploy's checks to a refusal, until the hour resets
-- a 403 or a 429 (the rate limit, or a token that may not read Actions) stops the walk, and the summary holds the runs read before it and names where it stopped
+- a 403 or a 429 (the rate limit, or a token that may not read Actions) on a run's artifacts, a zip or a later page of runs stops the walk, and the summary holds the runs read before it and names where it stopped; on the first page of runs the script fails with the reason
 - it continues on error (`continue-on-error: true`), so a report it could not make never decides the run's conclusion, and it is not a required check
 
 **`dev`'s ruleset requires eleven checks, and `main`'s rulesets six.**
@@ -162,7 +162,7 @@ The real-data steps of `real-data-and-workflows` are the only real-data check th
 Under `CI`, Playwright retries twice and sets `failOnFlakyTests` ([`front-end/playwright.config.ts`](../../../front-end/playwright.config.ts)), so a test that passes only on a retry still fails its shard.
 Every failed attempt and every retry keeps its trace, so the shard's `playwright-artifacts-shard-<n>` artifact, uploaded on that failure, holds every failed attempt's trace beside its passing retry's ([when a test fails](../../TESTING.md#when-a-test-fails)).
 Such a run is red, so a trial commit is queued again or a shard run again, and the test is easily forgotten: the nightly [`e2e-retries`](#ci) job's summary lists each test that passed only on a retry over `dev`'s last 20 runs that ran the shards, the merge queue's among them.
-Anyone with a token that may read the repository's Actions makes the same report for any number of runs, a personal token from its own budget of 5,000 requests an hour, with `GITHUB_REPOSITORY=Chan-Software-Services/Conventioner GITHUB_TOKEN=<token> python3 scripts/e2e_retries.py --runs <n>`.
+Anyone with a token that may read the repository's Actions makes the same report for more runs, up to those among the newest 1,000 Test runs GitHub lists, a personal token from its own budget of 5,000 requests an hour, with `GITHUB_REPOSITORY=Chan-Software-Services/Conventioner GITHUB_TOKEN=<token> python3 scripts/e2e_retries.py --runs <n>`.
 Within a shard the tests share one database (`workers: 1`); never across shards.
 
 ## Which suite a run runs

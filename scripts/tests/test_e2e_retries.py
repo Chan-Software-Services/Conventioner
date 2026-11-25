@@ -4,7 +4,8 @@ The script's command line runs as the nightly `e2e-retries` job runs it, against
 and the tests read what a person reads: the report on stdout and in the summary file, the reason on
 stderr, and the exit code. The stub answers each path with a scripted answer and records every
 request, in the pattern of test_ci_suite.py's, which this file does not import. An artifact's zip
-answers, as GitHub's does, with a redirect to storage on another host: a second stub.
+answers, as GitHub's does, with a redirect to storage on another origin (the same host, another
+port): a second stub.
 """
 import io
 import json
@@ -84,7 +85,7 @@ def stub():
 
 @pytest.fixture
 def storage():
-    """Where an artifact's zip redirects to: another host and port, so another origin."""
+    """Where an artifact's zip redirects to: another port, so another origin."""
     server = started()
     yield server
     stopped(server)
