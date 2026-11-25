@@ -1347,6 +1347,16 @@ def seen_as_stored(app_id: str) -> dict:
             "updatedAt": doc.get("updated_at")}
 
 
+def a_review_view(chosen=(), may_own=(), intake=None):
+    """A view of a market built by hand (``review_team.ReviewView``), for a test calling an
+    organizer read directly: with nobody chosen by default, so every application is in no share
+    and none waits, as on a market whose reviewers were never chosen."""
+    import review_team as ReviewTeam
+
+    return ReviewTeam.ReviewView(chosen=frozenset(chosen), may_own=frozenset(may_own),
+                                 intake=intake)
+
+
 def applicant_form_version_now(slug: str) -> str:
     """The form version a vendor's page opened now reads with the form, as every save carries it
     (T507): read through the public form route, so from whichever database the test configured."""

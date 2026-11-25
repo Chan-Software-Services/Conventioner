@@ -71,6 +71,48 @@ function dealtShares(entry: MarketHistoryEntry): DealtShare[] {
   });
 }
 
+/**
+ * How many applications a deal moved, the follow-ups among them counted apart ("3 open
+ * applications and 1 follow-up"), and among how many reviewers.
+ */
+function counted(shares: DealtShare[]): { many: string; among: number } {
+  const among = new Set(shares.map((share) => share.after).filter(Boolean)).size;
+  const followUps = shares.filter((share) => share.followUp).length;
+  const many =
+    plural(shares.length - followUps, 'open application', 'open applications') +
+    (followUps ? ` and ${plural(followUps, 'follow-up', 'follow-ups')}` : '');
+  return { many, among };
+}
+
+/**
+ * The action the status migration marked what it found waiting for the deal under (T277 ticket
+ * 02): the deal that took the mark records it under this, with no actor.
+ */
+const MIGRATED = 'review_state_migrated';
+
+/**
+ * The deal of what the status migration found waiting for the deal: nobody dealt it, so it reads
+ * as the application dealt, "having waited for the deal", one by its vendor (or as the vendor's own
+ * line), several by how many. Most were in nobody's share, but a follow-up whose owner left the
+ * market was still in its chosen reviewer's, so the words say only that it waited.
+ */
+function havingWaited(
+  shares: DealtShare[],
+  one: DealtShare | undefined,
+  mine: DealtShare | undefined,
+  text: (words: string) => MarketHistoryPart,
+  who: (email: unknown) => MarketHistoryPart,
+): MarketHistoryPart[] {
+  const from = ', having waited for the deal';
+  if (one) {
+    const what = one.followUp ? 'follow-up' : 'application';
+    const named = mine ? [text(`The ${what}`)] : [text(`The ${what} of `), who(one.vendor)];
+    return [...named, text(` was dealt to ${one.after ?? 'nobody'}${from}`)];
+  }
+  const { many, among } = counted(shares);
+  return [text(`${many} were dealt among ${plural(among, 'reviewer', 'reviewers')}${from}`)];
+}
+
 /** The share of the vendor whose own history this is, when the deal moved theirs. */
 function ownShare(entry: MarketHistoryEntry, own: string): DealtShare | undefined {
   const vendor = own.trim().toLowerCase();
@@ -347,6 +389,8 @@ export const readers: HistoryReaders = {
               text(` was dealt to ${one.after} as it arrived`),
             ];
       }
+      // What the status migration found waiting, dealt by the next deal: nobody dealt it.
+      if (entry.action === MIGRATED) return havingWaited(shares, one, mine, text, who);
       if (one?.followUp) {
         const followUp = mine
           ? [text('the follow-up')]
@@ -366,11 +410,7 @@ export const readers: HistoryReaders = {
           ? [actor, text('dealt '), ...application, text(` to ${one.after}`)]
           : [actor, text('returned '), ...application, text(' to first come, first served')];
       }
-      const among = new Set(shares.map((share) => share.after).filter(Boolean)).size;
-      const followUps = shares.filter((share) => share.followUp).length;
-      const many =
-        plural(shares.length - followUps, 'open application', 'open applications') +
-        (followUps ? ` and ${plural(followUps, 'follow-up', 'follow-ups')}` : '');
+      const { many, among } = counted(shares);
       return among
         ? [actor, text(`dealt ${many} among ${plural(among, 'reviewer', 'reviewers')}`)]
         : [actor, text(`returned ${many} to first come, first served`)];

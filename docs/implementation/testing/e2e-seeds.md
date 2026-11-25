@@ -34,7 +34,7 @@ describes:
   - front-end/e2e/helpers/seeds.ts#allocateThenFreeEverySeat
   - front-end/e2e/helpers/seedMarketDayMap.ts
   - front-end/e2e/helpers/seedAPricedVendor.ts
-verified: 2026-11-12
+verified: 2026-11-24
 sources:
   - E02
   - E11/F01/S01
@@ -284,6 +284,7 @@ Each helper is one block, what it leaves and its notes, one note a line; a new h
   - seven vendors seated by hand today on an allocation (`allocateThenFreeEverySeat()`), two of them sharing Aisle A 3 as its left and right halves, and two seated tomorrow
   - the first vendor checked in today at the door, and an organizer's note on the second
   - the form's three short text questions, a business name, a website and an Instagram handle, answered by most vendors in the shapes the map cleans, one answering none and one giving an email address as their business name
+- Reckons today and tomorrow from one instant, tomorrow as the next day on the calendar after it, and answers that instant as `seededAt`, at which a spec holds its pages' clock so they open on today; it once read the clock twice, so a seed that ran across midnight got days two apart
 - With `publicMap: true`, the map turned on through the Public map card's own write, its three questions chosen
 - With `inAssignment: true`, it stops in `assignment` once today's and tomorrow's seats are given: no location laid out, its sections' counts as Section Setup typed them, its results not out and nobody checked in, so a spec starts a layout past Draft and publishes itself (the phase's journey, `a-market-past-draft-gets-a-public-map.spec.ts`)
 - Notes:
@@ -318,11 +319,13 @@ It returns the `marketSlug` of the market's vendor page, where its vendors check
 A spec that also reads what a market on its day offers, such as the rail's More menu, seeds today and tomorrow (`marketDates`): a run that passes midnight between its seed and its read finds the market's one day over, and the rail then offers archiving as its main button with no menu (T501's trial merge).
 A second day does not hold a spec that checks vendors in and then reads the rail, since past midnight the door opens on that second day, where none of its check-ins stand.
 Such a spec, and any that reads what else turns at the browser's midnight on a market seeded on today (the vendor page's today card, the day the public map opens on), keeps its days, reckons them from one instant, `calendarToday(seededAt)`, for the seed and every check-in, and holds each page's clock at that instant with `page.clock.setFixedTime(seededAt)` before the page opens, so the browser's today stays the market's day whatever the clock reads by its last step ([`an-archive-keeps-its-vendor-page.spec.ts`](../../../front-end/e2e/an-archive-keeps-its-vendor-page.spec.ts), [`a-viewer-at-the-door-reads-why.spec.ts`](../../../front-end/e2e/a-viewer-at-the-door-reads-why.spec.ts)).
+A file that seeds once in `beforeAll` holds each test's page in a file-level `test.beforeEach`, at the seed's instant, such as `seedMarketDayMap()`'s `seededAt` ([`the-public-map.spec.ts`](../../../front-end/e2e/the-public-map.spec.ts)).
+A page that reads its day from its address, the door's `?date=`, is given the seeded day there instead of a held clock when the spec does not read which day the page opens on by itself ([`the-door-as-a-map.spec.ts`](../../../front-end/e2e/the-door-as-a-map.spec.ts)), and named again after a phase move, which lands on the door with no day in its address.
 A spec of what check-ins count, the Stats tab's, keeps its days to come and stores its check-ins with `recordCheckIns()` ([file](../../../front-end/e2e/helpers/seeds.ts)): one record per vendor's day, written as the door writes it, at the table the vendor holds that day, by the organizer it names, and with no history entry; it throws on a vendor with no seat that day.
 `seedTheScreens()` checks half of its rules market's first day in this way, for the Stats tab's check-in rows.
 
 **A vendor checks themselves in or out only at a market that turned its self check-in switch on** (T496, [attendance and the door](../modules/attendance-and-door.md#sharp-edges)), and every seeded market has it off, so a spec in which a vendor checks themselves in or out first calls `letVendorsCheckThemselvesIn(request, marketId)` ([file](../../../front-end/e2e/helpers/selfCheckIn.ts)), which turns it on through the switch's own `PUT`, with the session of someone who may check vendors in, on a market in its market days.
-The layout sweep's vendor page states on a market day are walked signed out, so `asAVendorAt` in `helpers/screens.ts` sets the stored switch on `big` with `mongoEval` each time it opens, on, or off for the state checked in at the door.
+The layout sweep's vendor page states on a market day are walked signed out, so `asAVendorAt` in `helpers/screens.ts` sets the stored switch on `big` with `mongoEval` each time it opens, on, or off for the state checked in at the door, and holds the page's clock at the instant it builds the seats on.
 
 ## Sharp edges
 

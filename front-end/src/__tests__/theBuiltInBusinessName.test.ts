@@ -34,6 +34,7 @@ import {
 } from '@/utils/essentialFields';
 import { ASSIGNMENT_READS } from '@/utils/answerUpdates';
 import { findsApplication } from '@/utils/reviewQueue';
+import { servedReview } from './support/servedReview';
 
 const sent: { url: string; body: unknown }[] = [];
 
@@ -220,6 +221,7 @@ function application(overrides: Partial<Application> = {}): Application {
     applicantEmail: 'ana@example.com',
     formData: { [FULL_NAME_KEY]: 'Ana Rivera', [BUSINESS_NAME_KEY]: 'Paper & Pine' },
     status: ApplicationStatus.ReviewerApproved,
+    ...servedReview('approved'),
     applicationType: ApplicationType.Main,
     updatedAt: '2026-10-01T00:00:00Z',
     ...overrides,

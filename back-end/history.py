@@ -177,6 +177,12 @@ APPLY = "apply"
 SUBMITTED = "submitted"
 EDITED = "edited"
 
+# An operator's own
+#: The action an application ``migrations/migrate_application_status.py`` found waiting for the
+#: deal is marked for it under (T277 ticket 02), with no actor: no row of the table asked it, so
+#: the deal that takes the mark records it under this, and the Applications group reads it.
+REVIEW_STATE_MIGRATED = "review_state_migrated"
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()

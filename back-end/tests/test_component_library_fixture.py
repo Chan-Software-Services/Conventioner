@@ -47,6 +47,20 @@ def test_the_applications_are_every_named_applicant_of_the_four_day_grid():
         "open": 110, "needs_follow_up": 25, "reviewer_approved": 160, "reviewer_rejected": 64}
 
 
+def test_each_application_carries_the_review_state_the_server_serves_it():
+    """The library reads each application's state as the screens do, from the served ``review``,
+    written by the server's own reader: each dealt to one of the 12 chosen reviewers, its share
+    theirs, a follow-up owned by its reviewer, so nothing waits for the deal."""
+    applications = FIXTURE["applications"]
+    email = {person["id"]: person["email"].lower() for person in FIXTURE["people"]}
+    assert collections.Counter(a["review"]["state"] for a in applications) == {
+        "open": 110, "follow_up": 25, "approved": 160, "rejected": 64}
+    assert all(a["review"]["undecided"] == (a["review"]["state"] in ("open", "follow_up"))
+               for a in applications)
+    assert all(a["review"]["share"] == [email[a["reviewer"]]] for a in applications)
+    assert not any(a["review"]["waiting"] for a in applications)
+
+
 def test_each_application_arrived_when_the_file_says_over_17_days():
     """The Stats tab's column chart is judged on these: each time read from the file's Timestamp
     column as the import stores it, spread over 17 days with none empty."""
@@ -247,8 +261,10 @@ def test_it_holds_only_strings_numbers_and_the_shape_the_library_reads():
         "applications", "export", "fill", "people", "question", "reviewers", "room", "seats",
         "valuesToFix"]
     assert sorted(FIXTURE["applications"][0]) == [
-        "business", "email", "export", "id", "name", "reviewer", "sells", "status",
+        "business", "email", "export", "id", "name", "review", "reviewer", "sells", "status",
         "submittedAt"]
+    assert sorted(FIXTURE["applications"][0]["review"]) == [
+        "share", "state", "undecided", "waiting"]
     assert sorted(FIXTURE["people"][0]) == ["email", "id", "name", "role"]
     assert sorted(FIXTURE["seats"][0]) == ["application", "date", "section", "table", "tier"]
     json.dumps(FIXTURE)

@@ -685,6 +685,7 @@ async function decideSelection() {
           :cap="PEOPLE_CAP"
           holds-choice
           list-over
+          compact
           label="Assigned to"
           placeholder="Type an address…"
           testid="applications-all-assigned-to"
@@ -1075,12 +1076,11 @@ async function decideSelection() {
   white-space: nowrap;
 }
 
-/* As tall as the compact statuses and the find field beside it, so the line is one height. */
+/* Compact, by the picker's own `compact`, as the statuses and the find field beside it are. */
 .all-view .all-assigned :deep(.field) {
   flex: 1 1 14rem;
   width: auto;
   min-width: 0;
-  height: var(--control-height-compact);
 }
 
 .all-selection {

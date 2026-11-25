@@ -23,6 +23,7 @@ import {
 import { MarketAction } from '@/utils/marketActions';
 import { useVendorDetails } from '@/utils/vendorDetails';
 import { EDITOR_ANSWERS, VIEWER_ANSWERS } from './support/servedAnswers';
+import { servedReview } from './support/servedReview';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() }));
 
@@ -40,6 +41,7 @@ const APPLICATION: Application = {
   applicantEmail: FERN,
   formData: { [QUESTION]: 'Fern Studio' },
   status: ApplicationStatus.ReviewerApproved,
+  ...servedReview('approved'),
   applicationType: ApplicationType.Main,
   updatedAt: '2026-10-01T00:00:00Z',
 };

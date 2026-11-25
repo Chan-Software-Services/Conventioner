@@ -742,6 +742,64 @@ describe('who reviews which application (E38/F07/S02)', () => {
     ]);
   });
 
+  /**
+   * The deal of what the status migration found waiting for the deal (T277 ticket 02): recorded
+   * under the migration's action, with no actor, since an operator's migration, not a person,
+   * marked it. Some were in nobody's share, a follow-up whose owner left in its reviewer's, so the
+   * line says only that it waited.
+   */
+  function afterTheMigration(entry: MarketHistoryEntry): MarketHistoryEntry {
+    return {
+      ...entry,
+      action: 'review_state_migrated',
+      actor: null,
+      detail: { ...(entry.detail as object), cause: 'arrived' },
+    } as MarketHistoryEntry;
+  }
+
+  it('words the deal of a migrated application as having waited, in the vendor’s own history too', () => {
+    const one = afterTheMigration(dealt([SAM], [KAI]));
+
+    expect(said(entryParts(one, { names: NAMES }))).toBe(
+      `The application of [Ana Rivera] was dealt to ${SAM}, having waited for the deal`,
+    );
+    expect(
+      said(entryParts(one, { names: NAMES, path: IntakeMode.Csv, own: 'ana@ember.test' })),
+    ).toBe(`The application was dealt to ${SAM}, having waited for the deal`);
+    expect(entryChanges(one, { path: IntakeMode.Csv, own: 'ana@ember.test' }).changed).toEqual([
+      { field: 'Reviewer', before: KAI, after: SAM },
+    ]);
+  });
+
+  it('words the deal of a migrated follow-up as having waited, in the vendor’s own history too', () => {
+    const many = afterTheMigration(handedOn());
+    const one = { ...many, vendors: ['ben@ember.test'], subject: { application_ids: ['app-1'] } };
+
+    expect(said(entryParts(one, { names: NAMES }))).toBe(
+      `The follow-up of [Ben Okafor] was dealt to ${SAM}, having waited for the deal`,
+    );
+    expect(
+      said(entryParts(many, { names: NAMES, path: IntakeMode.Csv, own: 'ben@ember.test' })),
+    ).toBe(`The follow-up was dealt to ${SAM}, having waited for the deal`);
+    expect(entryChanges(many, { path: IntakeMode.Csv, own: 'ben@ember.test' }).changed).toEqual([
+      { field: 'Reviewer', before: KAI, after: SAM },
+      { field: 'Follow-up owner', before: KAI, after: SAM },
+    ]);
+  });
+
+  it('words the deal of several migrated ones by how many, follow-ups among them', () => {
+    expect(said(entryParts(afterTheMigration(dealt([SAM, KAI, SAM])), { names: NAMES }))).toBe(
+      '3 open applications were dealt among 2 reviewers, having waited for the deal',
+    );
+    expect(said(entryParts(afterTheMigration(handedOn()), { names: NAMES }))).toBe(
+      '1 open application and 1 follow-up were dealt among 1 reviewer, having waited for the deal',
+    );
+    expect(entryChanges(afterTheMigration(dealt([SAM, KAI]))).changed).toEqual([
+      { field: 'ana@ember.test', before: 'none', after: SAM },
+      { field: 'ben@ember.test', before: 'none', after: KAI },
+    ]);
+  });
+
   it('opens a change of reviewers to the lists before and after, one address a line', () => {
     expect(entryChanges(reviewers(['a@x.test'], ['a@x.test', 'c@x.test'])).changed).toEqual([
       { field: 'Reviewers', before: 'a@x.test', after: 'a@x.test\nc@x.test' },
