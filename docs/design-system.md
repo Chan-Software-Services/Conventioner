@@ -363,16 +363,14 @@ The card's was extracted from the newer screens, where it is already used 77 tim
 
 ```css
 --shadow-card:
-  0 0 0 1px rgba(0, 0, 0, 0.07), 0 2px 4px rgba(0, 0, 0, 0.07),
-  0 6px 14px rgba(0, 0, 0, 0.08);
+  0 0 0 1px rgba(0, 0, 0, 0.07), 0 2px 4px rgba(0, 0, 0, 0.07), 0 6px 14px rgba(0, 0, 0, 0.08);
 ```
 
 **What floats over a map takes the second, `--shadow-float`** (T465): the public map's sheet, its day and hall dropdowns, its zoom and legend pills and its bubble.
 The card's shadow, with its 1px ring, reads heavy over a pale map, so this one is softer and wider, and what it lifts draws its own edge in `--mm-border-soft`.
 
 ```css
---shadow-float:
-  0 1px 2px rgba(39, 35, 35, 0.06), 0 8px 24px rgba(39, 35, 35, 0.08);
+--shadow-float: 0 1px 2px rgba(39, 35, 35, 0.06), 0 8px 24px rgba(39, 35, 35, 0.08);
 ```
 
 **A card that informs is flat**, where the cards worked in are lifted: on the [layout's page](implementation/modules/floorplan-placement.md#the-editor) the Sections card stands on `--mm-beige` with a 1px `--mm-border` edge and no shadow, so the white, lifted card of the selection or the tool under it reads as the one in hand (T422, the QC walk of 2026-11-16); its quiet lines take `--mm-text-muted-on-beige`, since `--mm-text-muted` is 4.23:1 there.
