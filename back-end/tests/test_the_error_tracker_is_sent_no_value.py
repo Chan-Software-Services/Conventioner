@@ -98,6 +98,23 @@ def assert_sent_no_value(transport):
         assert "request" not in event or set(event["request"]) <= {"method", "url"}
 
 
+def sdk_importers(root):
+    """Each back-end `.py` under ``root`` naming `sentry_sdk`, skipping what is not our code."""
+    importers = []
+    for directory, subdirectories, files in os.walk(root):
+        subdirectories[:] = sorted(
+            name for name in subdirectories
+            if not name.startswith(".") and name not in ("tests", "venv", "__pycache__")
+        )
+        for name in sorted(files):
+            path = os.path.join(directory, name)
+            if name.endswith(".py"):
+                with open(path, encoding="utf-8") as module:
+                    if "sentry_sdk" in module.read():
+                        importers.append(os.path.relpath(path, root))
+    return importers
+
+
 @pytest.fixture(autouse=True)
 def a_tracker_not_yet_started():
     """Importing the app started the tracker, with the suite's environment and so no DSN; a second
@@ -466,16 +483,16 @@ class TestStarting:
 
         assert done.stdout.strip() == "False"
 
-    def test_no_other_module_imports_the_sdk(self):
-        importers = []
-        for directory, subdirectories, files in os.walk(BACK_END_DIR):
-            subdirectories[:] = [name for name in subdirectories if name not in ("tests", "__pycache__")]
-            for name in files:
-                path = os.path.join(directory, name)
-                if name.endswith(".py") and "sentry_sdk" in open(path, encoding="utf-8").read():
-                    importers.append(os.path.relpath(path, BACK_END_DIR))
+    def test_no_other_module_imports_the_sdk(self, tmp_path):
+        assert sdk_importers(BACK_END_DIR) == ["error_tracking.py"]
 
-        assert importers == ["error_tracking.py"]
+        # A developer's `back-end/venv` (docs/STARTUP.md) holds the SDK itself, and a vendored
+        # file need not be UTF-8: neither is the back end's code.
+        for skipped in ("venv", ".venv", "tests", "__pycache__"):
+            (tmp_path / skipped).mkdir()
+            (tmp_path / skipped / "vendored.py").write_bytes(b"import sentry_sdk\n# \xff\n")
+        (tmp_path / "error_tracking.py").write_text("import sentry_sdk\n")
+        assert sdk_importers(str(tmp_path)) == ["error_tracking.py"]
 
 
 def test_a_dsn_the_shell_exported_is_gone_before_any_test_runs():
