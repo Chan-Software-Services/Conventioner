@@ -4,11 +4,17 @@
  *
  * Reads:
  * - `change-organization/renamed`
- * - `manage-organization-admins/role_given`
- * - `manage-organization-admins/role_changed`
+ * - `manage-organization-admins/role_given`, said as accepted when given by an invitation
+ * - `manage-organization-admins/role_changed`, the same: a member who accepts an admin invitation
  * - `manage-organization-admins/role_taken`
- * - `manage-organization-members/role_given`
+ * - `manage-organization-admins/invited`
+ * - `manage-organization-admins/invitation_withdrawn`
+ * - `manage-organization-admins/invitation_declined`
+ * - `manage-organization-members/role_given`, said as accepted when given by an invitation
  * - `manage-organization-members/role_taken`
+ * - `manage-organization-members/invited`
+ * - `manage-organization-members/invitation_withdrawn`
+ * - `manage-organization-members/invitation_declined`
  * - `transfer-organization/`
  * - `create-market/`
  * - `delete-market/`
@@ -26,6 +32,9 @@
 import { getRoleDisplayName } from '@/utils/permissions';
 import {
   asDetail,
+  invitationDeclined,
+  invitationWithdrawn,
+  invited,
   listed,
   permissionRows,
   roleChanged,
@@ -58,8 +67,14 @@ export const readers: HistoryReaders = {
   'manage-organization-admins/role_given': { parts: roleGiven },
   'manage-organization-admins/role_changed': { parts: roleChanged },
   'manage-organization-admins/role_taken': { parts: roleTaken },
+  'manage-organization-admins/invited': { parts: invited },
+  'manage-organization-admins/invitation_withdrawn': { parts: invitationWithdrawn },
+  'manage-organization-admins/invitation_declined': { parts: invitationDeclined },
   'manage-organization-members/role_given': { parts: roleGiven },
   'manage-organization-members/role_taken': { parts: roleTaken },
+  'manage-organization-members/invited': { parts: invited },
+  'manage-organization-members/invitation_withdrawn': { parts: invitationWithdrawn },
+  'manage-organization-members/invitation_declined': { parts: invitationDeclined },
   'transfer-organization/': {
     parts(entry, context) {
       const { actor, text } = sentence(entry, context);

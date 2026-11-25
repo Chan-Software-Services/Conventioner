@@ -42,6 +42,7 @@ APP_COLLECTIONS = (
     'vendor_notes',
     'payments',
     'amounts_owed',
+    'invitations',
 )
 
 # GridFS buckets, which are a pair of collections each and are not listed above.

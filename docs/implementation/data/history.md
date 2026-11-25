@@ -52,8 +52,9 @@ sources:
   - T422
   - T352
   - T496
-  - T452
   - T504
+  - T538
+  - T452
 ---
 
 # The market's history
@@ -94,7 +95,7 @@ The verdicts, the import, the start and the review team record through them too 
 The Discord connection, vendor info, added vendors, the table types and the floorplans record through them too (T352): each write through the `Asked` its own check returned, the Discord card's writes through `_write`'s, the image's delete through the asking the floorplans access module's `image_asking` returned, and a floorplan saved to a market through its own asking of Market Setup.
 The deal of a waiting application records through the unasked door, under the row id and the person the move that marked it for the deal stored beside it (`arriving`, the `Arrival` its caller gives the review state's event, [ADR 0037](../../adr/0037-an-applications-review-state-has-one-owner.md)), so `unasked` takes a row's id as `_record` does.
 A caller holding its write's asking builds that `Arrival` from it, `Arrival.of` in [`back-end/application_status.py`](../../../back-end/application_status.py), refused by `RecordedARefusal` on a refused asking: the rules' and the form's writes, vendor info, an undo and a follow-up's hand-on; the import, handed its person alone, names its own row, and an applicant's own save marks theirs under `APPLY`.
-Eleven functions open the unasked door, each giving the reason beside it as `because`: `csv_import.enter_review` (`FIRST_IMPORT_MOVES_UNASKED`), `csv_start.confirm` (`START_RELEASES_UNASKED`), `review_team._deal_arriving` (`ARRIVALS_DEAL_UNASKED`), `seed_test_markets.seed_test_market` (`SEEDER_MOVES_UNASKED`), `record_dropped` in the owed day's migration (`MIGRATION_DROPS_UNASKED`), `record_swapped` in the location name swap (`SWAP_RECORDS_UNASKED`), `record_renamed` in the location rename (`RENAME_RECORDS_UNASKED`), and `check_in`, `undo_check_in`, `check_out` and `undo_check_out` in `api/vendor_check_in.py` (`VENDORS_OWN_CHECK_IN_UNASKED`).
+Thirteen functions open the unasked door, each giving the reason beside it as `because`: `csv_import.enter_review` (`FIRST_IMPORT_MOVES_UNASKED`), `csv_start.confirm` (`START_RELEASES_UNASKED`), `review_team._deal_arriving` (`ARRIVALS_DEAL_UNASKED`), `seed_test_markets.seed_test_market` (`SEEDER_MOVES_UNASKED`), `record_dropped` in the owed day's migration (`MIGRATION_DROPS_UNASKED`), `record_swapped` in the location name swap (`SWAP_RECORDS_UNASKED`), `record_renamed` in the location rename (`RENAME_RECORDS_UNASKED`), `record_moved` in the business name migration (`MOVE_RECORDS_UNASKED`), `decline_market_invitation` in `api/markets.py` (`AN_INVITEE_ANSWERS`), and `check_in`, `undo_check_in`, `check_out` and `undo_check_out` in `api/vendor_check_in.py` (`VENDORS_OWN_CHECK_IN_UNASKED`).
 `Recorder` names the two, for a helper that records for its caller's check.
 [`back-end/tests/test_only_an_asking_writes_a_markets_history.py`](../../../back-end/tests/test_only_an_asking_writes_a_markets_history.py) holds the rule: it reads every server module and fails one outside this one and the market's actions that uses `_record`, `_write`, `history_collection` or `record` (the writer's public name before T105-9), any import of those by name, any use of `unasked` but a call from a function of its `DOORS` giving that function's reason, and any recorder built by hand, an `Asked` outside the market's actions or an `UnaskedRecorder` outside this module (`BUILDERS`); it plants each of those in a source of its own and sees it found.
 `TestARecordNoRequestAsked` in [`back-end/tests/test_the_history.py`](../../../back-end/tests/test_the_history.py) pins what the unasked recorder writes and that it never raises.
@@ -323,6 +324,18 @@ One block per action, in the order of [the actions table](../modules/market-acti
 - `role_given`, `role_changed`, `role_taken`: Manage market's people
   - Subject: `user_id`, `email`
   - Detail: `role`
+- `invited`: an address invited to a role ([invitations](../modules/invitations.md)), under the row that gives the role
+  - Subject: `email`, the address alone, whether or not it has an account
+  - Detail: `role`, the role it offers; inviting the address again records again, with the new role; read "<actor> invited <email> as an Editor"
+- `invitation_withdrawn`: a waiting invitation withdrawn, under the row that gives its role
+  - Subject: `email`
+  - Detail: `role`; read "<actor> withdrew the invitation to <email>"
+- `invitation_declined`: an invitation declined by the person it was sent to, through the unasked door `AN_INVITEE_ANSWERS`, under the row that gives its role
+  - Actor: the invitee's address
+  - Subject: `email`
+  - Detail: `role`; read "<email> declined the Editor role"
+- `role_given` by an invitation accepted: through the inviter's asking of the row that gives the role, at the moment it was accepted, so its actor is the inviter
+  - Detail: `role`, and `by_invitation: true`; read "<actor> gave <email> the Editor role, which they accepted"
 
 **`hand-on-market`**
 
@@ -374,12 +387,18 @@ One block per action, in the order its constants stand in `history.py`; a new ki
 - `role_given`, `role_changed`, `role_taken`: an admin added, a member made an admin, an admin removed
   - Subject: `user_id`, `email`
   - Detail: `role`: `admin`, `member`, or null
+- `invited`, `invitation_withdrawn`, `invitation_declined`: an invitation to be an admin sent, withdrawn, or declined by the person it was sent to, its actor their address ([invitations](../modules/invitations.md#inviting-to-an-organization))
+  - Subject: `email`, the address alone, whether or not it has an account
+  - Detail: `role`: `admin`
+- `role_given` or `role_changed` by an invitation accepted: its actor the inviter, at the moment it was accepted; `role_changed` for a member made an admin
+  - Detail: `role` before and after, and `by_invitation: true`; read as a market's are, "… the Admin role, which they accepted", or "<actor> changed <email> from Member to Admin, which they accepted"
 
 **`manage-organization-members`**
 
 - `role_given`, `role_taken`: a member added or removed
   - Subject: `user_id`, `email`
   - Detail: `role`: `member`, or null
+- `invited`, `invitation_withdrawn`, `invitation_declined`, and `role_given` by an invitation accepted: as for an admin, its `role` `member`
 
 **`transfer-organization`**
 
@@ -421,8 +440,8 @@ Not recorded, each for its reason in `NOT_A_CHANGE` and `NOT_RECORDED` of [`back
 Two rows record nothing of their own: "Update info the assignment or price reads", asked beside "Update a vendor's info" by the same write, which records it under that row, and who may be chosen as a reviewer, which changes nothing itself.
 That test sends every write route as the screen sends it and asserts its one entry; it fails on a market write route, or a row of the table, that records nothing without saying why there, and on an entry Mongo could not store.
 It also ties each entry to the asking (T105-9): a spy on `Actions.refusal` collects the rows each write asked and was let in by, leaving out a row asked on top of another and one read through `Actions.may`, which lets nobody in, and an entry under any other row fails.
-The exceptions are an applicant's own save, which no row asks, and the eight records no request asks, each in its `UNASKED`, which keeps only what the test adds to the reason its door passes: a first import's move into Review, the floorplans a start from a file drops, a vendor's own check-in, check-out or the undo of either, the deal of an application that waited to be dealt, recorded under the write it arrived by, the test-market seeder's phase moves, the amounts the owed day's migration drops, and the plan changes the location name swap and the location rename record.
-Its `REACHING_THE_UNASKED` sends a request that reaches each of those a route can reach, all but the seeder's, the migration's, the swap's and the rename's, and asserts the one record it is allowed as, and each of its `UNASKED` names a door of the guard's `DOORS` among its functions, every door named by one, so the reason is kept once, in that door's constant beside its caller.
+The exceptions are an applicant's own save, which no row asks, and the ten records no request asks, each in its `UNASKED`, which keeps only what the test adds to the reason its door passes: a first import's move into Review, the floorplans a start from a file drops, a vendor's own check-in, check-out or the undo of either, the deal of an application that waited to be dealt, recorded under the write it arrived by, the test-market seeder's phase moves, the amounts the owed day's migration drops, the plan changes the location name swap and the location rename record, the form change the business name migration records, and an invitee's decline of an invitation to the market.
+Its `REACHING_THE_UNASKED` sends a request that reaches each of those a route can reach, all but the seeder's and the four migrations', and asserts the one record it is allowed as, and each of its `UNASKED` names a door of the guard's `DOORS` among its functions, every door named by one, so the reason is kept once, in that door's constant beside its caller.
 A free that also deducts its amount asks two rows and records under each, and is sent alone, since every write of `WRITES` records one entry.
 Its `TestWhatAnEntryHolds` pins what some entries hold beyond that, among them an import's counts of the automatic rejections it returned and a taken role's `role` before, under the row that takes it.
 
