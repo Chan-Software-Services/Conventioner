@@ -16,7 +16,7 @@ import type { TrackedItem, TrackedRoute, TrackedViolation } from '@/utils/errorT
 /**
  * The SDK's side of the front end's error tracking (docs/implementation/modules/error-tracking.md),
  * reached only by `errorTracking.ts`'s `import()`, so it and the SDK are a chunk of their own that
- * no page loads before it has painted.
+ * a page loads after it has painted, or at its first error.
  *
  * It makes a client and a scope of its own rather than the SDK's global `init`, so nothing else in
  * the page reports through it, and turns off every integration but linking a cause to its error and

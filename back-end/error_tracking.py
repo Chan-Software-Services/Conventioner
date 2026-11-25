@@ -1,10 +1,11 @@
 """The back end's errors, sent to Sentry, and never an applicant's data (ADR 0049).
 
 With ``SENTRY_DSN`` set, every unexpected exception (``report``, from ``client_errors``), every
-warning and error log line, and every boot refusal becomes one event; an informational log line is
-kept as a breadcrumb on the event after it. With no DSN, or a blank or published one
-(``configured_secret``), nothing here imports the SDK, and the app runs exactly as it would without
-this module: importing it costs Active CPU on every cold start.
+warning and error log line but ``werkzeug``'s and ``client_errors``', and every boot refusal
+becomes one event; an informational log line is kept as a breadcrumb on the event after it. With
+no DSN, or a blank or published one (``configured_secret``), nothing here imports the SDK, and the
+app runs exactly as it would without this module: importing it costs Active CPU on every cold
+start.
 
 Every event is built anew from the ADR's allowlist (``_allowed_event``), never by deleting what the
 SDK added, so a field a later SDK adds is dropped until the ADR allows it. An exception is sent by

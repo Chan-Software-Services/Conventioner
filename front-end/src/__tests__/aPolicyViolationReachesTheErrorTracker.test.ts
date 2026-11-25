@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 /**
- * Each Content-Security-Policy violation in a page reaches Sentry as one warning, with only what
- * ADR 0049 allows of it (T584).
+ * The first Content-Security-Policy violation of each directive and blocked origin in a page load
+ * reaches Sentry as one warning, with only what ADR 0049 allows of it (T584).
  *
  * The browser fires `securitypolicyviolation` on the document for every load the policy refuses or,
  * under a report-only policy, would refuse. Each case installs the tracker on a real app and router

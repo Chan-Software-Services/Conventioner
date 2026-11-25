@@ -258,7 +258,7 @@ The human check (`captcha_passes` in [`back-end/utils/captcha.py`](../../../back
 Two lines keep a message on purpose: `healthz`'s `logger.exception`, since the database driver's message is how an operator reads an outage and holds no request's value, and the CSV import's parse warning, since the `csv` module's messages name a limit or a character class, never a cell.
 `healthz`'s message never reaches the error tracker, whose events carry an exception by its type alone ([ADR 0049](../../adr/0049-what-may-be-sent-to-the-error-tracker.md)); the CSV import's warning is an event, and its words, the `csv` module's message among them, are sent with every address replaced.
 
-**No log line carries an exception's message.**
+**No other log line formats a caught exception's message.**
 A library's message may quote what it was given, an applicant's address or answer among it, and a log line may become an error-tracker event kept for 30 days, where Vercel keeps the line for an hour.
 So a logging call (`logger.<level>` or `logging.<level>`, any level) in an `except` handler never formats the exception it caught: not as an argument, not in an f-string, not through `str()`, `repr()` or `.args`, and not through `traceback.format_exc()`, which prints the message under the frames.
 It names the exception's type (`type(e).__name__`), an attribute that holds no value (`e.code`), `parse_failure_detail(e)` or `traceback_without_messages(e)`.

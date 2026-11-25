@@ -1,4 +1,4 @@
-"""No log line carries an exception's message.
+"""No log line formats a caught exception's message into its arguments.
 
 A library's message may quote what it was given, an applicant's address or answer among it, and a
 log line may become an error-tracker event that is kept for 30 days. So a logging call
