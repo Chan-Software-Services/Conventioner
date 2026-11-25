@@ -7,7 +7,6 @@ describes:
   - front-end/e2e/helpers/seeds.ts#ensureTestOrgs
   - front-end/e2e/helpers/seeds.ts#ensureTestOrg
   - front-end/e2e/helpers/seeds.ts#removeFromOrganization
-  - front-end/e2e/helpers/grantMarketRole.ts
   - front-end/e2e/helpers/seeds.ts#seedMarketWithVendors
   - front-end/e2e/helpers/seeds.ts#seedPublishedMarketWithAssignments
   - front-end/e2e/helpers/seedAssignedMarket.ts
@@ -34,6 +33,7 @@ describes:
   - front-end/e2e/helpers/seeds.ts#allocateThenFreeEverySeat
   - front-end/e2e/helpers/seedMarketDayMap.ts
   - front-end/e2e/helpers/seedAPricedVendor.ts
+  - front-end/e2e/helpers/grantMarketRole.ts
 verified: 2026-11-24
 sources:
   - E02
@@ -262,7 +262,7 @@ Each helper is one block, what it leaves and its notes, one note a line; a new h
     - an admin's invitation to a long address waiting on it, beside `SCREENS_INVITEE`'s member one, so Manage organization draws "Invited" with a row of each place (T538); sent only when no admin's invitation waits, since the organization is the same on every seed of a stack and an invitation waits 14 days
   - the review market's cards lead with two answers and fold the rest behind "N more answers"
   - a `seedLayout()` draft whose Upper Hall layout has its floorplan and no scale, which the sweeps walk calibrating (T257)
-  - `SCREENS_INVITEE`, in no market and no organization, invited to the 36-vendor market `SCREENS_EDITOR` edits as an Editor and to the organization as a member, neither answered, so a `SCREENS` state signed in as `'invitee'` reads the Invitations page's two rows and the Markets list's line (T538); each invitation is sent only when none of its kind waits, since every sweep file seeds and an address is sent at most five invitations a quarter hour
+  - `SCREENS_INVITEE`, in no market and no organization, invited to the 36-vendor market `SCREENS_EDITOR` edits as an Editor and to the organization as a member, neither answered, so a `SCREENS` state signed in as `'invitee'` reads the Invitations page's two rows and the Markets list's line (T538); each invitation is sent only when none of its kind waits, since every sweep file seeds and an address's invitations are counted (`INVITATION_PER_ADDRESS`, [the one table of limits](../data/users-and-email.md#the-sign-in-is-bounded))
   - two invitations waiting on the 70-character draft, an Admin's to a long address and a Viewer's, to addresses each seed makes its own for that same limit, so Manage market draws "Invited" (T538)
   - a `seedLayout()` draft whose Upper Hall is laid out (`UPPER_HALL_TABLES`, `UPPER_HALL_ZONES`), which the sweeps walk as its map (T257)
   - a `seedSettledLayout()` market taking applications, its Upper Hall laid out in Draft, which the sweeps walk past Draft (T257)

@@ -27,7 +27,7 @@ Manage market's "Invite someone" and Manage organization's "Invite admin" and "I
   Inviting the address again replaces it, with the new role, a new email and a new 14 days.
   Whoever may give its role may withdraw it while it waits.
 - **Inviting is bounded.**
-  An organizer sends at most 100 invitations, and one address is sent at most 5, in a quarter of an hour; past either the organizer reads how long to wait, alike for every address.
+  An organizer's invitations are counted, far above a whole team invited in a sitting, and so are those one address is sent, above the few one person is ever sent ([the limits](../../implementation/modules/invitations.md#the-limits)); past either the organizer reads how long to wait, alike for every address.
 - **Only the invited address may answer.**
   A person signed in with the address it was sent to lists it, accepts it or declines it; to anyone else it reads as an invitation that has ended, so a forwarded email lets nobody else join.
 - **Accepting is the inviter's act, judged again.**

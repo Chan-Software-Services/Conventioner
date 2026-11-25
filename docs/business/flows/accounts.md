@@ -61,7 +61,7 @@ Branches: mismatched passwords ("Passwords do not match"), short password, a pas
 
 - A password longer than 72 bytes, which may be fewer than 72 characters since an accented letter or an emoji takes more than one, says "That password is too long. Use 72 characters or fewer; an accented letter or an emoji counts as more than one." and makes no account ([a password longer than 72 bytes](../../implementation/data/users-and-email.md#the-sign-in-is-bounded)).
 
-- Past thirty sign-ups from one caller in 15 minutes, the next says "You have asked several times. Try again in N minutes." before the human check is asked; past five from one caller for one address in 15 minutes, or twenty for one address in an hour whoever asks, the same, after it, the same for every address ([the sign-in is bounded](../../implementation/data/users-and-email.md#the-sign-in-is-bounded)).
+- Past the sign-ups allowed from one caller, the next says "You have asked several times. Try again in N minutes." before the human check is asked; past those allowed from one caller for one address, or for one address in an hour whoever asks, the same, after it, the same for every address ([the limits](../../implementation/data/users-and-email.md#the-sign-in-is-bounded)).
 
 - A sign-up whose human check does not pass (Cloudflare Turnstile, shown only when Cloudflare needs the person to tick a box) is answered "Confirm you're a person, then try again." and makes no account and sends no mail; when the server cannot reach Cloudflare, the sign-up goes on under its limits.
 
@@ -87,7 +87,7 @@ The page asks for the address on the page itself, in a labelled field.
 "Send the link again" with nothing typed says "Type your email address." under the field and sends nothing; a double click sends one link.
 A server's fault or no answer says so, and keeps the form and the address to try again.
 Each new link replaces the one sent before, which then says "Invalid verification token", and a new one can be asked for at once; a link that could not be mailed leaves none, the one before included, and asking again sends one at once ([a failed send leaves no wait armed](../../implementation/data/users-and-email.md#a-failed-send-leaves-no-wait-armed)).
-Past five links asked from one caller for one address in 15 minutes, twenty for one address in an hour whoever asks, or thirty from one caller, the next says "You have asked several times. Try again in N minutes." in place of a link on its way, the same for every address, and keeps the form and the address.
+Past the links allowed from one caller for one address, for one address in an hour whoever asks, or from one caller ([the limits](../../implementation/data/users-and-email.md#the-sign-in-is-bounded)), the next says "You have asked several times. Try again in N minutes." in place of a link on its way, the same for every address, and keeps the form and the address.
 "Back to sign in" under it is a link to `/login`.
 
 A sign-in refused because the address is not verified yet offers "Send the link again" too (A2), which says the same sentences (E38/F14/S02); past the limit it offers the link no more.
@@ -123,9 +123,9 @@ Every sign-in by password or by code starts a fresh session, so no session cooki
 Each form says one line at a time, the newer replacing the older, and says what to do next (E38/F14/S02):
 
 - A wrong password and an address with no account say the same, "That email and password do not match.", with "Forgot password?" in it (A4); so does a password longer than 72 bytes.
-- Past ten tries from one caller at one address in 15 minutes, or fifty from one caller, the next says "Too many sign-in attempts. Try again in N minutes, or reset your password.", with "Forgot password?" in it, the same for every address.
+- Past the tries allowed from one caller at one address, or from one caller ([the limits](../../implementation/data/users-and-email.md#the-sign-in-is-bounded)), the next says "Too many sign-in attempts. Try again in N minutes, or reset your password.", with "Forgot password?" in it, the same for every address.
   A right password takes its own try back, so only wrong ones count, and a few mistyped passwords cost nothing ([the sign-in is bounded](../../implementation/data/users-and-email.md#the-sign-in-is-bounded)).
-  No one else's tries count against the organizer: past fifty wrong tries at one address from every caller, Sign in asks the human check, which shows above Sign in, often with nothing to tick, and sends once more; a person passes it and is signed in.
+  No one else's tries count against the organizer: past the wrong tries allowed at one address from every caller, which only many callers together reach, Sign in asks the human check, which shows above Sign in, often with nothing to tick, and sends once more; a person passes it and is signed in.
   Asked a second time it says "We couldn't confirm you're a person. Try again.", and a check that cannot load says "The check that you're a person didn't load. Check your connection, then reload the page.".
   Until the server asks, the sign-in loads no script of the check's.
 - A right password on an account not yet verified says "Verify your email address first: we sent you a link when you registered.", with "Send the link again" (A1a).
@@ -134,7 +134,7 @@ Covered by:
 
 - `a-changed-network-keeps-the-organizer-signed-in.spec.ts`
 - `a-failure-says-what-to-do.spec.ts`
-- `an-organizer-signs-in-past-others-wrong-tries.spec.ts`, which fills the address's count as fifty others' wrong tries would, for the password and the code
+- `an-organizer-signs-in-past-others-wrong-tries.spec.ts`, which fills the address's count as many others' wrong tries would, for the password and the code
 - `auth.spec.ts`
 - `remember-me.spec.ts`
 - `sign-in-fits-a-phone.spec.ts`
@@ -162,9 +162,9 @@ Branches: a wrong code ("That code is not right."), which replaces the line sayi
 - Asking for another code before then says "You can ask for a new code in N minutes.".
 - Two requests for a code at once mail one code, the one that signs in, and the other is answered "You can ask for a new code in N minutes.".
 - A code that could not be mailed says "Something went wrong on our side. Try again in a moment.", as any fault of the server does, and asking again sends one at once.
-- Past five codes asked from one caller for one address in 15 minutes, twenty for one address in an hour whoever asks, or thirty from one caller, the next says "You have asked several times. Try again in N minutes.", the same for every address.
-- Past ten tries from one caller at one address in 15 minutes, or sixty from one caller, the next says "Too many sign-in attempts. Try again in N minutes, or reset your password.", the same for every address; a right code takes its own try back, as a right password does ([the sign-in is bounded](../../implementation/data/users-and-email.md#the-sign-in-is-bounded)).
-- Past fifty wrong codes at one address from every caller, Sign in asks the human check, as the password's does (A2), and sends once more.
+- Past the codes allowed from one caller for one address, for one address in an hour whoever asks, or from one caller ([the limits](../../implementation/data/users-and-email.md#the-sign-in-is-bounded)), the next says "You have asked several times. Try again in N minutes.", the same for every address.
+- Past the tries allowed from one caller at one address, or from one caller ([the limits](../../implementation/data/users-and-email.md#the-sign-in-is-bounded)), the next says "Too many sign-in attempts. Try again in N minutes, or reset your password.", the same for every address; a right code takes its own try back, as a right password does.
+- Past the wrong codes allowed at one address from every caller, Sign in asks the human check, as the password's does (A2), and sends once more.
 - Anyone may ask for an organizer's code and use up its five tries; the code sign-in then waits out the hour, while the password and "Forgot password?" stay open (A2, A4).
 
 Covered by:
@@ -194,7 +194,7 @@ Branches: asking for another link before an hour has passed since the last one e
 
 - A new password longer than 72 bytes says "That password is too long. Use 72 characters or fewer; an accented letter or an emoji counts as more than one.", as at sign-up (A1), and leaves the password and the link as they were.
 
-- Past five links asked from one caller for one address in 15 minutes, twenty for one address in an hour whoever asks, or thirty from one caller, the next says "You have asked several times. Try again in N minutes.", the same for every address ([the sign-in is bounded](../../implementation/data/users-and-email.md#the-sign-in-is-bounded)).
+- Past the links allowed from one caller for one address, for one address in an hour whoever asks, or from one caller ([the limits](../../implementation/data/users-and-email.md#the-sign-in-is-bounded)), the next says "You have asked several times. Try again in N minutes.", the same for every address.
 
 Covered by:
 
