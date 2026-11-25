@@ -107,7 +107,7 @@ function deployedHeaders(): Record<string, string> {
   return Object.fromEntries((everyPath?.headers ?? []).map(({ key, value }) => [key, value]));
 }
 
-/** Whether the policy source `source`, of a `connect-src` list, allows an HTTPS request to `host`. */
+/** Whether the `connect-src` source `source` allows an HTTPS request to `host`. */
 function sourceAllowsHost(source: string, host: string): boolean {
   const match = /^https:\/\/([^/:]+)\/?$/.exec(source);
   if (!match) return false;
@@ -120,8 +120,8 @@ function sourceAllowsHost(source: string, host: string): boolean {
  * Refuse an error tracker DSN the browser could not send to (T584).
  *
  * `VITE_SENTRY_DSN` is optional: blank, the bundle has no Sentry chunk and tracking is off. Set, it
- * must be a Sentry DSN, and its host one the policy's `connect-src` in `vercel.json` allows, read as
- * `vite preview` reads it, an exact host or a `*.` pattern matched as the policy matches one;
+ * must be a Sentry DSN, and its host one the policy's `connect-src` in `vercel.json` allows, read
+ * as `vite preview` reads it, an exact host or a `*.` pattern matched as the policy matches one;
  * otherwise every event would be refused by the policy, and nothing would say why. So the
  * mistake fails the build, naming the variable. There is no hatch: a blank one builds.
  */
@@ -219,6 +219,60 @@ export function noDevModules(): Plugin {
   };
 }
 
+/** `src/utils/errorTrackingClient.ts` spelled as Vite spells a module id, as `DEV_DIR` is. */
+const ERROR_TRACKER_CLIENT = normalizePath(
+  realpathSync(fileURLToPath(new URL('./src/utils/errorTrackingClient.ts', import.meta.url))),
+);
+
+/** A module of the Sentry SDK, by its id. */
+const SENTRY_SDK = /[\\/]node_modules[\\/]@sentry[\\/]/;
+
+/**
+ * No error tracker ships without a DSN (T584): a production build with a blank `VITE_SENTRY_DSN`
+ * fails when any chunk it emits holds the tracker's client or a module of `@sentry/`, and names
+ * each chunk and module.
+ *
+ * `errorTracking.ts` reaches the client only by an `import()` behind the DSN's check, spelled out
+ * in each function that loads it, which a build with no DSN drops with its branch. Moved behind a
+ * helper, the check is no longer folded and the build keeps the import, emitting the SDK's chunk;
+ * this is where that is caught, on every production build: CI's, the gate's and the deploy's.
+ */
+export function noErrorTrackerWithoutDsn(dsn: string | undefined): Plugin {
+  let production = false;
+  let root = '';
+  return {
+    name: 'conventioner:no-error-tracker-without-dsn',
+    apply: 'build',
+    configResolved(config) {
+      production = config.isProduction;
+      root = config.root;
+    },
+    generateBundle(_options, bundle) {
+      if (!production || dsn?.trim()) return;
+      const found = Object.values(bundle).flatMap((output) => {
+        if (output.type !== 'chunk') return [];
+        const modules = new Set(
+          output.moduleIds
+            .map((id) => id.split('?')[0]!)
+            .filter((id) => id === ERROR_TRACKER_CLIENT || SENTRY_SDK.test(id))
+            .map((id) => relative(root, id)),
+        );
+        return [...modules].map((module) => `  ${output.fileName}: ${module}`);
+      });
+      if (found.length === 0) return;
+      this.error(
+        [
+          'The error tracker is in this production build, which sets no VITE_SENTRY_DSN:',
+          ...found,
+          'Only errorTracking.ts may reach errorTrackingClient.ts, by an import() behind the ' +
+            'DSN check spelled out in the function that loads it; find what reaches it ' +
+            'another way.',
+        ].join('\n'),
+      );
+    },
+  };
+}
+
 /**
  * Every build says which commit it was built from (T254): it emits `version.json` at the root of
  * its output, `{"commit":"<sha>"}`, or `{"commit":null}` for a build made without one (CI's, the
@@ -258,7 +312,14 @@ export default defineConfig(({ command, mode }) => {
   }
 
   return {
-    plugins: [vue(), vueJsx(), vueDevTools(), noDevModules(), buildCommit()],
+    plugins: [
+      vue(),
+      vueJsx(),
+      vueDevTools(),
+      noDevModules(),
+      noErrorTrackerWithoutDsn(env.VITE_SENTRY_DSN),
+      buildCommit(),
+    ],
     resolve: {
       alias: [
         { find: '@', replacement: fileURLToPath(new URL('./src', import.meta.url)) },
