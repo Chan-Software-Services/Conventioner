@@ -1033,8 +1033,8 @@ async function closeAddUser() {
         <h3>Organization</h3>
         <p class="org-line" data-testid="manage-market-organization">
           <template v-if="marketData.organizationName">
-            Belongs to <strong>{{ marketData.organizationName }}</strong
-            >. Its admins run it; its members can view it.
+            Belongs to <strong>{{ marketData.organizationName }}</strong>. Its admins run it; its
+            members can view it.
           </template>
           <template v-else>Belongs to no organization you can see.</template>
         </p>
