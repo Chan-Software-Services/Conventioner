@@ -23,9 +23,13 @@
  *
  *   node scripts/e2e-shards.ts --shard=3/10 --timings=<that file>
  *
- * and writes its deal record (`test-results/e2e-deal.json`: the timings' source, the timings, every
- * listed file and its hand) beside Playwright's report. Without `--timings` it deals by the
- * committed file. Once every shard has passed, CI's `e2e` job runs
+ * and writes its deal record (`test-results/e2e-deal.json`: the timings' source, the timings,
+ * whether it dealt the whole suite or a named list, how many spec files Playwright listed, the files
+ * it dealt from and its hand) beside Playwright's report. Without `--timings` it deals by the
+ * committed file. With `--specs=<file>`, a JSON array of spec file names relative to `testDir`, it
+ * deals those files alone, by the same timings, and fails before running anything on a name
+ * Playwright does not list; CI passes it on a pull request whose selection named specs. Once every
+ * shard has passed, CI's `e2e` job runs
  *
  *   node scripts/e2e-shards.ts check <dir of the shards' artifacts> [--publish=<out file>]
  *
@@ -106,6 +110,18 @@ export function parseShard(value: string): { current: number; total: number } {
     throw new Error(`--shard takes "current/total", 1-based, as 3/6, not "${value}"`);
   }
   return { current, total };
+}
+
+/** The files a shard deals from: every listed file, or the named ones, with each named file
+ * Playwright does not list (any makes the shard fail before it runs). */
+export function filesToDeal(
+  listed: readonly string[],
+  named: readonly string[] | undefined,
+): { scope: 'whole' | 'named'; files: string[]; unlisted: string[] } {
+  if (named === undefined) return { scope: 'whole', files: [...listed], unlisted: [] };
+  const files = sorted(named);
+  const suite = new Set(listed);
+  return { scope: 'named', files, unlisted: files.filter((file) => !suite.has(file)) };
 }
 
 /** Escapes a path for a regular expression, its slashes too, since the filter is `/source/`. */
@@ -337,7 +353,11 @@ export interface DealRecord {
   /** Where the timings came from, the same words on every shard that took the same timings. */
   source: string;
   timings: Timings;
-  /** Every spec file the suite listed. */
+  /** Whether the shard dealt every listed file, or the list `--specs` named. */
+  scope: 'whole' | 'named';
+  /** How many spec files Playwright listed. */
+  listed: number;
+  /** What the shard dealt from: every listed file, or the named list. */
   files: string[];
   hand: string[];
 }
@@ -650,36 +670,79 @@ function readChosen(path: string | undefined): ChosenTimings {
 /** The deal record, beside Playwright's report, which Playwright empties the folder of first. */
 const dealRecordFile = () => join(import.meta.dirname, '..', 'test-results', 'e2e-deal.json');
 
+/** The spec files a `--specs` file names: a JSON array of strings. */
+function readSpecList(path: string): string[] {
+  try {
+    const value: unknown = JSON.parse(readFileSync(path, 'utf8'));
+    if (Array.isArray(value) && value.every((name) => typeof name === 'string')) return value;
+    throw new Error('it is not a JSON array of strings');
+  } catch (error) {
+    throw new Error(
+      `${path} could not be read as a list of spec files: ${(error as Error).message}`,
+    );
+  }
+}
+
 /**
- * Lists the suite, deals it, checks Playwright selects exactly this shard's hand, runs it, and
- * writes the deal record.
+ * Lists the suite, deals it, or the files `--specs` names, checks Playwright selects exactly this
+ * shard's hand, runs it, and writes the deal record.
  */
 function runShard(
   shard: string,
   timingsPath: string | undefined,
+  specsPath: string | undefined,
   playwrightArgs: readonly string[],
 ): number {
   const { current, total } = parseShard(shard);
+  let named: string[] | undefined;
+  try {
+    if (specsPath !== undefined) named = readSpecList(specsPath);
+  } catch (error) {
+    console.log(`::error::${(error as Error).message}`);
+    return 1;
+  }
   const suite = list();
   const rootDir = suite.config?.rootDir;
   if (!rootDir) throw new Error("Playwright's list names no rootDir");
   const { source, timings } = readChosen(timingsPath);
-  const files = specFiles(suite);
-  const hand = dealShards(files, timings, total)[current - 1]!;
-  const fallback = defaultSeconds(files, timings);
-  const minutes = hand.reduce((sum, file) => sum + (timings[file] ?? fallback), 0) / 60;
-  console.log(
-    `e2e shard ${current}/${total}: ${hand.length} of ${files.length} spec files, ` +
-      `about ${minutes.toFixed(1)} minutes of tests by ${source}`,
-  );
-  for (const file of hand) console.log(`  ${file}${file in timings ? '' : ' (no timing yet)'}`);
-  const record: DealRecord = { shard: current, total, source, timings, files, hand };
-  const writeRecord = () => {
+  const listed = specFiles(suite);
+  const { scope, files, unlisted } = filesToDeal(listed, named);
+  const writeRecord = (hand: string[]) => {
+    const record: DealRecord = {
+      shard: current,
+      total,
+      source,
+      timings,
+      scope,
+      listed: listed.length,
+      files,
+      hand,
+    };
     mkdirSync(join(import.meta.dirname, '..', 'test-results'), { recursive: true });
     writeFileSync(dealRecordFile(), `${JSON.stringify(record)}\n`);
   };
+  if (unlisted.length > 0) {
+    for (const file of unlisted) {
+      console.log(`::error::${file} is named by the selection but Playwright does not list it`);
+    }
+    writeRecord([]);
+    return 1;
+  }
+
+  const hand = dealShards(files, timings, total)[current - 1]!;
+  const fallback = defaultSeconds(files, timings);
+  const minutes = hand.reduce((sum, file) => sum + (timings[file] ?? fallback), 0) / 60;
+  const dealtFrom =
+    scope === 'whole'
+      ? `${files.length} spec files`
+      : `the ${files.length} named spec files (of ${listed.length} listed)`;
+  console.log(
+    `e2e shard ${current}/${total}: ${hand.length} of ${dealtFrom}, ` +
+      `about ${minutes.toFixed(1)} minutes of tests by ${source}`,
+  );
+  for (const file of hand) console.log(`  ${file}${file in timings ? '' : ' (no timing yet)'}`);
   if (hand.length === 0) {
-    writeRecord();
+    writeRecord(hand);
     return 0;
   }
 
@@ -687,13 +750,13 @@ function runShard(
   const selected = specFiles(list(filters));
   if (JSON.stringify(selected) !== JSON.stringify(hand)) {
     console.error(`The filters select ${JSON.stringify(selected)}, not this shard's hand.`);
-    writeRecord();
+    writeRecord(hand);
     return 1;
   }
   const run = spawnSync('npx', ['playwright', 'test', ...filters, ...playwrightArgs], {
     stdio: 'inherit',
   });
-  writeRecord();
+  writeRecord(hand);
   return run.status ?? 1;
 }
 
@@ -781,8 +844,24 @@ function refresh(dirs: readonly string[]): number {
   return 0;
 }
 
+/** The arguments after `--shard=`: its own flags, `--timings=` and `--specs=` in either order and
+ * each at most once, then Playwright's. Undefined when a flag is given twice. */
+function shardArguments(args: readonly string[]) {
+  const flags: { timings?: string; specs?: string } = {};
+  let first = 0;
+  for (; first < args.length; first++) {
+    const match = /^--(timings|specs)=(.*)$/.exec(args[first]!);
+    if (!match) break;
+    const name = match[1] as 'timings' | 'specs';
+    if (flags[name] !== undefined) return undefined;
+    flags[name] = match[2]!;
+  }
+  return { ...flags, playwright: args.slice(first) };
+}
+
 if (import.meta.main) {
   const [first, ...rest] = process.argv.slice(2);
+  const shardArgs = first?.startsWith('--shard=') ? shardArguments(rest) : undefined;
   if (first === 'refresh' && rest.length > 0) {
     process.exitCode = refresh(rest);
   } else if (first === 'timings' && rest.length === 1) {
@@ -793,18 +872,12 @@ if (import.meta.main) {
       : undefined;
     if (rest.length === 2 && !publish) process.exitCode = 2;
     else process.exitCode = checkCommand(rest[0]!, publish);
-  } else if (first?.startsWith('--shard=')) {
-    const timings = rest[0]?.startsWith('--timings=')
-      ? rest[0].slice('--timings='.length)
-      : undefined;
-    process.exitCode = runShard(
-      first.slice('--shard='.length),
-      timings,
-      timings === undefined ? rest : rest.slice(1),
-    );
+  } else if (shardArgs) {
+    const { timings, specs, playwright } = shardArgs;
+    process.exitCode = runShard(first!.slice('--shard='.length), timings, specs, playwright);
   } else {
     console.error(
-      'Usage: node scripts/e2e-shards.ts --shard=<current>/<total> [--timings=<file>] [playwright args]\n' +
+      'Usage: node scripts/e2e-shards.ts --shard=<current>/<total> [--timings=<file>] [--specs=<file>] [playwright args]\n' +
         '       node scripts/e2e-shards.ts timings <out file>\n' +
         "       node scripts/e2e-shards.ts check <dir of the shards' artifacts> [--publish=<out file>]\n" +
         "       node scripts/e2e-shards.ts refresh <dir of one run's Playwright JSON reports>...",
