@@ -110,7 +110,8 @@ export async function seedPeopleAtScale(request: APIRequestContext): Promise<Peo
   const orgId = (await org.json()).organization_id as string;
   // One at a time, never all at once: the organization holds them in the order above, and each
   // accept takes back the owner's count before the next invitation is sent, so the seed's 173
-  // invitations never reach the owner's limit of 100 a quarter hour.
+  // invitations never reach the owner's limit (`INVITATION_PER_INVITER` in
+  // `back-end/sign_in_limits.py`).
   for (const [place, placed] of [
     ['admin', admins],
     ['member', members],
