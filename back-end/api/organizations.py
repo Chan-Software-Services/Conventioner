@@ -3,7 +3,7 @@ Organization API functions for CRUD operations and role management.
 """
 import uuid
 from collections import Counter
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, Iterable, List, Tuple
 from pymongo.results import UpdateResult, DeleteResult
 import api.market_actions as Actions
 from assignment.utils import convert_keys_to_camel_case
@@ -23,11 +23,13 @@ from market_documents import market_doc_field, market_doc_filter, market_doc_key
 from tombstone import DELETING, live, new_tombstone, tombstone_of
 import deletion_trail as DeletionTrail
 import history as History
+import invitations as Invitations
 import market_deletion as MarketDeletion
 import organization_people as OrganizationPeople
 import phase_record as PhaseRecord
 import api.attendance as AttendanceApi
 import api.users as UsersApi
+import utils.email as Email
 
 db = get_database()
 organizations_collection = db["organizations"]
@@ -549,9 +551,10 @@ def delete_organization(org_id: str, requesting_user_email: str) -> DeleteResult
     for market in markets_collection.find(market_doc_filter("organization_id", org_id), {"id": 1}):
         MarketDeletion.delete_market_and_records(markets_collection, market["id"])
 
-    # Its own history goes with it, as each market's goes with the market; the trail above is
-    # what outlives it.
+    # Its own history and its invitations go with it, as each market's go with the market; the
+    # trail above is what outlives it.
     History.delete_for_organization(org_id)
+    Invitations.delete_for_organization(org_id)
 
     users_collection.update_many(
         {},
@@ -665,3 +668,164 @@ def transfer_org_ownership(org_id: str, current_owner_email: str, new_owner_emai
     """Transfer the organization's ownership to one of its admins or members, as its owner, who
     stays on it as an admin: one write (``organization_people``)."""
     OrganizationPeople.transfer(org_id, current_owner_email, new_owner_email)
+
+
+# ── Its invitations (T538, ADR 0047) ─────────────────────────────────────────────────────────
+
+#: Said to anyone but the organization's owner and its admins who reads or withdraws its
+#: invitations: nobody else may invite to it.
+ITS_INVITATIONS_ARE_THE_OWNERS_AND_ADMINS = (
+    "Only the organization's owner and its admins see its invitations.")
+
+#: The action an invitation to each place is recorded under, as adding to it is.
+_PLACE_ACTION = {
+    OrganizationPeople.ADMIN: History.MANAGE_ORGANIZATION_ADMINS,
+    OrganizationPeople.MEMBER: History.MANAGE_ORGANIZATION_MEMBERS,
+}
+
+
+def _people_and_requester(
+    org_id: str, requesting_user_email: str,
+) -> Tuple[Dict[str, Any], Dict[str, str], Any]:
+    """The live organization, its people as one map, and the account asking: 404 for an
+    organization nobody has, 403 for an address with no account."""
+    org = organizations_collection.find_one(live({"id": org_id}))
+    if not org:
+        raise NotFoundError("Organization not found")
+    requester = UsersApi.get_user(requesting_user_email)
+    if not requester:
+        raise ForbiddenError("User not found")
+    return org, organization_people_of(org), requester
+
+
+def _refused_unless_it_invites(people: Dict[str, str], requester: Any) -> None:
+    """Refuse, in one sentence, anyone who may invite to no place: all but its owner and admins."""
+    if people.get(requester.id) not in (OrganizationPeople.OWNER, OrganizationPeople.ADMIN):
+        raise ForbiddenError(ITS_INVITATIONS_ARE_THE_OWNERS_AND_ADMINS)
+
+
+def _kept_only_while_live(org_id: str) -> None:
+    """Called after an invitation is written: raises 404 when the organization is gone, or a
+    deletion that nothing takes back now is taking it, having deleted its invitations again.
+
+    A deletion sets its tombstone, then writes its trail, and only then deletes the invitations, so
+    an invitation written after an invite read the organization live may land after that sweep.
+    Seen live, or carrying a tombstone whose trail is not written yet, the sweep comes after this
+    write, or the deletion is refused and the organization lives on with it."""
+    now = organizations_collection.find_one({"id": org_id})
+    held = tombstone_of(now) if now is not None else None
+    if now is not None and (held is None or not DeletionTrail.is_recorded(held["trail_id"])):
+        return
+    Invitations.delete_for_organization(org_id)
+    raise NotFoundError("Organization not found")
+
+
+def invite_to_organization(
+    org_id: str, address: str, place: str, requesting_user_email: str,
+) -> Tuple[Dict[str, Any], bool]:
+    """Invite ``address``, a normalized address, to ``place``, ``"admin"`` or ``"member"``, in the
+    organization: the invitation as its owner and admins read it, and whether its email was sent.
+
+    Asks what adding to that place asks (``OrganizationPeople.AUTHORITY``): its owner invites an
+    admin or a member, an admin a member. The answer depends only on the address typed, the place,
+    the inviter and the time: both limits are counted before the account is looked up, and an
+    address with an account and one without are sent the same email and recorded alike, the
+    entry's subject the address alone. Only an address whose account already holds a place in it is
+    refused, saying which (``OrganizationPeople.already_placed``).
+
+    Gives nothing: the organization's people are not written, and the invitation waits in
+    ``invitations`` until someone signed in with the address accepts it.
+
+    Raises:
+        Invitations.TooManyInvitations: either limit refused it.
+    """
+    org, people, inviter = _people_and_requester(org_id, requesting_user_email)
+    OrganizationPeople.may(people, OrganizationPeople.INVITED_TO[place], inviter.id)
+
+    at = Invitations.now()
+    Invitations.count(inviter.id, address, at)
+
+    person = UsersApi.get_user(address)
+    held = people.get(person.id) if person is not None else None
+    if held:
+        raise BadRequestError(OrganizationPeople.already_placed(address, place, held))
+
+    invitation = Invitations.invite(
+        Invitations.ORGANIZATION, org_id, address, place, inviter.id, inviter.email, at)
+    _kept_only_while_live(org_id)
+    History.record_for_organization(
+        org_id, requesting_user_email, _PLACE_ACTION[place], kind=History.INVITED,
+        subject={"email": address}, detail={"role": place})
+    emailed = Email.send_invitation_email(
+        address, inviter.email, org.get("name") or "", Invitations.ORGANIZATION, place,
+        Invitations.ends_at(invitation))
+    return Invitations.served(invitation), emailed
+
+
+def organization_invitations(org_id: str, requesting_user_email: str) -> List[Dict[str, Any]]:
+    """The invitations waiting on the organization, to either place, newest first, for its owner
+    and its admins; anyone else is refused."""
+    _org, people, requester = _people_and_requester(org_id, requesting_user_email)
+    _refused_unless_it_invites(people, requester)
+    return [Invitations.served(invitation)
+            for invitation in Invitations.waiting_for(Invitations.ORGANIZATION, org_id)]
+
+
+def withdraw_organization_invitation(
+    org_id: str, invitation_id: str, requesting_user_email: str,
+) -> None:
+    """Withdraw a waiting invitation, as whoever may invite to its place: its owner either, an
+    admin a member's.
+
+    Anyone but its owner and its admins is refused first, in one sentence, whether or not the
+    invitation waits. One that has already ended is a 404 saying so, written and recorded as
+    nothing. One sent again to another place between the
+    read and the delete is left, and answers 409: the withdrawal asked about the place it read.
+    """
+    _org, people, requester = _people_and_requester(org_id, requesting_user_email)
+    _refused_unless_it_invites(people, requester)
+
+    invitation = Invitations.waiting(Invitations.ORGANIZATION, org_id, invitation_id)
+    if invitation is None:
+        raise NotFoundError(Invitations.ALREADY_ENDED)
+    place = invitation["role"]
+    OrganizationPeople.may(people, OrganizationPeople.INVITED_TO[place], requester.id)
+
+    if not Invitations.withdraw(invitation):
+        if Invitations.waiting(Invitations.ORGANIZATION, org_id, invitation_id) is None:
+            raise NotFoundError(Invitations.ALREADY_ENDED)
+        raise ConflictError(Invitations.CHANGED_MEANWHILE)
+    History.record_for_organization(
+        org_id, requesting_user_email, _PLACE_ACTION[place], kind=History.INVITATION_WITHDRAWN,
+        subject={"email": invitation["email"]}, detail={"role": place})
+
+
+def live_organization_names(org_ids: Iterable[str]) -> Dict[str, str]:
+    """The names of the live organizations among ``org_ids``, by id, in one read: the
+    organizations an invitee's waiting invitations are to. One gone or being deleted is not among
+    them."""
+    wanted = sorted(set(org_ids))
+    if not wanted:
+        return {}
+    return {doc["id"]: doc.get("name") or "" for doc in organizations_collection.find(
+        live({"id": {"$in": wanted}}), {"_id": 0, "id": 1, "name": 1})}
+
+
+def decline_organization_invitation(invitation: Dict[str, Any], invitee_address: str) -> None:
+    """End an invitation to an organization, as the person it was sent to, and record that they
+    declined, under the action its place is added by, its actor their address. Nothing of them is
+    written to the organization.
+
+    Raises:
+        Invitations.InvitationEnded: the organization is gone, or the invitation ended meanwhile.
+    """
+    org_id = invitation["target_id"]
+    if organizations_collection.find_one(live({"id": org_id}), {"_id": 1}) is None:
+        Invitations.end(invitation)
+        raise Invitations.InvitationEnded()
+    if not Invitations.end(invitation):
+        raise Invitations.InvitationEnded()
+    place = invitation["role"]
+    History.record_for_organization(
+        org_id, invitee_address, _PLACE_ACTION[place], kind=History.INVITATION_DECLINED,
+        subject={"email": invitee_address}, detail={"role": place})

@@ -1397,12 +1397,14 @@ def market_records(monkeypatch):
     import api.attendance as AttendanceApi
     import deletion_trail as DeletionTrail
     import history as History
+    import invitations as Invitations
     import payments as Payments
     import remembered_sign_ins as RememberedSignIns
     import services.gridfs_service as GridfsService
     import vendor_notes as VendorNotes
 
     fakes = SimpleNamespace(
+        invitations=FakeApplicationsCollection(),
         attendance=FakeApplicationsCollection(), challenges=FakeApplicationsCollection(),
         remembered=FakeApplicationsCollection(),
         history=FakeApplicationsCollection(), notes=FakeApplicationsCollection(),
@@ -1411,9 +1413,9 @@ def market_records(monkeypatch):
         # Not a market's record but what outlives one: an organization's deletion asks it first.
         trail=FakeApplicationsCollection(),
     )
-    # The boot builds these three's unique indexes (T270), so a test that runs app.py afresh
+    # The boot builds these four's unique indexes (T270, T538), so a test that runs app.py afresh
     # builds against them: none stands yet.
-    for built_at_boot in (fakes.attendance, fakes.payments, fakes.amounts_owed):
+    for built_at_boot in (fakes.attendance, fakes.payments, fakes.amounts_owed, fakes.invitations):
         built_at_boot.index_information = lambda: {}
     monkeypatch.setattr(GridfsService, "_fs", fakes.images)
     monkeypatch.setattr(Payments, "payments_collection", fakes.payments)
@@ -1423,6 +1425,7 @@ def market_records(monkeypatch):
     monkeypatch.setattr(ApplicantAuth, "challenges_collection", fakes.challenges)
     monkeypatch.setattr(RememberedSignIns, "remembered_collection", fakes.remembered)
     monkeypatch.setattr(History, "history_collection", fakes.history)
+    monkeypatch.setattr(Invitations, "invitations_collection", fakes.invitations)
     monkeypatch.setattr(History, "legacy_placement_collection", fakes.placement_history)
     monkeypatch.setattr(DeletionTrail, "deletion_trail_collection", fakes.trail)
     return fakes
@@ -1806,6 +1809,13 @@ if not STUBBED_MODULES:
     _payments_fake = FakeApplicationsCollection()
     _payments_fake.index_information = lambda: {}
     _stand_in(_payments_module, "payments_collection", _payments_fake)
+
+    # And the invitations, whose unique, invitee and expiry indexes the boot builds (T538).
+    import invitations as _invitations_module
+
+    _invitations_fake = FakeApplicationsCollection()
+    _invitations_fake.index_information = lambda: {}
+    _stand_in(_invitations_module, "invitations_collection", _invitations_fake)
 
 
 def a_solver_vendor(application_id: str = "app-1", **overrides):

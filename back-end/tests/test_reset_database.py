@@ -31,6 +31,14 @@ def test_vendor_remembered_sign_ins_are_cleared():
     assert REMEMBERED_SIGN_INS_COLLECTION in APP_COLLECTIONS
 
 
+def test_the_invitations_are_cleared():
+    # An invitation names its market or organization and its inviter's account, which a reset
+    # removes, so one kept across it would offer a target the seed no longer has.
+    from invitations import INVITATIONS_COLLECTION
+
+    assert INVITATIONS_COLLECTION in APP_COLLECTIONS
+
+
 def test_the_migration_markers_the_back_end_needs_to_boot_are_kept():
     assert "schema_migrations" in PRESERVED
     assert "schema_migrations" not in APP_COLLECTIONS

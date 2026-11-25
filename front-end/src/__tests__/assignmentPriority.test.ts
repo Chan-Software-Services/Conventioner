@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, it, expect } from 'vitest';
+import { reactive } from 'vue';
 import { flushPromises, mount } from '@vue/test-utils';
 
 import ElementAssignmentPriority from '@/components/elements/ElementAssignmentPriority.vue';
@@ -39,8 +40,9 @@ const CATEGORY = field({
 });
 const NOTES = field({ key: 'notes', label: 'Anything else?', type: 'text' });
 
+// Reactive, as the plan the market screen hands the component is: it edits the rules in place.
 function setup(): SetupObject {
-  return {
+  return reactive({
     priority: [],
     marketDates: [],
     tiers: [],
@@ -50,7 +52,7 @@ function setup(): SetupObject {
       maxAssignmentsPerVendor: null,
       maxHalfTableProportionPerSection: null,
     },
-  } as unknown as SetupObject;
+  }) as unknown as SetupObject;
 }
 
 function mountPriority(formFields: FormField[] = [RETURNING, CATEGORY, NOTES]) {

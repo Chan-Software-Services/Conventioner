@@ -52,7 +52,7 @@ describes:
   - back-end/assignment/lifecycle.py#store
   - back-end/assignment/lifecycle.py#publish
   - back-end/migrations/migrate_assignment_state.py
-verified: 2026-11-19
+verified: 2026-11-25
 sources:
   - T244
   - T274
@@ -63,6 +63,7 @@ sources:
   - T318
   - T411
   - T421
+  - T538
 ---
 
 # The market write
@@ -132,8 +133,8 @@ In [`back-end/api/markets.py`](../../../back-end/api/markets.py):
   A rules save refused stores no rules and judges no application again.
 - The four writes to the market's permission table (`set_permission`, `reset_permission`, `reset_permissions`, `copy_organization_default`), each holding every row it changes, `permissions.<row id>`, as read, so a row the owner changed in another tab meanwhile is not overwritten and the history's "before" is the row that stood.
   Where the stored `permissions` is not a map (null, a string), a set or a copy replaces it whole, so it is held whole; the market as read answers which, with no read of its own.
-- The three role writes (`add_market_role`, `update_market_role`, `remove_market_role`), each setting or unsetting one person's key, `roles.<user id>`, never the whole map, and holding, beside the phase, that person's role and the requester's as read (absent when the requester's right comes through the organization), so an admin taking someone's access while another gives a third person access both land, and a role taken never comes back ([what each role may do](../../business/rules/what-each-role-may-do.md)).
-  A decision that counted the owners (giving or changing to Owner, taking an Owner) holds `roles` whole; no role write reaches such a decision, since the market model refuses a market with no owner or two, and the Admin row and "This market already has an Owner." refuse every give of Owner.
+- The four role writes (`add_market_role`, `update_market_role`, `remove_market_role`, and `give_role_by_invitation`, an invitation accepted, judged as its inviter's write), each setting or unsetting one person's key, `roles.<user id>`, never the whole map, and holding, beside the phase, that person's role and the requester's as read (absent when the requester's right comes through the organization), so an admin taking someone's access while another gives a third person access both land, and a role taken never comes back ([what each role may do](../../business/rules/what-each-role-may-do.md)).
+  A decision that counted the owners (giving or changing to Owner, taking an Owner) holds `roles` whole; no role write reaches such a decision, since the market model refuses a market with no owner or two, and the Admin row and "This market already has an Owner." refuse every give of Owner, and an invitation to the Owner role is refused when it is sent ("A market's Owner changes only when ownership is transferred."), so accepting one never gives Owner.
   The one route that moves the Owner is the transfer of ownership below, which holds the two keys it changes instead.
   A take refused because the person's role is already gone answers the 404 "They no longer have a role on this market.", which Manage market reads as done.
 - The transfer of ownership (`hand_on_market`, the fixed row "Transfer ownership"), setting the Owner's key to `admin` and the new Owner's to `owner` in one write, holding both keys as read, so a second transfer from another tab meets the Owner's role changed and the market keeps exactly one Owner ([the market actions](market-actions.md#transfer-ownership-hand-on-market)).

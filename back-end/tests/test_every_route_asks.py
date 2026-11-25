@@ -90,6 +90,11 @@ CALLERS_OWN = {
     ("POST", "/organizations"): "makes an organization the caller owns",
     ("GET", "/floorplans/templates"): "lists the caller's templates, or their organization's",
     ("POST", "/floorplans/templates"): "makes a template the caller owns",
+    ("GET", "/invitations"): "lists the invitations sent to the caller's own address",
+    ("POST", "/invitations/<invitation_id>/accept"):
+        "answers an invitation sent to the caller's own address, and refuses any other",
+    ("POST", "/invitations/<invitation_id>/decline"):
+        "answers an invitation sent to the caller's own address, and refuses any other",
 }
 
 SCOPING_ARGUMENTS = {"market_id", "org_id", "gridfs_id", "template_id"}
@@ -155,6 +160,8 @@ BODIES = {
     ("POST", "/markets/<market_id>/applications-stopped"): {"json": {"stopped": True}},
     ("POST", "/markets/<market_id>/hand-on"): {"json": {"userId": "user-someone"}},
     ("PUT", "/organizations/<org_id>/users/<user_id>"): {"json": {"place": "member"}},
+    ("POST", "/organizations/<org_id>/invitations"): {
+        "json": {"email": "nobody@example.com", "place": "member"}},
     ("PUT", "/markets/<market_id>/plan"): {"json": {"setupObject": {}}},
     ("PUT", "/markets/<market_id>/table-types"): {"json": {"tableTypes": []}},
     ("PUT", "/markets/<market_id>/rejection-rules"): {"json": {"rules": []}},

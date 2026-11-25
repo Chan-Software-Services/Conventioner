@@ -5,7 +5,7 @@ describes:
   - front-end/src/views/OrganizationsView.vue
   - front-end/src/__tests__/OrganizationsView.test.ts
   - front-end/src/__tests__/theMarketsAndOrganizationsAtScale.test.ts
-verified: 2026-11-08
+verified: 2026-11-25
 sources:
   - E26/F06/S02
   - E26/F08/S01
