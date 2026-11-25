@@ -10,6 +10,7 @@ import {
 } from './fixtures';
 import {
   ensureTestOrg,
+  ensureTestOrgAuthenticated,
   ensureTestOrgs,
   loginViaApi,
   seedLayout,
@@ -131,9 +132,10 @@ test.describe('The create-market dialog is the dialog idiom', () => {
 
     // A name the server will refuse, so the error is a real one.
     const taken = `Duplicate Dialog ${Date.now()}`;
-    // With the page's own cookies, so at the page's own address for the API (`APP_API`).
-    await loginViaApi(page.request, APP_API, TEST_USER.email, TEST_USER.password);
-    const orgId = await ensureTestOrg(page.request, APP_API, TEST_USER.email, TEST_USER.password);
+    // With the page's own cookies, so at the page's own address for the API (`APP_API`), and
+    // with no sign-in of its own: a sign-in replaces the session, and a read the open dialog had
+    // in flight on the one it replaced answered 401 and sent the page to sign in again.
+    const orgId = await ensureTestOrgAuthenticated(page.request, APP_API);
     await page.request.post(`${APP_API}/markets`, {
       headers: { 'Content-Type': 'application/json' },
       data: {
