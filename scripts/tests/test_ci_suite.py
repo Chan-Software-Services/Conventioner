@@ -279,7 +279,7 @@ def in_progress(stub, *listed, total=None):
 
 
 def test_a_queue_run_still_going_whose_jobs_all_passed_only_warms_the_caches(stub, env):
-    in_progress(stub, job("suite", conclusion="skipped"), job("backend"), job("e2e shard 1/10"), job("e2e"),
+    in_progress(stub, job("suite", conclusion="skipped"), job("backend"), job("e2e shard 1/5"), job("e2e"),
                 job("warm-caches", conclusion="skipped"), job("test-map", conclusion="skipped"))
 
     code, *out = decide(env)
