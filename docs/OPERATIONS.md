@@ -18,6 +18,7 @@ describes:
   - back-end/migrations/migrate_owed_day_state.py
   - back-end/host_limits.py
   - back-end/organizer_sessions.py#ensure_organizer_session_indexes
+  - back-end/migrations/migrate_application_status.py
 verified: 2026-11-17
 sources:
   - E32/F03/S03
@@ -36,6 +37,7 @@ sources:
   - T315
   - T317
   - T335
+  - T452
 ---
 
 # Operations
@@ -210,6 +212,13 @@ The release carrying T335 stores each owed table-day's state ([payments](impleme
 It also drops each amount an Admin set on a day the vendor no longer holds, which no line shows, and records an `owed_dropped` entry in the market's history for each, naming the amount and who set it (Daniel's choice, T335).
 Until it runs, that release reads each record from the fields the release before wrote, so nothing refuses to boot and nothing a vendor's Payment tab shows changes; until then a hidden amount is dropped, with its entry, only when its day is next seated, which is why it runs right after the deploy.
 A record that changed between the script's read and its write on three tries is listed as skipped, and running it again sets it; a record whose fields do not parse is left alone and listed by id.
+The release that serves each application's review state (T277 ticket 02) reads every stored application by the owner's rules ([the application document](implementation/data/application-document.md#the-migration)): right after it is deployed, before any organizer uses Begin assignment, and on Daniel's word, which their word to merge it gives, run `MONGODB_URI='<URI>' .venv/bin/python migrations/migrate_application_status.py --dry-run` ([`migrate_application_status.py`](../back-end/migrations/migrate_application_status.py)), then without `--dry-run`, and again after any roll-forward past a rollback.
+Its first lines count the applications of the live markets in each stored status, missing ones included: run with `--dry-run`, that is the read-only count of production decision 9.6 of T277's report asks for, before any write.
+It then names each application it would change by market id and application id, never an address, says what it would store (a status, an origin, a mark for the deal), and counts them.
+Until it runs, that release reads each application as the migration would store it, so nothing refuses to boot, and a screen shows one thing differently: an application stored with no status (missing, null or empty) counts as open for Begin assignment's guard and for the Stats tab's "open to review", while no list serves it, so the guard holds that market with "Finish deciding" and nobody can decide the application it counts.
+The migration stores `open` on it, which is why it runs before any organizer uses Begin assignment.
+What running it changes is that the next deal on each market deals the applications it found waiting for the deal, which the market's history reads as dealt ", having waited for the deal".
+An application that changed between the script's read and its write on three tries is listed as skipped, and running it again sets it; one whose status no state names, or whose old status would read as another state, is left alone and listed by id.
 
 ### Swapping the names of two locations
 

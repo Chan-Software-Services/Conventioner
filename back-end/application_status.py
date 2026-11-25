@@ -76,6 +76,32 @@ class State(str, Enum):
         """Whether no verdict is given yet: open, or waiting on a follow-up."""
         return self in (State.OPEN, State.FOLLOW_UP)
 
+    @property
+    def served(self) -> "Served":
+        """This state as every organizer read serves it (``review.state``): the four states a
+        screen tells apart, an approval and a rejection each whoever gave it."""
+        return _SERVED[self]
+
+
+class Served(str, Enum):
+    """An application's review state as the organizer is served it (``review.state``): open,
+    follow-up, approved or rejected. What every screen, the export and the guard read to decide
+    anything, never the stored status, which keeps old spellings."""
+
+    OPEN = "open"
+    FOLLOW_UP = "follow_up"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+_SERVED = {
+    State.OPEN: Served.OPEN,
+    State.FOLLOW_UP: Served.FOLLOW_UP,
+    State.APPROVED_BY_A_PERSON: Served.APPROVED,
+    State.APPROVED_ADDED: Served.APPROVED,
+    State.REJECTED_BY_A_PERSON: Served.REJECTED,
+    State.REJECTED_BY_A_RULE: Served.REJECTED,
+}
 
 
 #: The statuses the old offers flow carried an approval on to (``NoApprovedApplicationsGuard``:
@@ -149,6 +175,23 @@ def is_decided(doc: Dict[str, Any]) -> bool:
 
 #: Every status a state names, as ``state_of`` reads it.
 _STATED_STATUSES = (None, "", *(status.value for status in ApplicationStatus))
+
+
+def _stored_as(state: State) -> List[Optional[str]]:
+    """Every stored status ``state_of`` reads as ``state`` on its own, missing and empty among
+    them: walked off the rule, so a count filtering on them names no spelling a second time."""
+    return [status for status in _STATED_STATUSES if state_of({"status": status}) is state]
+
+
+def undecided_counts(market_id: str) -> Tuple[int, int]:
+    """How many of a market's applications are open, and how many need a follow-up, whatever
+    their stored spelling: what Begin assignment's guard counts (``AllApplicationsReviewedGuard``).
+    A stored status alone decides whether an application is undecided, so two counts filtered on
+    the spellings of each undecided state count exactly what ``state_of`` reads so."""
+    return (
+        ApplicationsApi.count_applications_with_any_status(market_id, _stored_as(State.OPEN)),
+        ApplicationsApi.count_applications_with_any_status(market_id, _stored_as(State.FOLLOW_UP)),
+    )
 
 
 def saw_decided(seen: Dict[str, Any]) -> bool:
@@ -495,7 +538,9 @@ def _as_read(value: Any) -> Any:
     return value if value is not None else {"$in": [None]}
 
 
-def _held(doc: Dict[str, Any], *fields: str) -> Dict[str, Any]:
+def held_as_read(doc: Dict[str, Any], *fields: str) -> Dict[str, Any]:
+    """The filter holding each of ``fields`` as ``doc`` was read, null and absent alike: what a
+    write of an application holds (ADR 0024), the status migration's among them."""
     return {field: _as_read(doc.get(field)) for field in fields}
 
 
@@ -535,7 +580,7 @@ def move(doc: Dict[str, Any], event: Event, now: Optional[datetime] = None) -> U
     if state not in TABLE[type(event)]:
         return Refused()
     now = now or datetime.now(timezone.utc)
-    held = _held(doc, "status", "verdict_at")
+    held = held_as_read(doc, "status", "verdict_at")
 
     if isinstance(event, (GiveVerdict, ChangeVerdict)):
         if event.status not in MARKED_STATUSES:
@@ -544,11 +589,11 @@ def move(doc: Dict[str, Any], event: Event, now: Optional[datetime] = None) -> U
         if state is State.APPROVED_ADDED and not rejected:
             return Refused(ADDED_ONLY_REJECTED)
         sets, unset = _a_persons_verdict(doc, event.status, event.by, event.owner, now)
-        pins = {**held, **_held(doc, "updated_at")}
+        pins = {**held, **held_as_read(doc, "updated_at")}
         if isinstance(event, GiveVerdict):
             # What its giver's undo returns it to, held as it is kept (E38/F10/S01).
             sets["undo_to"] = undo_to_of(doc)
-            pins.update(_held(doc, "follow_up_owner"))
+            pins.update(held_as_read(doc, "follow_up_owner"))
         else:
             unset.append("undo_to")
         return Move(to=state_of({**doc, **sets}), set=sets, unset=tuple(unset), pins=pins)
@@ -581,7 +626,7 @@ def move(doc: Dict[str, Any], event: Event, now: Optional[datetime] = None) -> U
                  "verdict_by": VerdictGiver(kind="rule", rule=event.rule).model_dump(),
                  "verdict_at": now.isoformat(), "verdict_reason": event.reason},
             unset=("follow_up_owner", "undo_to", ApplicationsApi.ARRIVING_FIELD, *_CLAIM),
-            pins={**held, **_held(doc, "updated_at")},
+            pins={**held, **held_as_read(doc, "updated_at")},
         )
 
     if isinstance(event, RuleReturns):
@@ -590,7 +635,7 @@ def move(doc: Dict[str, Any], event: Event, now: Optional[datetime] = None) -> U
             set={"status": ApplicationStatus.OPEN.value,
                  ApplicationsApi.ARRIVING_FIELD: event.arrival.stored()},
             unset=(*_VERDICT, "follow_up_owner", "undo_to", *_CLAIM),
-            pins={**held, **_held(doc, "updated_at")},
+            pins={**held, **held_as_read(doc, "updated_at")},
         )
 
     # HandOnFollowUp: held on its still needing one, whoever marked it; what an undo returns to

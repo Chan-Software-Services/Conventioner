@@ -12,6 +12,7 @@ import { DOMWrapper, flushPromises, mount, type VueWrapper } from '@vue/test-uti
 import ApplicationMonitor from '@/components/application/ApplicationMonitor.vue';
 import { ApplicationStatus, type Application, type Market } from '@/assets/types/datatypes';
 import { isDecided } from '@/utils/verdicts';
+import { servedReview } from './support/servedReview';
 
 const fetchMarketApplications = vi.fn();
 const reviewApplication = vi.fn();
@@ -26,8 +27,7 @@ vi.mock('@/utils/api', async (importOriginal) => {
     const apps: Application[] = await fetchMarketApplications('m1');
     const handed = apps.find(
       (app) =>
-        !isDecided(app) &&
-        (body.includeFollowUps || app.status !== ApplicationStatus.NeedsFollowUp),
+        app.review.state === 'open' || (body.includeFollowUps && app.review.state === 'follow_up'),
     );
     return { data: { application: handed ?? null } };
   };
@@ -47,8 +47,14 @@ vi.mock('@/utils/applicantApi', async (importOriginal) => {
 const CHANGE_REFUSED =
   'Only an Admin or the owner may change a verdict or overturn an automatic rejection on this market.';
 
-function application(id: string, status: ApplicationStatus, extra = {}): Application {
+function application(
+  id: string,
+  status: ApplicationStatus,
+  served: ReturnType<typeof servedReview>,
+  extra = {},
+): Application {
   return {
+    ...served,
     id,
     marketId: 'm1',
     applicantEmail: `${id}@example.com`,
@@ -92,20 +98,22 @@ async function reviewedList(changes: boolean) {
 }
 
 describe('isDecided', () => {
-  it('is approved or rejected; a follow-up and an open one are not', () => {
-    expect(isDecided({ status: ApplicationStatus.ReviewerApproved })).toBe(true);
-    expect(isDecided({ status: ApplicationStatus.ReviewerRejected })).toBe(true);
-    expect(isDecided({ status: ApplicationStatus.NeedsFollowUp })).toBe(false);
-    expect(isDecided({ status: ApplicationStatus.Open })).toBe(false);
+  it('is approved or rejected, as the server serves it; a follow-up and an open one are not', () => {
+    expect(isDecided(servedReview('approved'))).toBe(true);
+    expect(isDecided(servedReview('rejected'))).toBe(true);
+    expect(isDecided(servedReview('follow_up'))).toBe(false);
+    expect(isDecided(servedReview('open'))).toBe(false);
   });
 });
 
 describe('the reviewed list, one by one', () => {
   beforeEach(() => {
     fetchMarketApplications.mockResolvedValue([
-      application('open', ApplicationStatus.Open),
-      application('approved', ApplicationStatus.ReviewerApproved),
-      application('ruled-out', ApplicationStatus.ReviewerRejected, { verdictBy: RULE }),
+      application('open', ApplicationStatus.Open, servedReview('open')),
+      application('approved', ApplicationStatus.ReviewerApproved, servedReview('approved')),
+      application('ruled-out', ApplicationStatus.ReviewerRejected, servedReview('rejected'), {
+        verdictBy: RULE,
+      }),
     ]);
   });
 
@@ -130,10 +138,17 @@ describe('the reviewed list, one by one', () => {
 
 describe('a card someone else decided first', () => {
   beforeEach(() => {
-    fetchMarketApplications.mockResolvedValue([application('open', ApplicationStatus.Open)]);
-    const decided = application('open', ApplicationStatus.ReviewerApproved, {
-      verdictBy: { kind: 'person', email: 'kai@example.com' },
-    });
+    fetchMarketApplications.mockResolvedValue([
+      application('open', ApplicationStatus.Open, servedReview('open')),
+    ]);
+    const decided = application(
+      'open',
+      ApplicationStatus.ReviewerApproved,
+      servedReview('approved'),
+      {
+        verdictBy: { kind: 'person', email: 'kai@example.com' },
+      },
+    );
     reviewApplication.mockRejectedValue({
       isAxiosError: true,
       response: {

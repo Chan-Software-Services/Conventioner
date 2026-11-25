@@ -1,17 +1,24 @@
 /**
- * Who applied, as the Stats tab counts it (E45/F01/S01): the server's counts by stored status, read
- * as the Applications tab's All view filters, each a part of the review's split bar. When they
+ * Who applied, as the Stats tab counts it (E45/F01/S01): the server's counts by served review state,
+ * read as the Applications tab's All view filters, each a part of the review's split bar. When they
  * applied is drawn over time by `appliedOverTime.ts`, tested beside it.
  */
 import { describe, expect, it } from 'vitest';
 import { ApplicationStatus, type Application } from '@/assets/types/datatypes';
 import { applicantStats, type ApplicantCounts } from '@/utils/applicantStats';
 import { ALL_VIEW_FILTERS, allViewApplications } from '@/utils/reviewQueue';
+import { servedReview } from './support/servedReview';
 
 let next = 0;
-function app(status: ApplicationStatus, submittedAt?: string, added = false): Application {
+function app(
+  status: ApplicationStatus,
+  served: ReturnType<typeof servedReview>,
+  submittedAt?: string,
+  added = false,
+): Application {
   next += 1;
   return {
+    ...served,
     id: `app-${next}`,
     marketId: 'm1',
     applicantEmail: `vendor${next}@example.com`,
@@ -26,13 +33,13 @@ function app(status: ApplicationStatus, submittedAt?: string, added = false): Ap
 
 /** What the server sends for these applications (`back-end/market_stats.py#count_applicants`). */
 function counted(applications: Application[]): ApplicantCounts {
-  const statuses: Record<string, number> = {};
-  for (const a of applications) statuses[a.status] = (statuses[a.status] ?? 0) + 1;
+  const states = { open: 0, follow_up: 0, approved: 0, rejected: 0 };
+  for (const a of applications) states[a.review.state] += 1;
   const applied = applications.filter((a) => !a.addedBy);
   return {
     total: applications.length,
     addedByHand: applications.length - applied.length,
-    statuses,
+    states,
     submittedAt: applied.flatMap((a) => (a.submittedAt ? [a.submittedAt] : [])),
     openedAt: null,
     closedAt: null,
@@ -41,13 +48,18 @@ function counted(applications: Application[]): ApplicantCounts {
 
 // Local times, so the day each falls on is the same wherever the suite runs.
 const APPS = [
-  app(ApplicationStatus.Open, '2026-09-01T09:00:00'),
-  app(ApplicationStatus.UnderReview, '2026-09-01T23:30:00'),
-  app(ApplicationStatus.NeedsFollowUp, '2026-09-03T10:00:00'),
-  app(ApplicationStatus.ReviewerApproved, '2026-09-03T11:00:00'),
-  app(ApplicationStatus.ReviewerApproved, '2026-09-03T12:00:00'),
-  app(ApplicationStatus.ReviewerRejected, '2026-09-02T08:00:00'),
-  app(ApplicationStatus.ReviewerApproved, '2026-11-18T09:00:00', true),
+  app(ApplicationStatus.Open, servedReview('open'), '2026-09-01T09:00:00'),
+  app(ApplicationStatus.UnderReview, servedReview('open'), '2026-09-01T23:30:00'),
+  app(ApplicationStatus.NeedsFollowUp, servedReview('follow_up'), '2026-09-03T10:00:00'),
+  app(ApplicationStatus.ReviewerApproved, servedReview('approved'), '2026-09-03T11:00:00'),
+  app(ApplicationStatus.ReviewerApproved, servedReview('approved'), '2026-09-03T12:00:00'),
+  app(ApplicationStatus.ReviewerRejected, servedReview('rejected'), '2026-09-02T08:00:00'),
+  app(
+    ApplicationStatus.ReviewerApproved,
+    servedReview('approved', { origin: 'added' }),
+    '2026-11-18T09:00:00',
+    true,
+  ),
 ];
 
 describe('who applied', () => {
@@ -60,7 +72,7 @@ describe('who applied', () => {
     expect(stats.applied).toBe(6);
   });
 
-  it("counts each status as the Applications tab's All view filters it", () => {
+  it("counts each state as the Applications tab's All view filters it", () => {
     expect(stats.byStatus.map((r) => [r.label, r.count])).toEqual([
       ['Open', 2],
       ['Needs follow-up', 1],
@@ -95,16 +107,21 @@ describe('who applied', () => {
     ]);
   });
 
-  it('still counts a status the All view has no filter for, so the rows add up', () => {
-    const odd = applicantStats(
-      counted([...APPS, app(ApplicationStatus.Cancelled, '2026-09-04T10:00:00')]),
-      'm1',
-    );
-    const cancelled = odd.byStatus.find((r) => r.label === 'Cancelled')!;
-    expect(cancelled.count).toBe(1);
-    expect(cancelled.to).toBeUndefined();
-    expect(cancelled.fill).toBe('--mm-chart-grey');
-    expect(odd.byStatus.reduce((sum, r) => sum + r.count, 0)).toBe(odd.total);
+  it('counts a status the review no longer gives under the filter the server reads it as', () => {
+    // `cancelled` is served as rejected, `assignment_sent` as approved: no grey "other" part.
+    const old = [
+      app(ApplicationStatus.Cancelled, servedReview('rejected'), '2026-09-04T10:00:00'),
+      app(ApplicationStatus.AssignmentSent, servedReview('approved'), '2026-09-04T11:00:00'),
+    ];
+    const stats = applicantStats(counted([...APPS, ...old]), 'm1');
+    expect(stats.byStatus.map((r) => [r.label, r.count])).toEqual([
+      ['Open', 2],
+      ['Needs follow-up', 1],
+      ['Approved', 4],
+      ['Rejected', 2],
+    ]);
+    expect(stats.byStatus.every((r) => r.to)).toBe(true);
+    expect(stats.byStatus.reduce((sum, r) => sum + r.count, 0)).toBe(stats.total);
   });
 
   it('is nothing for a market nobody has applied to', () => {
