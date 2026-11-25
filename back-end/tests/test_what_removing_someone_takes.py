@@ -51,8 +51,8 @@ class Markets:
 
 def organization(org_id=ORG_ID, **overrides):
     return {
-        "_id": f"mongo-{org_id}", "id": org_id, "name": "Seed Test Org", "owner": OWNER,
-        "admins": [ADMIN], "members": [MEMBER, EDITOR_MEMBER],
+        "_id": f"mongo-{org_id}", "id": org_id, "name": "Seed Test Org",
+        "people": {OWNER: "owner", ADMIN: "admin", MEMBER: "member", EDITOR_MEMBER: "member"},
         # Drifted: it names a market that is gone and misses one that is there.
         "markets": ["gone"], "theme": None, **overrides,
     }

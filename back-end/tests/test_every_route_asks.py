@@ -332,8 +332,8 @@ def walked(monkeypatch):
     monkeypatch.setattr(MarketsApi, "markets_collection", markets)
 
     organizations = FakeOrganizations({
-        "_id": "mongo-org-1", "id": ORG_ID, "name": "Org", "owner": "user-owner", "admins": [],
-        "members": [], "markets": [MARKET_ID],
+        "_id": "mongo-org-1", "id": ORG_ID, "name": "Org", "people": {"user-owner": "owner"},
+        "markets": [MARKET_ID],
     })
     install_organizations(monkeypatch, organizations)
     for module in (PermissionsApi, TemplatesApi):

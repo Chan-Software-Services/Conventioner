@@ -66,7 +66,7 @@ def _organization(org_id):
     """An organization as ``get_organization`` and ``organization_documents_of`` return it."""
     return {
         "id": org_id, "_id": f"mongo-{org_id}", "name": "Test Org",
-        "owner": "org-owner", "admins": [], "members": [USER_ID], "markets": [],
+        "people": {"org-owner": "owner", USER_ID: "member"}, "markets": [],
     }
 
 
@@ -219,7 +219,7 @@ def org_delete(monkeypatch):
     fake = FakeMarketsCollection([_market("camel-market")])
     monkeypatch.setattr(OrgsApi, "markets_collection", fake)
     monkeypatch.setattr(
-        OrgsApi, "organizations_collection", FakeOrganizations({"id": ORG_ID, "owner": USER_ID}))
+        OrgsApi, "organizations_collection", FakeOrganizations({"id": ORG_ID, "people": {USER_ID: "owner"}}))
     monkeypatch.setattr(
         OrgsApi.users_collection, "update_many", lambda *_a, **_k: None, raising=False
     )
