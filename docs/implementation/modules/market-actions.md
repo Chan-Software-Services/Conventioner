@@ -25,7 +25,7 @@ describes:
   - back-end/api/markets.py#_market_change
   - back-end/tests/test_a_change_records_under_the_row_it_asked.py
   - back-end/tests/test_only_an_asking_writes_a_markets_history.py
-verified: 2026-11-24
+verified: 2026-11-25
 sources:
   - E39
   - E39/F01/S01
@@ -491,7 +491,7 @@ The role-shaped reasons the screens read before (`adminActionsReason`, `verdictL
 **No source outside this module and `permissions.py` names a role threshold**: `test_no_check_outside_the_actions_module_names_a_role` in [`back-end/tests/test_every_check_names_an_action.py`](../../../back-end/tests/test_every_check_names_an_action.py) searches every other server source for any use of `user_has_permission`, `can_manage_roles` or `ROLE_RANK`, and of the role resolvers `get_user_market_role`, `organization_market_role` and `higher_role` outside the one function that serves the role itself to the client (`get_market_for_user`), and fails on any; the list's `_summary_role` takes its role from `market_role_of`, which is not one of the three.
 Holding a role is how a check would compare one, so searching for the resolvers catches a comparison in any shape, inline, against a tuple, through an annotated name or kept on an attribute, and an import of any of these names by name is flagged too, since an alias (`from api.permissions import ROLE_RANK as R`) would hide every later use; `test_the_search_finds_a_check_that_names_a_role` pins each shape.
 The function that serves the role is allowed by module and name, so a function of the same name elsewhere is still searched.
-The search cannot see a raw read of `market.roles` or `organization.admins`: comparing a stored role there looks, by syntax, exactly like keeping the one-owner invariant (`add_market_role` refusing a second owner), so such a read is for review to catch.
+The search cannot see a raw read of `market.roles` or `organization.people`: comparing a stored role there looks, by syntax, exactly like keeping the one-owner invariant (`add_market_role` refusing a second owner), so such a read is for review to catch.
 The same file pins every row's default, label, group and fixed flag against the epic's table, and for each row that its default role may, that every role above may, and that the role below is refused with its sentence; and which row each loader-backed write and read asks.
 
 **A test that fakes who may patches `user_has_permission` or `Actions.refusal`**: the first still sees the role the row asks on the market (its default unless the market holds the row), so a fake that answers by role keeps working.

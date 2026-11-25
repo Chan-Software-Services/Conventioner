@@ -41,7 +41,7 @@ describes:
   - back-end/tests/test_a_roll_forward_rebuilds_the_people_from_the_lists.py
   - back-end/tests/test_a_persons_organizations_in_either_shape.py
   - back-end/api/organizations.py#change_org_place
-verified: 2026-11-17
+verified: 2026-11-25
 sources:
   - E20/F04/S01
   - E21/F03/S01
@@ -127,7 +127,7 @@ The same person creating two of one name at the same instant can race past the c
 **An organization stored before the map is read folded** by `people_from_lists` in [`back-end/datatypes.py`](../../../back-end/datatypes.py): the owner gets `owner`, then each id in `admins` not yet placed gets `admin`, then each in `members` not yet placed gets `member`, in list order, and a value that is not a list reads as an empty one.
 So the owner wins over any list they also stand in: an organization whose owner was also in `admins` or `members` failed the model, so the market read treated it as absent and its admins and members lost every role through it with nothing said, and it parses and grants again.
 `organization_people_of(document)` is the one rule every reader of a raw document reads its people by, the stored map when there is one, else the fold: `_role_in`, `_what_removing_takes` and `get_organizations_for_user` here, the membership and owner checks in [`back-end/api/floorplans_templates.py`](../../../back-end/api/floorplans_templates.py), `organization_refusal` in [`back-end/api/markets.py`](../../../back-end/api/markets.py), and `delete_user`'s owner check in [`back-end/api/users.py`](../../../back-end/api/users.py); a `people` that is not a map reads as nobody there, and fails the model.
-Readers holding an `Organization`, the permissions, the market read and the Markets list, read its derived `owner`, `admins` and `members`.
+Readers holding an `Organization`, the permissions, the market read and the Markets list, read its `people` map, never its derived lists: `organization_market_role` takes the map, and `organization_people_in_order` in [`back-end/api/permissions.py`](../../../back-end/api/permissions.py) names its owner, then its admins, then its members, each in the map's order, for `people_with_market_role` and the accounts the market read looks up.
 
 **"The organizations this person is in" is one filter**, `of_person(user_id)` in [`back-end/organization_people.py`](../../../back-end/organization_people.py): an `$or` of their key in `people`, `{"people.<id>": {"$exists": true}}`, served by the wildcard index `people.$**` as `roles.$**` serves a market's, and, on an organization with no `people`, its `owner`, `admins` or `members`, each a [lookup index](lookup-indexes.md).
 An organization with a map is never found by a stale list.

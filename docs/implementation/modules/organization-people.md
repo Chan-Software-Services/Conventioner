@@ -14,7 +14,7 @@ describes:
   - front-end/src/__tests__/changingAPlaceAsksFirst.test.ts
   - front-end/src/__tests__/manageOrganizationPeople.test.ts
   - front-end/e2e/an-organizations-people-change-place.spec.ts
-verified: 2026-11-16
+verified: 2026-11-25
 sources:
   - T283
   - T315
