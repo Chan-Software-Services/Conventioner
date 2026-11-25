@@ -13,6 +13,7 @@ import { ensureTestOrg, SEED_MARKET_DATE, seedMarketWithVendors } from './helper
 import { marketScreenPath } from './helpers/marketScreens';
 import { mongoEval } from './helpers/mongo';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { rowLayout } from './helpers/barLedger';
 import { withUser } from './helpers/withUser';
 import { ApplicationsAllPage } from './pages/ApplicationsAllPage';
@@ -99,10 +100,7 @@ test('the Stats tab counts who applied as the Applications tab does, for anyone 
   seedApplied(marketId, 'priya@weft.test', 'reviewer_approved', '2026-09-03T15:00:00Z');
   seedApplied(marketId, 'lena@forge.test', 'reviewer_rejected', '2026-09-03T18:00:00Z');
   seedAddedByHand(marketId, 'walk.in@example.com');
-  const granted = await request.post(`${BACKEND_URL}/markets/${marketId}/roles`, {
-    data: { user_email: VIEWER.email, role: 'viewer' },
-  });
-  expect(granted.ok(), await granted.text()).toBeTruthy();
+  await grantMarketRole(request, marketId, VIEWER, 'viewer');
 
   // Reached from the bar, at its own address.
   const stats = new StatsPage(page);

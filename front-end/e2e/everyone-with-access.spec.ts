@@ -4,6 +4,7 @@ import { ManageMarketPage } from './pages/ManageMarketPage';
 import { loginViaApi } from './helpers/seeds';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
 import { uniqueMarketName } from './helpers/uniqueName';
+import { grantMarketRole, placeInOrganization } from './helpers/grantMarketRole';
 
 /**
  * Manage market lists everyone with access, at the role that counts and where it comes from
@@ -33,15 +34,8 @@ async function seedTheWalksCase(request: APIRequestContext, orgPrefix = 'Access 
   const org = await request.post(`${BACKEND_URL}/organizations`, { data: { name: orgName } });
   expect(org.ok(), await org.text()).toBeTruthy();
   const orgId = (await org.json()).organization_id as string;
-  for (const [place, email] of [
-    ['admins', ORG_ADMIN.email],
-    ['members', ORG_MEMBER.email],
-  ]) {
-    const added = await request.post(`${BACKEND_URL}/organizations/${orgId}/${place}`, {
-      data: { user_email: email },
-    });
-    expect(added.ok(), await added.text()).toBeTruthy();
-  }
+  await placeInOrganization(request, orgId, ORG_ADMIN, 'admin');
+  await placeInOrganization(request, orgId, ORG_MEMBER, 'member');
   const marketName = uniqueMarketName('Access Market');
   const market = await request.post(`${BACKEND_URL}/markets`, {
     data: {
@@ -52,15 +46,8 @@ async function seedTheWalksCase(request: APIRequestContext, orgPrefix = 'Access 
   });
   expect(market.ok(), await market.text()).toBeTruthy();
   const marketId = (await market.json()).market_id as string;
-  for (const [email, role] of [
-    [ORG_ADMIN.email, 'editor'],
-    [ADDED.email, 'viewer'],
-  ]) {
-    const given = await request.post(`${BACKEND_URL}/markets/${marketId}/roles`, {
-      data: { user_email: email, role },
-    });
-    expect(given.ok(), await given.text()).toBeTruthy();
-  }
+  await grantMarketRole(request, marketId, ORG_ADMIN, 'editor');
+  await grantMarketRole(request, marketId, ADDED, 'viewer');
   return { orgId, orgName, marketName };
 }
 

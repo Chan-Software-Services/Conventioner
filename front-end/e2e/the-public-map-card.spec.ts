@@ -1,6 +1,7 @@
 import { test, expect, TEST_USER, BACKEND_URL } from './fixtures';
 import { DAY_MAP_QUESTIONS, seedMarketDayMap } from './helpers/seedMarketDayMap';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { withUser } from './helpers/withUser';
 import { PHONE } from './helpers/screens';
 import { marketPagePath } from './helpers/marketScreens';
@@ -107,10 +108,7 @@ test('someone the row refuses reads the card, every control disabled, and why', 
   const seed = await seedMarketDayMap(request, BACKEND_URL, TEST_USER.email, TEST_USER.password, {
     publicMap: true,
   });
-  const granted = await request.post(`${BACKEND_URL}/markets/${seed.marketId}/roles`, {
-    data: { user_email: VIEWER.email, role: 'editor' },
-  });
-  expect(granted.ok(), await granted.text()).toBeTruthy();
+  await grantMarketRole(request, seed.marketId, VIEWER, 'editor');
 
   await withUser(browser, VIEWER.email, VIEWER.password, async (editor) => {
     const tools = new ToolsPage(editor);
