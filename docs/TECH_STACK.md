@@ -95,7 +95,7 @@ How each part of the code works is in the implementation layer of the [knowledge
 ### Utilities
 
 - **Python's `secrets`** - Email verification and password reset links, and sign-in codes, each stored only as its hash (`back-end/account_secrets.py`)
-- **PyJWT 2.15** - The applicant's sign-in token, signed with a key derived from `SECRET_KEY` for vendor tokens alone
+- **PyJWT 2.15** - The applicant's sign-in token, signed with its own key derived from `SECRET_KEY`
 - **Cryptography 50** - Lets the local stack's `flask run --cert=adhoc` make its certificate; no module imports it
 - **Requests 2.34** - HTTP library
   - Used for reCAPTCHA verification API calls
