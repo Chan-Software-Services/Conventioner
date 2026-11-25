@@ -11,7 +11,7 @@ const ciReporters = [
   ['json', { outputFile: process.env.E2E_JSON_OUTPUT ?? 'test-results/results.json' }] as const,
 ];
 
-/** CI's shards set E2E_WORKERS (scripts/e2e-shards.ts); unset, or not a positive integer, is 1. */
+/** CI's shards set E2E_WORKERS (.github/workflows/test.yml); unset, or not a positive integer, is 1. */
 function workers(value: string | undefined): number {
   const count = Number(value);
   return Number.isInteger(count) && count > 0 ? count : 1;
