@@ -30,8 +30,8 @@ and `--results` name files instead). A spec is chosen:
 4. every spec, when the change edits a file the whole suite stands on, or the E2E run's own
    machinery: the Test workflow, `.github/workflows/test.yml`, a file under `.github/actions/`,
    the shard dealer, `front-end/scripts/e2e-shards.ts`, and its `e2e-shard-timings.json`, this
-   script and `scripts/test_map.py`, `scripts/chromium-packages.sh` and `scripts/image-tags.sh`
-   (`RUN_EVERY_SPEC`);
+   script and `scripts/test_map.py`, `scripts/chromium-packages.sh` and `scripts/image-tags.sh`,
+   and `.nvmrc`, the Node every shard runs on (`RUN_EVERY_SPEC`);
 5. every spec, scoring nothing, when the change edits a file under `front-end/` or `back-end/` no
    rule places: not a spec, not imported by one at the head or the base, in no spec's modules and
    no endpoint's files (a stylesheet Vite inlines, a module no endpoint ran, a config no rule
@@ -105,8 +105,9 @@ SPEC_NAME = re.compile(r"[A-Za-z0-9._+/-]+\.spec\.ts")
 # run, the front end's build and dependencies, and the stack and data every spec runs against:
 # every back-end lock but the advisory scan's, which no stack installs. And the E2E run's own
 # machinery, so a change to it runs the whole suite: the Test workflow and its shared actions, the
-# shard dealer and its timings, this selection and the map's builder, and the scripts that give a
-# runner its browser's packages and a stack its image tags.
+# shard dealer and its timings, this selection and the map's builder, the scripts that give a
+# runner its browser's packages and a stack its image tags, and `.nvmrc`, the Node every shard
+# installs to run the dealer and Playwright.
 RUN_EVERY_SPEC = re.compile(
     r"^(?:front-end/(?:e2e/fixtures\.ts|e2e/global-setup\.ts|playwright\.config\.ts"
     r"|package-lock\.json|vite\.config\.ts|index\.html"
@@ -114,7 +115,7 @@ RUN_EVERY_SPEC = re.compile(
     r"|docker-compose[^/]*\.ya?ml|(?:.*/)?Dockerfile[^/]*|back-end/requirements(?!-audit\.)[^/]*\.txt"
     r"|scripts/(?:seed_fixture\.sh|lib/stack-identity\.sh|affected-specs\.py|test_map\.py"
     r"|chromium-packages\.sh|image-tags\.sh)"
-    r"|\.github/(?:workflows/test\.yml|actions/.+))$"
+    r"|\.github/(?:workflows/test\.yml|actions/.+)|\.nvmrc)$"
 )
 
 # The changed files that drive no spec, wherever the map places them: the docs, Markdown, the

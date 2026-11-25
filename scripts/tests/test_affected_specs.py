@@ -583,6 +583,7 @@ class TestRuleFourEverySpec:
             "scripts/test_map.py",
             "scripts/chromium-packages.sh",
             "scripts/image-tags.sh",
+            ".nvmrc",
         ],
     )
     def test_the_e2e_runs_own_machinery_chooses_every_spec_and_scores_nothing(self, repo, path):
