@@ -570,7 +570,7 @@ export function checkShards(
   const serial = (deal: DealRecord) => deal.serial ?? [];
   const workers = (deal: DealRecord) => deal.workers ?? 1;
   const plural = (count: number, noun: string) =>
-    count === 0 ? `no ${noun}` : `${count} ${noun}${count === 1 ? '' : 's'}`;
+    count === 0 ? `no ${noun}` : counted(count, noun);
   const parts = [
     {
       what: 'timings',
