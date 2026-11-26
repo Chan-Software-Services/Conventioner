@@ -39,11 +39,12 @@ test.describe('Manage organization at 150 people', () => {
   }) => {
     const seededIds = new Set(seed.people.map((person) => person.id));
     // Signing in lands on Markets, which makes the same organizations read; its list shows once that
-    // read has answered, so the profiler, started after it, counts the opening's read alone.
+    // read has answered, so the profiler, started after it, counts the opening's reads alone.
     await expect(page.getByTestId('markets-result-count')).toBeVisible();
 
+    let requests: string[] = [];
     const reads = await usersReadsWhile(async () => {
-      await requestsWhile(page, {}, async () => {
+      requests = await requestsWhile(page, {}, async () => {
         await openManageOrganization(page, seed.orgId, seed.counts);
       });
     });
@@ -51,13 +52,20 @@ test.describe('Manage organization at 150 people', () => {
     const alone = reads.map((read) => idsNamed(read).alone).filter((id) => id && seededIds.has(id));
     expect(alone, 'a seeded person read alone').toEqual([]);
     const batches = reads.filter((read) => idsNamed(read).batch.some((id) => seededIds.has(id)));
-    expect(batches).toHaveLength(1);
+    // Opened from its address, the organizations are read twice, the page's list and the dialog's own
+    // read of its organization, and each read names them in one batch.
+    const organizationReads = requests.filter((made) => made === 'GET /api/organizations');
+    expect(organizationReads).toHaveLength(2);
+    expect(batches).toHaveLength(organizationReads.length);
     // The seed owner is in other organizations too, whose people the same read names.
-    const batch = new Set(idsNamed(batches[0]).batch);
-    expect([...seededIds].filter((id) => !batch.has(id))).toEqual([]);
+    for (const read of batches) {
+      const batch = new Set(idsNamed(read).batch);
+      expect([...seededIds].filter((id) => !batch.has(id))).toEqual([]);
+    }
     // A one-person organization's opening reads every organization the seed owner is in as well,
-    // so it is no measure here: the opening's reads are the session's account and the one batch,
-    // a handful, where a read per person, whatever its filter, makes one per admin and member.
+    // so it is no measure here: the opening's reads are the session's account and a batch for each
+    // request, a handful, where a read per person, whatever its filter, makes one per admin and
+    // member.
     expect(readsMade(reads).length, 'the reads the opening made').toBeLessThan(10);
   });
 

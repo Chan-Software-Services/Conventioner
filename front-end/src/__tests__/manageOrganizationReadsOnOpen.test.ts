@@ -235,7 +235,7 @@ describe('Manage organization reads the organization as it opens', () => {
     await rename('Autumn Makers');
 
     expect(reads).toHaveLength(2);
-    // The read asked before the rename answers last, with the old name: it is dropped.
+    // A read still out from before the rename answers last, with the old name: it is dropped.
     answers(1, { ...TRUE_NOW, name: 'Autumn Makers' });
     await flushPromises();
     reads[0]!.resolve({ data: { organizations: [COPY] } });

@@ -235,6 +235,8 @@ const invitedToTheOrganization = async (page: Page, seed: TheScreensSeed) => {
     .getByTestId('organizations-manage-button')
     .click();
   await expect(orgs.invitedRows.nth(1)).toBeVisible({ timeout: 15000 });
+  // The people above it are a read of their own, and move it as they arrive.
+  await orgs.waitForPeopleRead();
   await orgs.invited.scrollIntoViewIfNeeded();
 };
 
