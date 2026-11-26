@@ -120,7 +120,7 @@ It opened on the organizations list's copy and read the organization again only 
 - The rename field takes each name that differs from the one shown, so a read that brings the same name leaves one being typed alone.
 
 The list mounts one Manage organization for every organization, so each opening starts afresh: both invite rows closed, their fields empty and nothing said under them, no confirmation asking, and the finds empty.
-Each row's Cancel and the opening clear it through the one function (`clearAddAdmin`, `clearAddMember`), since only Cancel emptied the field, and an address left by Escape or the close button came back on the next opening, of another organization too (T646).
+Each row's Cancel and each opening clear that row through the same function (`clearAddAdmin`, `clearAddMember`), so an address left by Escape or the close button never comes back on the next opening, on any organization.
 
 ## Make member and Make admin
 
