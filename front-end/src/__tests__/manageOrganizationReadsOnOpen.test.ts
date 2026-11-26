@@ -192,6 +192,82 @@ describe('Manage organization reads the organization as it opens', () => {
     expect(byTestId('manage-org-error')).toBeNull();
   });
 
+  const SAVED_UNREAD = 'Saved, but could not re-read the organization';
+  const said = () => byTestId('manage-org-error')?.textContent?.trim();
+
+  async function confirm(button: string, submit: string) {
+    byTestId(button)!.click();
+    await flushPromises();
+    byTestId(submit)!.click();
+    await flushPromises();
+  }
+  const removeTheMember = () =>
+    confirm('manage-org-remove-member-button', 'manage-org-remove-submit-button');
+  const makeTheMemberAdmin = () =>
+    confirm('manage-org-make-admin-button', 'manage-org-place-change-submit-button');
+
+  it.each([
+    ['a removal', removeTheMember, (answer: () => void) => answer()],
+    ['a change of place', makeTheMemberAdmin, (answer: () => void) => answer()],
+    [
+      'a removal made after the first read failed',
+      removeTheMember,
+      () => reads[0]!.reject(failure(404)),
+    ],
+  ])(
+    'says %s was saved when the read after it fails with no sentence of its own',
+    async (_, change, firstRead) => {
+      api.delete.mockResolvedValue({ data: {} });
+      api.put.mockResolvedValue({ data: {} });
+      open();
+      firstRead(() => answers(0, COPY));
+      await flushPromises();
+      await change();
+      reads[1]!.reject(failure(404));
+      await flushPromises();
+
+      expect(said()).toBe(SAVED_UNREAD);
+      expect(members()).toEqual(['left@example.com']);
+    },
+  );
+
+  it('says nothing was saved of a later change that was refused', async () => {
+    api.delete.mockResolvedValue({ data: {} });
+    open();
+    answers(0, COPY);
+    await flushPromises();
+    await removeTheMember();
+    reads[1]!.reject(failure(404));
+    await flushPromises();
+    api.put.mockRejectedValue(
+      Object.assign(failure(409), {
+        response: { status: 409, data: { error: 'Changed.', code: 'organization_changed' } },
+      }),
+    );
+    await makeTheMemberAdmin();
+    reads[2]!.reject(failure(404));
+    await flushPromises();
+
+    expect(said()).toBe('Could not re-read the organization');
+  });
+
+  it('says nothing was saved of a later opening whose first read fails', async () => {
+    api.delete.mockResolvedValue({ data: {} });
+    const wrapper = open();
+    answers(0, COPY);
+    await flushPromises();
+    await removeTheMember();
+    reads[1]!.reject(failure(404));
+    await flushPromises();
+    await wrapper.setProps({ manageOpen: false, org: null });
+    await wrapper.setProps({ manageOpen: true, org: COPY });
+    await flushPromises();
+    reads[2]!.reject(failure(404));
+    await flushPromises();
+
+    expect(said()).toBe('Could not re-read the organization');
+  });
+
   it('shows nothing of an organization the list no longer holds, and says so', async () => {
     open();
     answers(0, org({ id: 'org-2', name: 'Another Org' }));

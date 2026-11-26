@@ -147,6 +147,9 @@ const openOn = () => (props.manageOpen ? (props.org?.id ?? null) : null);
 /** The organizations list answered without the organization asked for. */
 class NotListed extends Error {}
 
+/** What a failed read says when its failure has no sentence of its own. */
+const UNREAD = 'Could not re-read the organization';
+
 /** The organization as the person's list of organizations serves it now. */
 async function readOrganization(id: string): Promise<Organization> {
   const found = (await fetchOrganizations()).find((candidate) => candidate.id === id);
@@ -160,7 +163,7 @@ async function readOrganization(id: string): Promise<Organization> {
  * never lands, and only the newest read asked does.
  */
 const read = useServerRead<string, Organization>(openOn, readOrganization, {
-  failure: 'Could not re-read the organization',
+  failure: UNREAD,
   missing: (error) => error instanceof NotListed,
 });
 /** The list's copy it was opened with, a new name or default table saved here taken into it. */
@@ -176,7 +179,16 @@ const orgData = computed(() => {
 });
 /** This opening's first read failed: the copy's people are listed from then on, until one lands. */
 const firstReadFailed = ref(false);
-watch(read.key, () => (firstReadFailed.value = false), { flush: 'sync' });
+/** The read asked last follows a removal or a change of place that was saved. */
+const readingWhatWasSaved = ref(false);
+watch(
+  read.key,
+  () => {
+    firstReadFailed.value = false;
+    readingWhatWasSaved.value = false;
+  },
+  { flush: 'sync' },
+);
 watch(read.phase, (phase) => {
   if (phase === 'failed') firstReadFailed.value = true;
 });
@@ -184,11 +196,19 @@ watch(read.phase, (phase) => {
 const peopleState = computed(() =>
   read.phase.value === 'loading' && !firstReadFailed.value ? 'loading' : 'ready',
 );
-/** A read that failed, or an organization no longer listed, said by the shell. */
+/**
+ * A read that failed, or an organization no longer listed, said by the shell. A person just removed
+ * or moved can still be listed behind a failed read, so one with no sentence of its own says the
+ * change was saved.
+ */
 const errorMessage = computed(() => {
   const phase = read.phase.value;
   if (phase === 'missing') return 'You are no longer in this organization, or it has been deleted.';
-  return phase === 'failed' || phase === 'refresh_failed' ? read.sentence.value : '';
+  if (phase !== 'failed' && phase !== 'refresh_failed') return '';
+  const said = read.sentence.value;
+  return said === UNREAD && readingWhatWasSaved.value
+    ? 'Saved, but could not re-read the organization'
+    : said;
 });
 // The first read can take away what the dialog opened on, the whole organization or a control the
 // person may no longer use, which leaves focus on <body>: it goes back inside.
@@ -303,10 +323,12 @@ const mayWithdraw = (invitation: SentInvitation<OrganizationPlace>) =>
  * Run inside a write, with its submission's `isCurrent`, so the hold lasts until the change shows:
  * once the opening the write was sent from has gone (Manage organization closed, or opened on
  * another organization), nothing is read. The read overtakes any asked before it, so an older answer
- * never lands after it.
+ * never lands after it. `saved` marks the read after a removal or a change of place that was saved.
  */
-async function rereadAfterAWrite(isCurrent: () => boolean): Promise<void> {
-  if (isCurrent()) await read.reread();
+async function rereadAfterAWrite(isCurrent: () => boolean, saved = false): Promise<void> {
+  if (!isCurrent()) return;
+  readingWhatWasSaved.value = saved;
+  await read.reread();
 }
 
 /**
@@ -512,7 +534,7 @@ async function handleRemoveUser() {
       }
       // Held until the confirmation closes: during the re-read its Remove would send a second
       // removal.
-      await rereadAfterAWrite(isCurrent);
+      await rereadAfterAWrite(isCurrent, true);
     },
     {
       done: async () => {
@@ -570,7 +592,7 @@ async function handlePlaceChange() {
       }
       // Held until the confirmation closes: during the re-read its confirm would send a second
       // change.
-      await rereadAfterAWrite(isCurrent);
+      await rereadAfterAWrite(isCurrent, true);
       return landedIn;
     },
     {
