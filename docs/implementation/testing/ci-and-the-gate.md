@@ -20,10 +20,12 @@ describes:
   - .github/actions/e2e-stack/action.yml
   - .github/actions/front-end-deps/action.yml
   - scripts/chromium-packages.sh
-  - scripts/ci_suite.py
   - scripts/nm-lint.sh
+  - scripts/ci_suite.py
   - scripts/e2e_retries.py
-verified: 2026-11-25
+  - scripts/affected-specs.py#ci_decision
+  - scripts/affected-specs.py#shard_count
+verified: 2026-11-26
 sources:
   - T47
   - T53
@@ -42,28 +44,29 @@ sources:
   - T375
   - T424
   - T464
-  - T508
-  - T528
   - T527
-  - T510
+  - T508
   - T565
+  - T528
   - T582
+  - T510
   - T606
+  - T612
 ---
 
 # CI and the gate
 
-GitHub Actions runs the suites before code reaches `dev`, on every pull request and merge queue trial commit, and again on a push only when [the queue did not test that commit](#which-suite-a-run-runs); the no-mistakes gate, on a branch pushed through it, checks it for real data before it pushes, [lints the front-end, docs and root Markdown files it changes](#the-gates-lint-step) and [leaves the suites to CI](#the-no-mistakes-gate).
+GitHub Actions runs the suites before code reaches `dev`, on every pull request, whose E2E run into `dev` is [the specs the test map names](#what-a-pull-requests-e2e-run-runs), or every spec on any doubt, and every merge queue trial commit, which runs every spec, and again on a push only when [the queue did not test that commit](#which-suite-a-run-runs); the no-mistakes gate, on a branch pushed through it, checks it for real data before it pushes, [lints the front-end, docs and root Markdown files it changes](#the-gates-lint-step) and [leaves the suites to CI](#the-no-mistakes-gate).
 [Dependabot's pull requests](#dependabot) meet only the first.
 What each suite covers is [TESTING.md](../../TESTING.md); how a commit reaches production is [RELEASING.md](../../RELEASING.md).
 
 ## CI
 
 [`.github/workflows/test.yml`](../../../.github/workflows/test.yml) runs on pushes and pull requests to `dev` and `main`, on [a merge queue's trial commit](#a-merge-queues-trial-commit) for `dev`, and [nightly on `dev`'s tip, or by hand](#the-nightly-test-map), for the test map.
-Its token is read-only (`permissions: contents: read`, and on the `suite` job `actions: read` too, for the queue's run and the test maps, and on the `e2e-shard` and `e2e` jobs, for [the timings artifact](#the-timings-refresh-themselves) and the newest `test-map` artifact, other runs', and on the `e2e-retries` job, for other runs' shard reports), every action is pinned by its full commit SHA with the version in a comment beside it, which [Dependabot](#dependabot) bumps together, and no checkout keeps its git credentials (`persist-credentials: false`), since no job pushes.
+Its token is read-only (`permissions: contents: read`, and `actions: read` too, to read other runs, on the `suite` job for the queue's run and the test maps, on `e2e-shard` for [the timings artifact](#the-timings-refresh-themselves), on `e2e-select` and `e2e` for the newest `test-map` artifact, and on `e2e-retries` for other runs' shard reports), every action is pinned by its full commit SHA with the version in a comment beside it, which [Dependabot](#dependabot) bumps together, and no checkout keeps its git credentials (`persist-credentials: false`), since no job pushes.
 No `${{ }}` expression is written inside a `run:` script: a value reaches the shell through the step's `env:` and is read as a variable.
 A push to a pull request's branch cancels the run of its earlier head (`concurrency`); a push to `dev` or `main` never cancels one, since each commit there keeps the checks a promotion reads, and neither does a trial commit, whose group is its own queue branch and commit.
-Every job but `e2e-shard` (whose checks are `e2e shard <n>/10`) sets `name:` to its id, the name `dev`'s and `main`'s rules require its check by, so renaming a job drops a required check.
+Every job but `e2e-shard` (whose checks are `e2e shard <n>/<shards>`, the run's count of shards, 10 on a whole run) sets `name:` to its id, the name `dev`'s and `main`'s rules require its check by, so renaming a job drops a required check.
 CodeQL's analysis is [a workflow of its own](#codeql), whose three checks `dev` requires too.
 
 Each job is one block, what it runs one item a line ([two features never share a line](../conventions/two-features-never-share-a-line.md)); a new job is a block beside the job it is most like, and a new step of a job is one item beside the step it is most like.
@@ -73,7 +76,7 @@ Each job is one block, what it runs one item a line ([two features never share a
 - on a push to `dev`, and first, before every other job: [`scripts/ci_suite.py`](../../../scripts/ci_suite.py) reads the queue's Test run on the pushed commit and says, as the job's output `run`, [which suite the run runs](#which-suite-a-run-runs)
 - on a nightly or hand-started run, first too: the same script reads whether the commit already has a test map, and says `map` or `none` ([the nightly test map](#the-nightly-test-map))
 - the runner's own `python3`, since the script needs only the standard library, with the run's read-only token
-- skipped on every other run, so a pull request's, a trial commit's and a push to `main`'s start every job at once, as before it
+- skipped on every other run, so no job of a pull request's, a trial commit's or a push to `main`'s waits for its word
 
 **`backend`**
 
@@ -114,9 +117,19 @@ Each job is one block, what it runs one item a line ([two features never share a
 
 - `docker compose build`
 
+**`e2e-select`**
+
+- on a pull request into `dev` alone, one step, `decide`, which asks [`affected-specs.py ci`](#what-a-pull-requests-e2e-run-runs) what the run's E2E runs, over a checkout of two commits, the merge commit and its first parent, and sets the outputs `scope`, `shards` and `specs`
+- the runner's own `python3`, since the script needs only the standard library, with the run's read-only token
+- it needs no other job, and the shards wait for it
+- skipped on every other run, whose shards, if it runs any, run every spec
+- not a required check
+
 **`e2e-shard`**
 
-- ten runners, each running the [shared actions](#the-e2e-stack-and-its-caches), which fill `front-end/node_modules`, install Chromium, load the stack's images from the cache or build them, start the stack and seed it with `seed_fixture.sh --primary`, then taking [the timings to deal by](#the-timings-refresh-themselves) and running the spec files [dealt to it by them](#the-e2e-shards), with `DISABLE_CAPTCHA`, `DISABLE_EMAIL` and `DISCORD_FAKE` set
+- one runner a shard, ten (`E2E_SHARDS`) unless [`e2e-select` asked for fewer](#what-a-pull-requests-e2e-run-runs), each running the [shared actions](#the-e2e-stack-and-its-caches), which fill `front-end/node_modules`, install Chromium, load the stack's images from the cache or build them, start the stack and seed it with `seed_fixture.sh --primary`, then taking [the timings to deal by](#the-timings-refresh-themselves) and running the spec files [dealt to it by them](#the-e2e-shards), with `DISABLE_CAPTCHA`, `DISABLE_EMAIL` and `DISCORD_FAKE` set
+- on a pull request whose selection named specs, it deals those alone (`--specs=`)
+- skipped, before its matrix expands, on a pull request whose selection named no spec
 - it posts a flaky-test summary and uploads its JSON report and its deal record (`e2e-results-shard-<n>`, kept 90 days) on every run, and on failure uploads the whole report
 - on a nightly or hand-started run alone (`RECORD_TEST_MAP`) it also records [the test map](the-test-map.md) (`TEST_MAP_OUT`) and uploads the records with the back end's timestamped log (`test-map-shard-<n>`, kept 90 days)
 
@@ -128,9 +141,12 @@ Each job is one block, what it runs one item a line ([two features never share a
 
 **`e2e`**
 
-- passes only when every shard did and [the shards ran every spec file exactly once](#the-timings-refresh-themselves), whose check writes the timings' source, each shard's seconds and their spread to the job summary
+- passes only when every shard did and [the shards ran every spec file exactly once](#the-timings-refresh-themselves), or, on a pull request whose scope is `named`, each file of the selection's list exactly once; the check writes what ran, the timings' source, each shard's seconds and their spread to the job summary
+- on a pull request whose selection named no spec, passes with no shard run, and says so in the job summary
+- its step "A folder of results for each of this run's shards", before the check, gives the check and the audits one folder a shard: it moves into shard 1's folder the files of a lone artifact, which the download unpacks straight into its path, and removes each folder numbered above this run's count of shards, left by an earlier attempt that asked for more
 - on a push to `dev` or a trial commit, whose shards all passed, it publishes the next timings (`e2e-shard-timings`, kept 90 days); a run whose shards did not all pass, or ran none, publishes nothing
-- on a pull request it then runs [the selection audit](the-test-map.md#where-a-miss-shows), which lists each spec the shards failed in the job's summary as ran, left to CI or missed by `affected-specs.py` for the pull request's diff, each miss also a warning annotation once a test map exists, its steps continuing on error so they never decide the job
+- on a pull request it then runs [the selection audit](the-test-map.md#where-a-miss-shows), which lists each spec the shards failed in the job's summary as ran, left to CI or missed by `affected-specs.py` for the pull request's diff, each miss also a warning annotation once a test map exists, its step continuing on error so it never decides the job
+- on a trial commit it runs [the queue's audit](the-test-map.md#where-a-miss-shows) instead, which says of each spec the shards failed how the pull request's own run [would have treated it](#what-a-pull-requests-e2e-run-runs): ran it by name, ran it within the whole suite, or left it out, each spec left out also a warning annotation, its step continuing on error too
 
 **`test-map`**
 
@@ -155,10 +171,10 @@ Both require `backend`, `frontend-unit`, `frontend-lint-and-types`, `docker-buil
 `dev`'s rules are one ruleset with a merge queue: a pull request into `dev` merges only through the queue, by a merge commit, once every required check has passed on its head and again on [the queue's trial commit](#a-merge-queues-trial-commit), and its `code_scanning` rule holds back one that brings in [a new CodeQL alert](#codeql).
 The ruleset has no bypass actor, so nothing merges into `dev`, the merge of `main` back into it included, without all eleven, short of changing the ruleset itself; `main`'s rulesets let an admin bypass them through a pull request only, which is how the Release PR merges with `--admin`, and let no one but the Promote workflow's App push to `main` ([RELEASING.md](../../RELEASING.md#branch-model), [ADR 0027](../../adr/0027-main-moves-only-through-promote.md)).
 `e2e` is a job of its own so the rules name one check whatever the shard count becomes.
-It runs whatever the shards' result, so a failed shard fails it, but not on a cancelled run (`!cancelled()`), which would post a red `e2e` on the head a later push made moot, nor on a warm push, whose skipped shards would post a red one on a commit the queue passed, nor on a nightly or hand-started run, which posts `e2e` on `dev`'s tip only as skipped, read as passing, never a red one.
+It runs whatever the shards' result, so a failed shard fails it, as do skipped shards unless the [selection named no spec](#what-a-pull-requests-e2e-run-runs), but not on a cancelled run (`!cancelled()`), which would post a red `e2e` on the head a later push made moot, nor on a warm push, whose skipped shards would post a red one on a commit the queue passed, nor on a nightly or hand-started run, which posts `e2e` on `dev`'s tip only as skipped, read as passing, never a red one.
 `knowledge-graph` fails a pull request that changes a described file without touching its node or bumping `verified`: its drift step is part of the required check.
 The online zizmor step never fails `real-data-and-workflows`: a rate limit or outage of GitHub's API would otherwise block a merge, and the offline step already holds the workflows to the offline audits.
-The selection audit never fails `e2e`, for the same reason: a failed download or an outage of GitHub's API would otherwise block a merge whose shards all passed.
+Neither selection audit fails `e2e`, for the same reason: a failed download or an outage of GitHub's API would otherwise block a merge whose shards all passed.
 The real-data steps of `real-data-and-workflows` are the only real-data check the gate's own commits get: the document, lint and CI-fix steps commit after `nm-test.sh` has run, and the gate pushes them from its repository, which has no hooks installed ([real data never leaves the PC](../conventions/security-invariants.md#real-data-never-leaves-the-pc)).
 
 **A flaky test fails the build.**
@@ -192,8 +208,43 @@ Each word runs these jobs:
 `python-advisories` reads no word, so it runs beside each of them, a daily scan of `dev`'s tip on the nightly run.
 `e2e-retries` reads none either, and runs on every nightly and hand-started run, whichever word it gets.
 Each test job `needs: suite` and runs `if: ${{ !cancelled() && (needs.suite.outputs.run == '' || needs.suite.outputs.run == 'full') }}`, the shards on `map` too; `!cancelled()` lets them run when `suite` was skipped or failed.
+The shards need `e2e-select` too, and on a pull request into `dev` run [what it named](#what-a-pull-requests-e2e-run-runs), no shard at all when it named no spec.
 A required check whose job its `if:` skipped reports success, so a warm push's six required checks and `e2e` pass on a commit whose queue run passed them, and its run is green whatever `warm-caches` did, unless `python-advisories` fails: an advisory published since the pull request's run makes the warm push's run red, which holds Promote on that commit until the lock moves.
 [Promote](../../RELEASING.md#how-a-promotion-proves-itself) reads that run or the queue's, the newest of the two.
+
+## What a pull request's E2E run runs
+
+**A pull request into `dev` runs the E2E spec files [the test map](the-test-map.md) names for its change, and the merge queue's run runs every spec** ([ADR 0050](../../adr/0050-a-pull-requests-e2e-run-is-the-test-maps-selection.md)).
+So every check that can block a merge still runs before it, and a spec the map left out of a change's pull request run meets that change first on the queue, where its failure costs a trial commit, not a red `dev`.
+Every other run that runs the shards, a pull request into `main` among them, runs every spec, since `e2e-select` runs only on `github.event_name == 'pull_request' && github.base_ref == 'dev'`.
+
+Its step `decide` runs [`scripts/affected-specs.py`](../../../scripts/affected-specs.py) `ci --github --base HEAD^1 --head HEAD --max-shards "$E2E_SHARDS"`, which reads the newest map and each spec's minutes as [a builder's run does](the-test-map.md#choosing-a-builders-specs), takes no cap, and prints its decision as one JSON object.
+The first that applies decides (`ci_decision`):
+
+1. The whole suite, "there is no test map": no run on `dev` has an unexpired one, or GitHub could not be read or the map did not download, with none downloaded before, as on a runner.
+2. The whole suite, "the test map could not be read from GitHub": an older map was read from a machine's own downloads, which a runner never has.
+3. The whole suite, "the newest test map is <n> days old": its artifact was made more than 7 days ago (`MAP_MAX_AGE_DAYS`), whether the nightly runs since failed to make one or no merge gave them a new commit.
+4. The whole suite, "the change names every spec": the map names every spec file at the head, as [rule 4 or 5](the-test-map.md#choosing-a-builders-specs) does.
+5. The whole suite, "a spec name the run cannot pass on": a named spec's name is not ASCII letters, digits and `. _ + / -` ending `.spec.ts` (`SPEC_NAME`), so no other character reaches an output, an environment variable or a filter.
+6. Otherwise the named specs: those the map names that the head holds, which may be none.
+
+**A named run takes as many shards as its minutes need** (`shard_count`): none for no spec, else the named minutes divided by a whole run's share (the suite's minutes over `E2E_SHARDS`), rounded up, at least one, and never more than the named specs or `E2E_SHARDS`.
+So each of its shards holds about a whole run's share of the suite or less.
+
+**`E2E_SHARDS`**, the workflow's `env`, `"10"`, is a whole run's count of shards: `decide` passes it as `--max-shards`, `test-map` expects that many shards' records, and `e2e` keeps that many folders of results on a run whose `e2e-select` set no `shards`.
+The shards' matrix falls back to a list of 1 to it, written out because `strategy` cannot read `env`; `scripts/tests/test_ci_suite.py` holds the two together, so change both.
+
+**Every doubt runs the whole suite.**
+The step's shell passes a named decision on only from a script that exited 0 having printed one object whose `scope` is `named`, whose `specs` is a list of strings and whose `shards` is a whole number from 0 to `E2E_SHARDS`, 0 exactly when `specs` is empty: it writes the outputs `scope=named`, `shards` (the list 1 to that number) and `specs`.
+On anything else it writes `scope=whole` alone, and its log says whether the script chose the whole suite or could not decide.
+A job skipped or failed leaves every output empty: the shards' matrix reads an empty `shards` as the whole run's list, their run step reads an empty `specs` as no `--specs`, and `e2e` checks for every spec file unless the event is a pull request and the scope is `named`, so the queue's run, a push's and a whole pull request's demand every spec whatever `e2e-select` printed.
+
+**The run's summary says why, when the script reaches a decision.**
+`decide` writes a section "E2E selection": the decision in one sentence, the map and the diff it was made from, and for named specs a folded table of each one's minutes and the first reasons it was chosen.
+
+**"Re-run failed jobs" tests what the first attempt tested, when its `e2e-select` passed.**
+It keeps that job's outputs, so the shards deal the same specs, by [the same timings](#the-timings-refresh-themselves).
+One that failed runs and decides again, as every job does under "Re-run all jobs", and may then read a newer map.
 
 ## The nightly test map
 
@@ -214,17 +265,18 @@ The `merge_group` trigger (`checks_requested`, for `dev` alone, since `main` mov
 The roll-up `CodeQL` check is not required, since GitHub posts it only on a pull request, never on a trial commit.
 On it `github.base_ref` and `github.event.pull_request` are empty, since they belong to a pull request's event, and each job reads its event as follows:
 
-| Job                                                                   | On a trial commit                                                                                                                                                                                                                          |
-| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `suite`, `warm-caches`                                                | skipped: `suite` runs on a push to `dev`, a nightly and a hand-started run, and `warm-caches` only on `warm`                                                                                                                               |
-| `backend`, `frontend-unit`, `frontend-lint-and-types`, `docker-build` | every step, as on a push: `suite` skipped leaves `run` empty, which their `if:` reads as the whole suite, and no step has an `if:`                                                                                                         |
-| `knowledge-graph`                                                     | the scripts' tests and `knowledge_graph.py check`; the drift step, which reads `github.base_ref`, is skipped, as on a push, since it judges a pull request against its base, which the pull request's own run does                         |
-| `real-data-and-workflows`                                             | zizmor offline and actionlint; the real-data scans and zizmor online (`if:` a pull request), and gitleaks (`if:` a pull request or a push), are skipped                                                                                    |
-| `python-advisories`                                                   | skipped (`if:` not a `merge_group`); not a required check                                                                                                                                                                                  |
-| `e2e-shard`                                                           | every step, as on a push, but shard 1 saves no cache ([why](#the-e2e-stack-and-its-caches)) and no shard records [the test map](the-test-map.md), which only the nightly run records (`RECORD_TEST_MAP`)                                   |
-| `e2e`                                                                 | its `if:`, which reads `suite`'s empty `run` as the whole suite, and the deal's check; it publishes the next timings, as a push to `dev` whose shards run does; the selection audit, `if: github.event_name == 'pull_request'`, is skipped |
-| `test-map`                                                            | skipped (`if:` a nightly or hand-started run), as on every push; not a required check                                                                                                                                                      |
-| CodeQL's `analyze`, the three `Analyze (<language>)` checks           | every step, as on a push: none has an `if:`                                                                                                                                                                                                |
+| Job                                                                   | On a trial commit                                                                                                                                                                                                                                                                                                         |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `suite`, `warm-caches`                                                | skipped: `suite` runs on a push to `dev`, a nightly and a hand-started run, and `warm-caches` only on `warm`                                                                                                                                                                                                              |
+| `e2e-select`                                                          | skipped (`if:` a pull request into `dev`), so the shards run every spec                                                                                                                                                                                                                                                   |
+| `backend`, `frontend-unit`, `frontend-lint-and-types`, `docker-build` | every step, as on a push: `suite` skipped leaves `run` empty, which their `if:` reads as the whole suite, and no step has an `if:`                                                                                                                                                                                        |
+| `knowledge-graph`                                                     | the scripts' tests and `knowledge_graph.py check`; the drift step, which reads `github.base_ref`, is skipped, as on a push, since it judges a pull request against its base, which the pull request's own run does                                                                                                        |
+| `real-data-and-workflows`                                             | zizmor offline and actionlint; the real-data scans and zizmor online (`if:` a pull request), and gitleaks (`if:` a pull request or a push), are skipped                                                                                                                                                                   |
+| `python-advisories`                                                   | skipped (`if:` not a `merge_group`); not a required check                                                                                                                                                                                                                                                                 |
+| `e2e-shard`                                                           | every step, as on a push, all ten shards over every spec, but shard 1 saves no cache ([why](#the-e2e-stack-and-its-caches)) and no shard records [the test map](the-test-map.md), which only the nightly run records (`RECORD_TEST_MAP`)                                                                                  |
+| `e2e`                                                                 | its `if:`, which reads `suite`'s empty `run` as the whole suite, and the deal's check, which takes no `--named` and so fails a shard that dealt less than every spec; it publishes the next timings, as a push to `dev` whose shards run does; the queue audit runs; the pull request's (`if:` a pull request) is skipped |
+| `test-map`                                                            | skipped (`if:` a nightly or hand-started run), as on every push; not a required check                                                                                                                                                                                                                                     |
+| CodeQL's `analyze`, the three `Analyze (<language>)` checks           | every step, as on a push: none has an `if:`                                                                                                                                                                                                                                                                               |
 
 Each workflow's concurrency group is `<its name>-<its queue branch's ref>-<its sha>` (`Test-...`, `CodeQL-...`), so no other run shares it and none is cancelled.
 The queue builds at most two trial commits at once: one asks for 19 of [the account's 20 jobs](#the-e2e-shards), so a third would only wait for runners, while a second fills the runners the first leaves idle in its long `e2e` tail.
@@ -233,11 +285,12 @@ Promotion reads a trial commit's run: [`promote_check.py`](../../../scripts/prom
 
 ## The e2e shards
 
-Each `e2e-shard` job runs [`front-end/scripts/e2e-shards.ts`](../../../front-end/scripts/e2e-shards.ts) `--shard=<n>/10`, not Playwright's `--shard`.
+Each `e2e-shard` job runs [`front-end/scripts/e2e-shards.ts`](../../../front-end/scripts/e2e-shards.ts) `--shard=<n>/<shards>`, not Playwright's `--shard`.
 Playwright's `--shard` cuts the alphabetical list of spec files into runs of equal test count, whatever the tests cost (with `fullyParallel: false` a spec file is never split), so on the first six-shard run the three people-at-scale files, whose names sort together, all landed on one shard: 24 minutes of tests on it, 6 on another, and 28 minutes for the workflow.
 The script lists the suite with `playwright test --list`, deals the spec files heaviest first, each to the shard with the fewest seconds so far, by [the timings](#the-timings-refresh-themselves), and runs its own hand in alphabetical order.
 The hands depend only on the list and the timings, so every runner given the same timings deals the same ones and each spec file is in exactly one (`src/__tests__/e2eShards.test.ts`); before it runs, the script lists its hand again through the filters it passes and fails the shard if Playwright selects any other set of files.
 A spec file with no timing yet weighs the median of those measured.
+With `--specs=<file>`, a JSON list of spec files, which CI passes on [a pull request that named specs](#what-a-pull-requests-e2e-run-runs), it deals that list alone, by the same timings, and fails before it runs anything on a name Playwright does not list, naming each, as for a spec file that holds no test.
 
 ### The timings refresh themselves
 
@@ -256,12 +309,14 @@ The timings are each spec file's seconds, the summed duration of every attempt o
 - **Never a failed shard.**
   With no such artifact (as before the first one is published, or after 90 days without one), a corrupt one, or GitHub's API failing (after up to three tries), the shard deals by the committed [`front-end/scripts/e2e-shard-timings.json`](../../../front-end/scripts/e2e-shard-timings.json) with a warning annotation, and a corrupt artifact is never passed over for an older one, so every shard falls back alike.
 - **Checked.**
-  Each shard writes its deal record, `test-results/e2e-deal.json` (the timings' source, the timings, every listed file and its hand), uploaded beside its report.
-  Once every shard has passed, `e2e` runs `node scripts/e2e-shards.ts check`, which fails the job unless every shard dealt by the same timings and the reports hold every listed file exactly once, as when one shard fell back on a failed API call while the others took the artifact: a file no shard ran was never tested.
+  Each shard writes its deal record, `test-results/e2e-deal.json` (the timings' source, the timings, its scope, `whole` or `named`, how many spec files Playwright listed, the files it dealt from and its hand), uploaded beside its report.
+  Once every shard has passed, `e2e` runs `node scripts/e2e-shards.ts check`, which fails the job unless every shard dealt every listed file, all by the same timings, and the reports hold each exactly once; shards that dealt by different timings, as when one fell back on a failed API call while the others took the artifact, may leave a file no shard ran, which was never tested.
+  With `--named=<file>`, which `e2e` passes only on a pull request whose scope is `named`, it demands instead that every shard dealt exactly the files of that list and the reports hold each once.
+  A run that publishes timings is never a pull request's, and the script refuses `--named` with `--publish`.
   Shards that all fell back to the committed file, for different reasons, dealt by the same timings and pass.
   A re-run of the whole run then deals again by the same artifact.
 - **Read.**
-  Each shard's log names the timings it dealt by and the minutes they give its hand; the `e2e` job's summary names the source, or each source and its shards when they differ, each shard's seconds of tests and the spread between the fastest and the slowest.
+  Each shard's log names the timings it dealt by and the minutes they give its hand; the `e2e` job's summary opens with what ran and by which timings, "Every spec file the suite lists ran, dealt by <source>." or "The <n> spec files the test map named, of the <M> the suite lists, ran, dealt by <source>.", or, when the check found a problem, only "Dealt by <source>."; the source is each source and its shards when they differ; then each shard's seconds of tests and the spread between the fastest and the slowest.
 
 The committed file is the fallback, and `scripts/affected-specs.py` reads it.
 It was refreshed last from twelve whole runs on `dev` and the merge queue, 44525439048 to 44721661345, blended oldest first as CI publishes them; to refresh it again, download each run's reports into a folder of its own and give the folders oldest first, the newest a whole run:
@@ -277,14 +332,14 @@ The refresh lists the suite and refuses, naming each file, when a spec file it l
 **Ten shards, since the suite is the run's critical path.**
 With six, the slowest shard ended a median 21.5 minutes into a run, while every other job was done by 2.7; a shard is about 3 minutes of setup and its share of the suite, so ten bring a shard to about 12 minutes at about 13 more runner-minutes of setup a run.
 That holds while runners are free: the account is on GitHub Free, which runs 20 jobs at once across the repository.
-A pull request's run asks for 20, so it fits alone: 16 Test jobs at its start (`backend`, `knowledge-graph`, `real-data-and-workflows`, `frontend-unit`, `frontend-lint-and-types`, `docker-build` and the ten shards), `python-advisories` only once `real-data-and-workflows`, under a minute, is done, `e2e` only once the shards are done, and CodeQL's three; a push to `main` asks for the same.
+A pull request's run into `dev` asks for at most 20 jobs at once, so it fits alone, and fewer when [slimmed](#what-a-pull-requests-e2e-run-runs) to fewer than ten shards: at its start the six short jobs (`backend`, `knowledge-graph`, `real-data-and-workflows`, `frontend-unit`, `frontend-lint-and-types` and `docker-build`), `e2e-select` beside them and CodeQL's three; the shards, ten at most, once `e2e-select` is done; `python-advisories` only once `real-data-and-workflows`, under a minute, is done; and `e2e` only once the shards are done.
+A push to `main` asks for the six short jobs, the ten shards and CodeQL's three at its start, 19, then `python-advisories` and `e2e` as above.
 A trial commit's run asks for the same with no `python-advisories`, 19 in all.
-A [warm push](#which-suite-a-run-runs) to `dev` asks for three, `suite` then `warm-caches` and `python-advisories`, and CodeQL's three; a whole-suite push to `dev` asks for `suite` first, then the same 16, then `python-advisories` once `real-data-and-workflows` is done and `e2e` once the shards are done.
+A [warm push](#which-suite-a-run-runs) to `dev` asks for three, `suite` then `warm-caches` and `python-advisories`, and CodeQL's three; a whole-suite push to `dev` asks for `suite` first, then the six short jobs and the ten shards, then `python-advisories` once `real-data-and-workflows` is done and `e2e` once the shards are done.
 A [nightly run](#the-nightly-test-map) asks for `suite` and `e2e-retries`, then the ten shards and `python-advisories`, then `test-map`, twelve at once at most; one whose commit has a map asks for `suite` and `e2e-retries`, then `python-advisories`.
 That is why the five short checks (drift, the real-data scan with gitleaks, zizmor offline, zizmor online and actionlint) are steps of `knowledge-graph` and `real-data-and-workflows`: as five jobs of their own they made one run ask for 24, more than the account runs at once.
 `python-advisories` is a job of its own, since a step's failure would fail a required check, so it waits for `real-data-and-workflows` instead, and takes the runner that job leaves.
 With another run going, shards still wait: on one such run four shards queued 9 to 12 minutes, and the run ended at 23 minutes while each shard's own time was 10.5 to 12.5.
-The matrix lists the shards and their `total`, which move together.
 
 ## The e2e stack and its caches
 
@@ -306,11 +361,11 @@ Each `uses:` line calls an action by its path (`./.github/actions/...`) with a `
 
 The source is not in the images' key: an image's `COPY` of the source is stale on a hit, and the compose file's bind mounts of `back-end/` and `front-end/` put the checked-out source over it, while the front end's `node_modules` volume is filled from the image, whose `package-lock.json` is in the key.
 That is the rule by which every worktree and `nm-test.sh` stack shares its images ([below](#the-no-mistakes-gate)).
-Only one job of a run saves (`save-cache` and `save-caches`), and only what it did not restore, so ten shards never race to write one key: shard 1 of a pull request's run, of a whole-suite push's or of a nightly run's, and `warm-caches` on a warm push, which also saves npm's cache, the setup-node cache `frontend-unit` and `frontend-lint-and-types` read; the first run of a new key installs and builds on every shard, as before.
+Only one job of a run saves (`save-cache` and `save-caches`), and only what it did not restore, so the shards never race to write one key: shard 1 of a pull request's run, of a whole-suite push's or of a nightly run's, and `warm-caches` on a warm push, which also saves npm's cache, the setup-node cache `frontend-unit` and `frontend-lint-and-types` read; the first run of a new key installs and builds on every shard, as before.
 `docker-build` never uses the cache: it builds both images from nothing on every run, so a base image or a dependency that no longer builds still fails it.
 A cache written on `dev` is read by every pull request; one written on a pull request's run only by that pull request's later runs.
 A trial commit's shards read `dev`'s, the default branch's, and save none: a cache written on its queue branch would be read by no other run.
-The four caches are about 680 MB together (the images' archive about 340, the browsers about 280, `node_modules` about 40, the packages about 22), the first three saved once by each pull request that changes a key's files and the packages once for each runner image that moves their versions, against the repository's 10 GB of Actions cache, which GitHub evicts least recently used first and after 7 days unread.
+The four caches are about 680 MB together (the images' archive about 340, the browsers about 280, `node_modules` about 40, the packages about 22), the first three saved once by each pull request that changes a key's files and runs a shard and the packages once for each runner image that moves their versions, against the repository's 10 GB of Actions cache, which GitHub evicts least recently used first and after 7 days unread.
 
 ### Chromium's system packages
 
