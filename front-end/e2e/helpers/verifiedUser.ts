@@ -2,8 +2,9 @@ import { runBackendScript } from './backendScript';
 
 /**
  * Markers printed by `back-end/create_test_user.py`. The script exits 0 whether it created the
- * user, found one already there, or failed to insert, so its exit code says nothing; its output
- * is the only signal that a login-ready user actually exists.
+ * user, found one already there, or its insert answered no id, so a zero exit says nothing; its
+ * output is the only signal that a login-ready user actually exists. An insert the database
+ * refuses raises, exiting non-zero.
  */
 const CREATED_MARKER = 'Successfully created test user';
 const ALREADY_EXISTS_MARKER = 'already exists';

@@ -16,8 +16,8 @@ import { stackReady } from './helpers/stackReady';
  * count and be refused.
  *
  * It starts with none of the stack's seed locks held either (`stackLock.ts`): no worker of the run
- * has started, so a lock still standing was left by a killed worker of an earlier run, and no
- * waiter ever removes one. Like the counters, that assumes one run at a time on a stack.
+ * has started, so a lock still standing, or a takeover's `.reap` lock, was left by an earlier
+ * run. Like the counters, that assumes one run at a time on a stack.
  */
 export default async function globalSetup(config: FullConfig): Promise<void> {
   mongoEval('db.sign_in_attempts.deleteMany({})');

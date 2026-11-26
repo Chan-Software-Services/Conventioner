@@ -1,5 +1,5 @@
-import { createHash } from 'node:crypto';
-import { mkdirSync, rmSync } from 'node:fs';
+import { createHash, randomBytes } from 'node:crypto';
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { stack } from './stack';
@@ -13,21 +13,29 @@ import { stack } from './stack';
  * the first made and writes nothing.
  *
  * The lock is a directory under the OS temp dir, in a directory of the stack's own keyed by its
- * back end: making a directory either makes it or fails, at once, for every process on the
- * machine, which is where a shard's workers run. No waiter ever removes a lock, however old,
- * since a waiter that read it as old may remove one another waiter has just made; a lock a killed
- * worker left is cleared by the next run's `global-setup.ts`, before any worker starts, and
- * within the run its waiters fail, naming it, once they have waited `waitMs`.
+ * back end, holding an `owner` file: the holder's process id and a token of its own. A holder
+ * makes it whole under another name and renames it into place, which either lands or fails, at
+ * once, for every process on the machine, where a shard's workers run, since a directory never
+ * replaces one that holds a file; and it removes it only while the token there is its own.
+ *
+ * A lock is judged by its holder, never by its age: a waiter takes it over once the holder's
+ * process is gone, as when a worker was killed, or a hook timed out inside the body (Playwright
+ * replaces the worker, so its `finally` never runs), so the retry waits only until the old worker
+ * has exited, never for a stale age. The takeover is made under a second lock, `<lock>.reap`, and
+ * removes the lock only when its owner is still the one judged gone, so a waiter that judged it
+ * never removes one another waiter made meanwhile. A live holder is waited on for `waitMs`, then
+ * the waiter fails naming the lock. `global-setup.ts` clears the stack's locks before a run.
  */
 export interface LockTiming {
   /** How often a waiter looks again. */
   pollMs?: number;
-  /** How long a waiter waits before it fails: past any body's seconds, short of a hook's 120 s. */
+  /** How long a waiter waits on a live holder before it fails. */
   waitMs?: number;
 }
 
 const POLL_MS = 100;
 const WAIT_MS = 60_000;
+const OWNER = 'owner';
 
 const key = (text: string) => createHash('sha256').update(text).digest('hex').slice(0, 16);
 
@@ -41,6 +49,61 @@ export function lockPath(backend: string, name: string, dir: string = tmpdir()):
   return join(stackLocksDir(backend, dir), key(name));
 }
 
+/** The owner a lock names, `<pid> <token>`, or null when there is none to read. */
+function ownerOf(path: string): string | null {
+  try {
+    return readFileSync(join(path, OWNER), 'utf8');
+  } catch {
+    return null;
+  }
+}
+
+/** Whether the process that wrote `owner` still runs. */
+function holderRuns(owner: string): boolean {
+  const pid = Number(owner.split(' ')[0]);
+  if (!Number.isInteger(pid) || pid <= 0) return true;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
+/** Make the lock at `path` as `owner`, whole, or answer false when another holds it. */
+function take(path: string, owner: string): boolean {
+  const staging = `${path}.${randomBytes(8).toString('hex')}`;
+  mkdirSync(staging);
+  writeFileSync(join(staging, OWNER), owner);
+  try {
+    renameSync(staging, path);
+    return true;
+  } catch (error) {
+    rmSync(staging, { recursive: true, force: true });
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOTEMPTY' || code === 'EEXIST') return false;
+    throw error;
+  }
+}
+
+/** Remove the lock at `path` when it still names `judged`, a holder gone; true when removed. */
+function reap(path: string, judged: string): boolean {
+  const reaping = `${path}.reap`;
+  try {
+    mkdirSync(reaping);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') return false;
+    throw error;
+  }
+  try {
+    if (ownerOf(path) !== judged) return false;
+    rmSync(path, { recursive: true, force: true });
+    return true;
+  } finally {
+    rmSync(reaping, { recursive: true, force: true });
+  }
+}
+
 /** Run `body` holding the lock at `path`, waiting while another holder has it. */
 export async function withLock<T>(
   path: string,
@@ -48,18 +111,14 @@ export async function withLock<T>(
   { pollMs = POLL_MS, waitMs = WAIT_MS }: LockTiming = {},
 ): Promise<T> {
   mkdirSync(dirname(path), { recursive: true });
+  const owner = `${process.pid} ${randomBytes(8).toString('hex')}`;
   const deadline = Date.now() + waitMs;
-  for (;;) {
-    try {
-      mkdirSync(path);
-      break;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-    }
+  while (!take(path, owner)) {
+    const held = ownerOf(path);
+    if (held !== null && !holderRuns(held) && reap(path, held)) continue;
     if (Date.now() > deadline) {
       throw new Error(
-        `e2e: waited ${waitMs} ms for the lock ${path}, still held by another worker, or left by ` +
-          'one that was killed (the next run clears it)',
+        `e2e: waited ${waitMs} ms for the lock ${path}, still held by ${held ?? 'another worker'}`,
       );
     }
     await new Promise((resolve) => setTimeout(resolve, pollMs));
@@ -67,7 +126,7 @@ export async function withLock<T>(
   try {
     return await body();
   } finally {
-    rmSync(path, { recursive: true, force: true });
+    if (ownerOf(path) === owner) rmSync(path, { recursive: true, force: true });
   }
 }
 
@@ -86,7 +145,8 @@ export function withStackLock<T>(name: string, body: () => Promise<T>): Promise<
 
 /**
  * Remove every lock of this run's stack, for `global-setup.ts`, which runs before any worker of
- * the run: a lock then standing was left by a worker of an earlier run that was killed holding it.
+ * the run: a lock then standing was left by an earlier run, and so may a takeover's `.reap` lock
+ * be, which a waiter killed in its few file calls would leave.
  */
 export function clearStackLocks(dir: string = tmpdir()): void {
   rmSync(stackLocksDir(stackBackend(), dir), { recursive: true, force: true });
