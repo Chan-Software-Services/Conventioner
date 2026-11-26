@@ -48,8 +48,11 @@ export async function vendorToken(
 }
 
 /**
- * Start the sign-in counters again. A serial run is one caller, and by a spec that signs in the
- * run's earlier pages may have used its allowance up (E2E patterns).
+ * Start the sign-in counters again. Every page of a run reaches the back end as one caller,
+ * whichever worker drives it, so by a spec that signs in, the run's other pages may have used its
+ * allowance up (E2E patterns). It empties every count, those of a test in another worker too, so a
+ * spec that asserts a limit is reached, or needs the counters it cleared, is on the serial list
+ * (`e2e/serialSpecs.ts`).
  */
 export function forgetSignInAttempts(): void {
   mongoEval('db.sign_in_attempts.deleteMany({})');
