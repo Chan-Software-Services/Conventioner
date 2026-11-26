@@ -1035,7 +1035,7 @@ def test_a_check_that_fails_fails_its_step(tmp_path, event):
 
 
 def upload(folder, shard, total, scope, files, hand):
-    """The two files a shard's artifact holds, in `folder`."""
+    """The three files a shard's artifact holds, in `folder`."""
     folder.mkdir(parents=True, exist_ok=True)
     deal = {
         "shard": shard, "total": total, "source": "the test timings", "timings": {},
@@ -1043,6 +1043,8 @@ def upload(folder, shard, total, scope, files, hand):
     }
     (folder / "e2e-deal.json").write_text(json.dumps(deal))
     (folder / "results.json").write_text(json.dumps({"suites": [{"file": file} for file in hand]}))
+    phases = [{"name": "parallel", "files": len(hand), "seconds": 120, "status": 0}]
+    (folder / "e2e-phases.json").write_text(json.dumps(phases))
 
 
 def whole_run_upload(results):
@@ -1096,9 +1098,10 @@ def test_a_one_shard_run_s_lone_artifact_is_checked_as_shard_1_s(tmp_path):
     done = check_the_downloaded_results(tmp_path, tmp_path / "temp", "named", "[1]", '["a.spec.ts","b.spec.ts"]')
 
     assert done.returncode == 0, done.stdout + done.stderr
-    # Where the audit looks for reports.
-    assert (results / "e2e-results-shard-1" / "results.json").exists()
-    assert not (results / "results.json").exists()
+    # Where the audit looks for reports, and the check for each shard's records.
+    for file in ("results.json", "e2e-deal.json", "e2e-phases.json"):
+        assert (results / "e2e-results-shard-1" / file).exists(), file
+        assert not (results / file).exists(), file
 
 
 def test_a_lone_artifact_of_a_run_with_more_shards_still_fails_the_check(tmp_path):
