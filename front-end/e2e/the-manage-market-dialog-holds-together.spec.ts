@@ -4,6 +4,7 @@ import { ManageMarketPage } from './pages/ManageMarketPage';
 import { seedApplicantMarket } from './helpers/seedApplicantMarket';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
 import { grantMarketRole } from './helpers/grantMarketRole';
+import { seedDraftMarket } from './helpers/seedDraftMarket';
 
 /**
  * Manage market holds together (bug 15, and items 14 and 15 of bug 43; E26/F10/S01).
@@ -13,6 +14,9 @@ import { grantMarketRole } from './helpers/grantMarketRole';
  * offered a role select the server refused every use of, and the refusal appeared at the foot of
  * the dialog: it is said under the person's row now, as `changing-a-role-asks-first.spec.ts`
  * proves. Delete asked "Are you sure?" inline, Confirm before Cancel, with focus left on the page.
+ *
+ * The invite row's email field was narrower than its role select at a desk, cutting off a typed
+ * address (T642).
  */
 test.use({ viewport: { width: 1440, height: 900 } });
 
@@ -30,6 +34,25 @@ async function openManage(page: Page, marketName: string): Promise<ManageMarketP
 
 const height = (locator: Locator) =>
   locator.evaluate((el) => Math.round(el.getBoundingClientRect().height));
+
+const box = async (locator: Locator) => {
+  const b = await locator.boundingBox();
+  if (!b) throw new Error('not rendered');
+  return b;
+};
+
+/** How far the widest of `texts` runs past the room a select leaves beside its arrow. */
+const overrun = (select: Locator, texts: 'chosen' | 'every') =>
+  select.evaluate((el, which) => {
+    const field = el as HTMLSelectElement;
+    const style = getComputedStyle(field);
+    const context = document.createElement('canvas').getContext('2d')!;
+    context.font = style.font;
+    const options = which === 'every' ? [...field.options] : [...field.selectedOptions];
+    const widest = Math.max(...options.map((option) => context.measureText(option.text).width));
+    const room = field.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    return widest - room;
+  }, texts);
 
 test('its controls are the product size, and inviting someone is one row with its own Cancel', async ({
   authenticatedPage: page,
@@ -84,11 +107,6 @@ test('on a phone, the email field and the role each take the invite row, with it
   const manage = await openManage(page, marketName);
   await manage.clickAddUser();
 
-  const box = async (locator: Locator) => {
-    const b = await locator.boundingBox();
-    if (!b) throw new Error('not rendered');
-    return b;
-  };
   const form = await box(page.locator('form').filter({ has: manage.addUserInput }));
   const field = await box(manage.addUserInput);
   expect(field.width, 'the field takes the row').toBeGreaterThanOrEqual(form.width - 1);
@@ -113,18 +131,60 @@ test('on a phone, the email field and the role each take the invite row, with it
   ).toBeLessThan(1);
 
   // The role reads whole: its name fits inside the select, beside its arrow.
-  const fits = await role.evaluate((el) => {
-    const select = el as HTMLSelectElement;
-    const style = getComputedStyle(select);
-    const context = document.createElement('canvas').getContext('2d')!;
-    context.font = style.font;
-    const text = context.measureText(select.selectedOptions[0]?.text ?? '').width;
-    const room =
-      select.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
-    return { text, room };
-  });
-  expect(fits.text, 'the role is not cut').toBeLessThanOrEqual(fits.room);
+  expect(await overrun(role, 'chosen'), 'the role is not cut').toBeLessThanOrEqual(0);
 });
+
+/** An address of an ordinary length, a fixture's. */
+const TYPED = 'someone.new@example.com';
+
+for (const window of [
+  { width: 1440, height: 900, phone: false },
+  // The narrowest window that keeps the row on one line.
+  { width: 641, height: 900, phone: false },
+  { width: 390, height: 844, phone: true },
+  { width: 320, height: 568, phone: true },
+]) {
+  test(`a typed address shows in full in the invite row at ${window.width}`, async ({
+    authenticatedPage: page,
+    request,
+  }) => {
+    await page.setViewportSize({ width: window.width, height: window.height });
+    const { marketName } = await seedDraftMarket(
+      request,
+      BACKEND_URL,
+      TEST_USER.email,
+      TEST_USER.password,
+    );
+    const manage = await openManage(page, marketName);
+    await manage.clickAddUser();
+    await manage.fillAddUserEmail(TYPED);
+
+    const hidden = await manage.addUserInput.evaluate((el) => el.scrollWidth - el.clientWidth);
+    expect(hidden, 'none of the address is scrolled out of the field').toBeLessThanOrEqual(0);
+    expect(
+      await overrun(manage.addUserSelect, 'every'),
+      'every role reads whole',
+    ).toBeLessThanOrEqual(0);
+
+    if (window.phone) return;
+    // One line: the field takes what the role and the buttons leave, and the role only its own.
+    const [form, field, role, send, cancel] = await Promise.all(
+      [
+        page.locator('form').filter({ has: manage.addUserInput }),
+        manage.addUserInput,
+        manage.addUserSelect,
+        manage.addUserSubmit,
+        manage.addUserCancel,
+      ].map(box),
+    );
+    for (const control of [role, send, cancel]) {
+      expect(control.y, 'on the field\u2019s line').toBeCloseTo(field.y, 0);
+    }
+    expect(field.width, 'the field is wider than the role').toBeGreaterThan(role.width);
+    expect(field.x, 'from the row\u2019s start').toBeCloseTo(form.x, 0);
+    expect(cancel.x + cancel.width, 'to the row\u2019s end').toBeCloseTo(form.x + form.width, 0);
+  });
+}
 
 test('deleting is a destructive dialog that opens on Cancel and says what goes', async ({
   authenticatedPage: page,

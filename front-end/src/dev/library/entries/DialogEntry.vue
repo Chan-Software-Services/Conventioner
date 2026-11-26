@@ -794,6 +794,17 @@ function sendInvitation() {
   gap: var(--space-2);
 }
 
+/* As Manage market's row: the role as wide as its longest name, the field taking the rest. */
+.library-invite__row input.field {
+  flex: 1;
+  min-width: 0;
+}
+
+.library-invite__row .field--select {
+  width: auto;
+  flex: none;
+}
+
 /* On a phone, as Manage market's row: the field and the role each take a line, the buttons beneath
    them at the line's end. */
 @media (width <= 640px) {
@@ -801,7 +812,8 @@ function sendInvitation() {
     flex-wrap: wrap;
   }
 
-  .library-invite__row .field {
+  .library-invite__row input.field,
+  .library-invite__row .field--select {
     flex-basis: 100%;
   }
 

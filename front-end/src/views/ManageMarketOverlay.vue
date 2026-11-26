@@ -1214,6 +1214,18 @@ async function closeAddUser() {
   gap: var(--space-2);
 }
 
+/* The role is as wide as its longest name, and the address's field takes what the row has left:
+   both at `.field`'s full width, the field came out the narrower and cut off a typed address. */
+.add-user-form input.field {
+  flex: 1;
+  min-width: 0;
+}
+
+.add-user-form .field--select {
+  width: auto;
+  flex: none;
+}
+
 /* On a phone the email field and the role each take a line of the invite row, with Send invitation
    and Cancel at the end of a line beneath them: beside them at 390 the field and the role were
    squeezed to 66px each, reading "User e" and "Edi" (T142), and beside the role alone the two
