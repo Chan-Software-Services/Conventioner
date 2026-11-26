@@ -77,8 +77,7 @@
 
 /*
  * Destructive is not a peer of an additive action. `Delete market` used to be the exact visual
- * weight of the button that adds a person, today's `Send invitation`, on a dialog where one is
- * irreversible.
+ * weight of the button now reading `Invite someone`, on a dialog where one is irreversible.
  */
 .btn--destructive {
   --focus-border: var(--focus-border-on-fill);
