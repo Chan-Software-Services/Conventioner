@@ -25,6 +25,7 @@ describes:
   - front-end/e2e/helpers/humanCheck.ts
   - front-end/e2e/helpers/signInLimits.ts
   - front-end/e2e/serialSpecs.ts
+  - front-end/e2e/helpers/stackLock.ts
 verified: 2026-11-26
 sources:
   - E21/F02/S02
@@ -65,6 +66,7 @@ sources:
   - T539
   - T510
   - T618
+  - T568
 ---
 
 # E2E patterns
@@ -176,6 +178,7 @@ CI's shards run their hand in two passes ([CI and the gate](ci-and-the-gate.md#c
 A spec file joins the list when one of its tests needs state that every test shares to stay as it left it between two of its steps.
 That is when it counts the database's reads across collections (the profiler), asserts that a shared counter reaches its limit or needs the counters it cleared, ends or counts `TEST_USER`'s or `NO_ORG_USER`'s sessions, reads `TEST_USER`'s whole market or organization list, or empties or drops a collection other specs write.
 A spec that only writes documents of its own (its own market, account, address or fake Discord server), or only clears a counter to make room, stays parallel.
+A seed step that reads state every spec file shares and then writes what it found missing (a fixed account, the screens' organization, a place in it, an invitation sent only when none waits) runs under the stack's lock, `withStackLock` ([`helpers/stackLock.ts`](../../../front-end/e2e/helpers/stackLock.ts)), and reads again inside it, so a second worker that reaches it at once waits, then finds the state made and writes nothing, and its spec stays parallel; `seedTheScreens()` and `ensureTestOrgAuthenticated()` take it, and a seed of a spec's own documents needs none.
 Each entry's comment names the kind of shared state that puts it there; today's are four: the profiler's database-wide read counts, the sign-in counters, the fixture organizer's sessions, and the fixture organizer's whole market list.
 The sign-in counters' limits are of two kinds, an address's and a caller's ([sharp edges](#sharp-edges)): every test of a pass reaches the stack as the same callers and shares their counts, in both passes, and a spec that clears the counters to make room empties them for every address, so a spec that asserts a limit is reached, or needs the counters it cleared, is serial.
 A spec that fails only beside another, as `people-at-scale-organization.spec.ts` did in `T509`, joins the list rather than gains a wait.

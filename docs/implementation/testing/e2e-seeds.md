@@ -34,7 +34,7 @@ describes:
   - front-end/e2e/helpers/seedMarketDayMap.ts
   - front-end/e2e/helpers/seedAPricedVendor.ts
   - front-end/e2e/helpers/grantMarketRole.ts
-verified: 2026-11-25
+verified: 2026-11-26
 sources:
   - E02
   - E11/F01/S01
@@ -66,6 +66,7 @@ sources:
   - T422
   - T411
   - T496
+  - T568
 ---
 
 # E2E seeds
@@ -90,7 +91,7 @@ A spec that needs an account not yet verified signs up through the real route, `
 ## Markets require an organization
 
 `POST /markets` answers 400 to a payload with no `organizationId`, an unknown organization, or one the caller is not a member of ([the organization document](../data/organization-document.md)).
-So anything that creates a market attaches one: [`helpers/seeds.ts`](../../../front-end/e2e/helpers/seeds.ts) exports `ensureTestOrgAuthenticated()` (for a request context already signed in, by `loginViaApi()` or, on `page.request`, by the page's own sign-in) and `ensureTestOrg()` (which logs in first), both reusing the user's first organization or creating `E2E Test Org`; the seed helpers return it as `orgId`.
+So anything that creates a market attaches one: [`helpers/seeds.ts`](../../../front-end/e2e/helpers/seeds.ts) exports `ensureTestOrgAuthenticated()` (for a request context already signed in, by `loginViaApi()` or, on `page.request`, by the page's own sign-in) and `ensureTestOrg()` (which logs in first), both reusing the user's first organization or creating `E2E Test Org`, under the stack's lock after reading again, so two workers that both find none make one ([E2E patterns](e2e-patterns.md#specs-that-need-the-stack-to-themselves)); the seed helpers return it as `orgId`.
 A spec that creates a market through the UI calls `ensureTestOrg()` in `beforeAll`, or the create dialog's organization list is empty and its submit stays disabled.
 `ensureTestOrgs(count)` is for a spec whose subject is a choice of organization, which a split run (CI shards) no longer guaranteed by accident.
 `ensureOrganizationAdmin(orgId, person)` ([`helpers/grantMarketRole.ts`](../../../front-end/e2e/helpers/grantMarketRole.ts)) makes a verified user an admin of that organization, through the owner's session the request carries, and so Admin on every market it holds.
@@ -259,6 +260,7 @@ Each helper is one block, what it leaves and its notes, one note a line; a new h
     - its name 72 characters and its admin's and member's addresses 32 and 43, found by name on a later run, so Manage organization draws its people
     - holding a draft of its own, made anew on each run and dated after every other seeded market, its admin also Editor on it, so Manage market draws an organization's people and a market role that adds nothing (E38/F12/S01)
     - the organizer always has a second organization, and "the new-market dialog" always draws the organization select rather than naming one (T148)
+    - it, its admin's and member's places, and the two invitations sent only when none waits are made under the stack's lock, as are the accounts every seed shares, so two workers seeding at once make them once ([E2E patterns](e2e-patterns.md#specs-that-need-the-stack-to-themselves))
     - an admin's invitation to a long address waiting on it, beside `SCREENS_INVITEE`'s member one, so Manage organization draws "Invited" with a row of each place (T538); sent only when no admin's invitation waits, since the organization is the same on every seed of a stack and an invitation waits 14 days
   - the review market's cards lead with two answers and fold the rest behind "N more answers"
   - a `seedLayout()` draft whose Upper Hall layout has its floorplan and no scale, which the sweeps walk calibrating (T257)
