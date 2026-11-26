@@ -145,12 +145,18 @@ export class VendorPage {
     return this.page.getByTestId('vendor-page-signed-in-as');
   }
 
-  /** "Submitted", or the outcome once results are published, with the date applied. */
+  /**
+   * "Submitted", or the outcome once the results are out, with the date applied on a market whose
+   * vendors apply on its page.
+   */
   get status(): Locator {
     return this.page.getByTestId('vendor-page-status');
   }
 
-  /** Each day's table, once results are published. */
+  /**
+   * Each day's table, once the results are out, save in the market's days and once it has ended
+   * after running, when the check-in section lists them.
+   */
   get seats(): Locator {
     return this.page.getByTestId('vendor-page-seats');
   }

@@ -9,7 +9,7 @@ describes:
   - front-end/src/components/application/FollowUpDialog.vue
   - back-end/application_status.py#hand_on_follow_up
   - back-end/application_status.py#deal_follow_up
-verified: 2026-11-25
+verified: 2026-11-26
 sources:
   - brain-dump/2026-10-19#9
   - brain-dump/2026-10-19#21
@@ -52,7 +52,7 @@ A follow-up waiting for the deal, handed on or marked as its application arrived
 
 **It is not undecided to the automatic rejections**: a rule never judges a follow-up, since a person has looked at it and decided it needs more.
 
-**The applicant reads "Submitted"**, as for every other status, until results are published ([an applicant never reads a verdict early](an-applicant-never-reads-a-verdict-early.md)); entering `assignment` needs every follow-up resolved, so none is left when they are.
+**The applicant reads "Submitted"**, as for every other status, until the results are out ([an applicant never reads a verdict early](an-applicant-never-reads-a-verdict-early.md)); entering `assignment` needs every follow-up resolved, so none is left when they are.
 
 ## Who may
 
@@ -77,4 +77,4 @@ They name as its owner one of the people they are offered: everyone with a role 
 ## Superseded
 
 - The review's third verdict was Skip (wayfinding/real-market-readiness/04); it became this status, beside "Next" (brain-dump/2026-10-19#9, E34/F02/S01).
-- The applicant was to read "under review" while a follow-up was open (brain-dump/2026-10-19#9); every applicant reads "Submitted" until results are published, so nothing a reviewer or a rule does shows early (E36/F05/S01).
+- The applicant was to read "under review" while a follow-up was open (brain-dump/2026-10-19#9); every applicant reads "Submitted" until the results are out, so nothing a reviewer or a rule does shows early (E36/F05/S01).

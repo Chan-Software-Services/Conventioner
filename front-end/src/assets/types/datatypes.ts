@@ -755,7 +755,7 @@ export interface Application {
   /** Organizer's only: the reviewer looking at it, while their claim stands (E34/F03/S02). */
   heldBy?: { userId?: string | null; email: string } | null;
   /**
-   * Applicant's only, once results are published (E36/F05/S02): whether they have a table, and
+   * Applicant's only, once the results are out (E36/F05/S02): whether they have a table, and
    * where. Null and empty before; a verdict is never served to them.
    */
   outcome?: 'has_a_table' | 'not_assigned' | null;
@@ -779,7 +779,7 @@ export interface Application {
 /** An application as its applicant reads it: never where the review stands (no early verdict). */
 export type ApplicantApplication = Omit<Application, 'origin' | 'review'>;
 
-/** One seat an applicant holds, as their page lists it once results are published (E36/F05/S02). */
+/** One seat an applicant holds, as their page lists it once the results are out (E36/F05/S02). */
 export interface ApplicantSeat {
   date: string;
   tableCode: string;

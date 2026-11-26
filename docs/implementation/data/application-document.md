@@ -122,7 +122,7 @@ A re-import still compares the file with `form_data` (`csv_import._unchanged`): 
 
 ## The review state
 
-The applicant never reads a status: their page reads "Submitted" until results are published, then an outcome read off the stored seats ([an applicant never reads a verdict early](../../business/rules/an-applicant-never-reads-a-verdict-early.md)).
+The applicant never reads a status: their page reads "Submitted" until the results are out, then an outcome read off the stored seats ([an applicant never reads a verdict early](../../business/rules/an-applicant-never-reads-a-verdict-early.md)).
 
 Every function this section names is in `application_status.py`, the review state's owner ([ADR 0037](../../adr/0037-an-applications-review-state-has-one-owner.md)).
 This section states the transition table once; every other node points here rather than restate a transition.
