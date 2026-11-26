@@ -177,6 +177,7 @@ So a read that fetches too little, or a write the server would apply otherwise, 
 Shared module stubs live in `back-end/tests/conftest.py`, which also points the `.env` loader at a path that does not exist.
 The suite reads no `.env`, so a stale one on your machine cannot change its result.
 It turns `ALLOW_INSECURE_LOCAL_DEV` on unless the shell set it, and clears `DISABLE_CAPTCHA`, `DISABLE_EMAIL` and `DISCORD_FAKE` before any test runs, so a shell that exported a stack's switches cannot change its result either; a test that needs a switch sets it itself, and `test_the_suite_reads_no_switch_from_its_shell.py` keeps that true.
+It also clears `SENTRY_DSN` at import, so a shell's DSN can never send a test's error to Sentry ([error tracking](implementation/modules/error-tracking.md)).
 It clears `MONGODB_URI`, `MONGODB_HOST` and the other `MONGODB_*` variables the back end connects by, and names a port nothing listens on in their place, so a test that reaches a collection no fake stands in for fails at server selection instead of reaching the database a shell exported; a test that needs one sets it itself, and `test_the_suite_reads_no_database_from_its_shell.py` keeps that true.
 The real-MongoDB suite below reads `REAL_MONGODB_URI` instead, which this leaves alone.
 It hashes every password at bcrypt's lowest cost, 4, where the app hashes at flask-bcrypt's default of 12, since a hash at 12 takes about 0.16 s and the tests that sign in make many: `back-end/tests/conftest.py` lowers it on flask-bcrypt's `Bcrypt` class before any module makes its own, so it holds for the app's and `create_account.py`'s, and for the stand-in hash an address with no account is checked against; `create_test_user.py` hashes its fixture accounts at 4 itself.
@@ -251,6 +252,8 @@ happy-dom would send an unstubbed request for real, to its page's address, `http
 Instead the setup ([`noNetwork.ts`](../front-end/src/__tests__/support/noNetwork.ts)) refuses every request sent through XHR, which the app's axios uses, or `fetch`, and fails the test that sent it, naming the request, or the file, for a request sent after its last test.
 Stub the module that sends it (`vi.mock('@/utils/api', ...)`), or `fetch` with `vi.stubGlobal` or `vi.spyOn`, over the refusal.
 A navigation (`location.assign`, a link followed, a form submitted) is not refused, since happy-dom sends it through its own fetch: a test that navigates stubs it, as `aPageThatCouldNotOpen.test.ts` passes a stub `location`.
+
+The same setup ([`setup.ts`](../front-end/src/__tests__/support/setup.ts)) blanks `VITE_SENTRY_DSN` before any test runs, as the back end's conftest clears `SENTRY_DSN`, so a DSN exported in the shell or set in a `.env` changes no result: a test that needs one stubs it (`vi.stubEnv`), and a build test that loads `vite.config.ts` builds with none.
 A test that runs in Node (`@vitest-environment node`) has no window, and nothing refuses its `fetch`.
 
 Configuration: `front-end/vitest.config.ts` with `happy-dom` environment.

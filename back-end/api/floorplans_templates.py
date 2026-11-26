@@ -221,7 +221,7 @@ def create_template():
         }), 201
 
     except Exception as exc:
-        logger.error(f"Error creating template: {exc}")
+        logger.error("Error creating template: %s", type(exc).__name__)
         return jsonify({"error": "Internal server error"}), 500
 
 
@@ -255,7 +255,7 @@ def list_templates():
         return jsonify({"templates": templates}), 200
 
     except Exception as exc:
-        logger.error(f"Error listing templates: {exc}")
+        logger.error("Error listing templates: %s", type(exc).__name__)
         return jsonify({"error": "Internal server error"}), 500
 
 
@@ -277,7 +277,7 @@ def get_template(template_id: str):
         return jsonify({"template": _doc_to_response(doc)}), 200
 
     except Exception as exc:
-        logger.error(f"Error getting template {template_id}: {exc}")
+        logger.error("Error getting template %s: %s", template_id, type(exc).__name__)
         return jsonify({"error": "Internal server error"}), 500
 
 
@@ -324,7 +324,7 @@ def update_template(template_id: str):
         }), 200
 
     except Exception as exc:
-        logger.error(f"Error updating template {template_id}: {exc}")
+        logger.error("Error updating template %s: %s", template_id, type(exc).__name__)
         return jsonify({"error": "Internal server error"}), 500
 
 
@@ -354,5 +354,5 @@ def delete_template(template_id: str):
         }), 200
 
     except Exception as exc:
-        logger.error(f"Error deleting template {template_id}: {exc}")
+        logger.error("Error deleting template %s: %s", template_id, type(exc).__name__)
         return jsonify({"error": "Internal server error"}), 500

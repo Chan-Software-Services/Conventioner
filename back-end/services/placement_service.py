@@ -205,7 +205,7 @@ def _compute_placement_zone(
             if not obs_poly.is_empty and obs_poly.is_valid:
                 zone = zone.difference(obs_poly)
         except Exception as exc:
-            logger.warning("Skipping invalid obstacle %s: %s", obs.id, exc)
+            logger.warning("Skipping invalid obstacle %s: %s", obs.id, type(exc).__name__)
 
     if zone.is_empty:
         return Polygon()
@@ -682,7 +682,7 @@ def auto_place_tables(
             timed_out=False,
         )
     except Exception as exc:
-        logger.warning("pyckingsolver failed (%s), falling back to grid placement", exc)
+        logger.warning("pyckingsolver failed (%s), falling back to grid placement", type(exc).__name__)
 
     # ── fallback: grid-based greedy ───────────────────────────────────────
     try:
@@ -690,6 +690,6 @@ def auto_place_tables(
             zone, table_objects, counts, table_spacing, time_limit_s=GRID_TIME_LIMIT_S,
         )
     except Exception as exc:
-        logger.error("Grid fallback also failed: %s", exc)
+        logger.error("Grid fallback also failed: %s", type(exc).__name__)
         return PlacementResult(placed=[], timed_out=False)
     return PlacementResult(placed=placed, timed_out=timed_out)

@@ -33,7 +33,7 @@ describes:
   - back-end/datatypes.py#TableTypeObject
   - back-end/datatypes.py#FloorplanZone
   - back-end/datatypes.py#PublicMapSettings
-verified: 2026-11-18
+verified: 2026-11-25
 sources:
   - E02
   - E03/F03

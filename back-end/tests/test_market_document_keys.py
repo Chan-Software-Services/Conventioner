@@ -311,6 +311,10 @@ class TestStartupCheck:
 
         assert "migrations/migrate_market_keys.py" in str(excinfo.value)
         assert isinstance(excinfo.value.cause, ConnectionError)
+        # By its type: a library's message may quote what it was given, and the refusal is logged,
+        # and sent to the error tracker, whole.
+        assert "(ConnectionError, code None)" in str(excinfo.value)
+        assert "no reachable servers" not in str(excinfo.value)
 
     def test_a_query_failure_is_not_reported_as_unreachable_and_ignored(self):
         """Any failure to read the marker is fatal, not just a connection failure."""

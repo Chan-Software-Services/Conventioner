@@ -19,6 +19,7 @@ sources:
   - T317
   - T345
   - T588
+  - T584
   - T582
 ---
 
@@ -91,6 +92,11 @@ How each part of the code works is in the implementation layer of the [knowledge
   - The contract (which routes ask it, what a failed check answers, what an outage lets through) is in [security invariants](implementation/conventions/security-invariants.md)
   - Secret key configured via `TURNSTILE_SECRET_KEY` environment variable, which the app refuses to boot without; Cloudflare's published test secrets are refused
   - Test-only bypass via `DISABLE_CAPTCHA`, honored only under `ALLOW_INSECURE_LOCAL_DEV` (see Environment Variables)
+
+### Error Tracking
+
+- **sentry-sdk 3.0** - Sends the back end's errors to Sentry, only when `SENTRY_DSN` is set; unset, it is never imported ([error tracking](implementation/modules/error-tracking.md))
+  - Every event is built from [ADR 0049](adr/0049-what-may-be-sent-to-the-error-tracker.md)'s allowlist, with the Flask integration and the logging integration's breadcrumbs, and no integration that switches itself on
 
 ### Utilities
 
@@ -202,6 +208,10 @@ How each part of the code works is in the implementation layer of the [knowledge
 - **VueDraggable 4.1.0** - Drag and drop component, resolved to the ES source it publishes (`vite.config.ts`), since its UMD builds evaluate a string and carry a second Vue
   - Drag-and-drop functionality for UI elements
 - **A layout is drawn in SVG by the app's own component** ([`LayoutMap.vue`](../front-end/src/components/layout/LayoutMap.vue)), with no canvas library: Konva and vue-konva went with the floorplan beta (T257)
+
+### Error Tracking
+
+- **@sentry/browser 11.17** - Sends the front end's errors to Sentry, only when the build sets `VITE_SENTRY_DSN`, from a chunk of its own loaded after the first paint; unset, the build has no Sentry chunk ([error tracking](implementation/modules/error-tracking.md#the-front-end))
 
 ### Development Tools
 

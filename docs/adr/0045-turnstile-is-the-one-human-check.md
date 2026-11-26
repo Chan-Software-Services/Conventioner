@@ -6,7 +6,7 @@ describes:
   - front-end/src/utils/captcha.ts
   - front-end/src/components/HumanCheck.vue
   - front-end/vercel.json
-verified: 2026-11-24
+verified: 2026-11-25
 sources:
   - T539
 status: accepted

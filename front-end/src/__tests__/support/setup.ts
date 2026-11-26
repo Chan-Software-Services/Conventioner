@@ -27,3 +27,9 @@ if (typeof window !== 'undefined') {
 
 // A test that stubs `fetch` (`vi.stubGlobal`, `vi.spyOn`) stubs it over the refusal.
 refuseRequests();
+
+// No test reads the error tracker's DSN from the shell or a `.env` (T584), as the back end's
+// conftest clears `SENTRY_DSN`: a test that needs one stubs it (`vi.stubEnv`), and a build test
+// loading `vite.config.ts` then builds with none, so a DSN a developer exported cannot change a
+// result. Blank rather than deleted, since a `.env` file's value fills in a name the shell lacks.
+process.env.VITE_SENTRY_DSN = '';
