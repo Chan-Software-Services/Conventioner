@@ -47,9 +47,12 @@ while True:
   fi
 }
 
-# "45 minutes" for 2700, "20 seconds" for 20.
+# "45 minutes" for 2700, "20 seconds" for 20, "1 minute" for 60, "1 second" for 1.
 e2e_lock_span() {
-  if (( $1 % 60 )); then echo "$1 seconds"; else echo "$(( $1 / 60 )) minutes"; fi
+  local count=$1 unit=second
+  if (( $1 % 60 == 0 )); then count=$(( $1 / 60 )) unit=minute; fi
+  if (( count != 1 )); then unit+=s; fi
+  echo "$count $unit"
 }
 
 take_e2e_lock() {
