@@ -18,7 +18,7 @@ import subprocess
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from itertools import product
+from itertools import pairwise, product
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
@@ -1597,12 +1597,19 @@ def test_a_missing_selection_script_runs_the_whole_suite(tmp_path):
 # The two actions' conditions are evaluated, as the runner would, so a test says what a step does,
 # not how its condition is written.
 
-TOKEN = re.compile(r"\s*('[^']*'|==|!=|&&|\|\||[()]|[\w.-]+)")
+TOKEN = re.compile(r"\s*('[^']*'|==|!=|&&|\|\||[!()]|[\w.-]+)")
+# A reference or a function's name starts with a letter or `_`, so no number is read as one.
+NAME = re.compile(r"[A-Za-z_][\w.-]*")
+LITERALS = {"true", "false", "null"}
+STATUS_FUNCTIONS = {"success", "failure", "cancelled", "always"}
 
 
-def result_of(expression, context):
-    """The result of an expression of the forms these steps use: references, 'literals', ==, !=, &&,
-    which binds before ||, and brackets. A reference the context lacks, or any other form, raises."""
+def truthy(result):
+    """GitHub's truthiness, which is not Python's: an empty array is truthy."""
+    return result not in (None, False, 0, "")
+
+
+def tokens_of(expression):
     tokens = []
     rest = expression.strip()
     if rest.startswith("${{") and rest.endswith("}}"):
@@ -1612,6 +1619,14 @@ def result_of(expression, context):
         assert found, f"cannot read {rest!r}"
         tokens.append(found.group(1))
         rest = rest[found.end():]
+    return tokens
+
+
+def result_of(expression, context):
+    """The result of an expression of references, 'string literals', brackets, calls of fromJSON and
+    the status functions, and the operators !, == and !=, && and ||, each binding before the next. A
+    reference or status function the context lacks, or any other form, raises."""
+    tokens = tokens_of(expression)
 
     def taken(token):
         if tokens[:1] != [token]:
@@ -1619,39 +1634,72 @@ def result_of(expression, context):
         del tokens[0]
         return True
 
-    # && and || result in one of their operands, as Python's `and` and `or` do.
+    # && and || result in one of their operands.
     def either():
         result = both()
         while taken("||"):
             right = both()
-            result = result or right
+            result = result if truthy(result) else right
         return result
 
     def both():
         result = comparison()
         while taken("&&"):
             right = comparison()
-            result = result and right
+            result = right if truthy(result) else result
         return result
 
     def comparison():
-        left = operand()
+        left = negation()
         for op in ("==", "!="):
             if taken(op):
-                return (folded(left) == folded(operand())) == (op == "==")
+                return equal(left, negation()) == (op == "==")
         return left
 
-    # The runner ignores case when it compares strings.
-    def folded(compared):
-        return compared.casefold() if isinstance(compared, str) else compared
+    def negation():
+        if taken("!"):
+            return not truthy(negation())
+        return operand()
+
+    # The runner ignores case when it compares strings. It coerces two values of different types to
+    # numbers, which is not read here.
+    def equal(left, right):
+        assert type(left) is type(right), f"cannot compare {left!r} with {right!r} in {expression!r}"
+        return left.casefold() == right.casefold() if isinstance(left, str) else left == right
 
     def operand():
-        token = tokens.pop(0)
+        token = tokens.pop(0) if tokens else ""
         if token == "(":
             inner = either()
             assert taken(")"), f"unclosed bracket in {expression!r}"
             return inner
-        return token[1:-1] if token.startswith("'") else context[token]
+        if token.startswith("'"):
+            return token[1:-1]
+        assert NAME.fullmatch(token) and token.casefold() not in LITERALS, (
+            f"cannot read {token!r} as an operand in {expression!r}"
+        )
+        return call(token) if taken("(") else context[token]
+
+    # A function's name is read without case; a reference only as it is written.
+    def call(name):
+        arguments = []
+        if not taken(")"):
+            arguments.append(either())
+            assert taken(")"), f"unclosed call of {name} in {expression!r}"
+        function = name.casefold()
+        if function == "fromjson" and len(arguments) == 1:
+            return from_json(arguments[0])
+        assert function in STATUS_FUNCTIONS and not arguments, (
+            f"cannot read {name} with {len(arguments)} arguments in {expression!r}"
+        )
+        return True if function == "always" else context[f"{function}()"]
+
+    def from_json(text):
+        assert isinstance(text, str), f"fromJSON cannot read {text!r} in {expression!r}"
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError as error:
+            raise AssertionError(f"fromJSON cannot read {text!r} in {expression!r}") from error
 
     result = either()
     assert not tokens, f"cannot read {tokens} in {expression!r}"
@@ -1659,12 +1707,18 @@ def result_of(expression, context):
 
 
 def evaluate(expression, context):
-    """Whether an `if:` with this expression runs its step."""
-    return bool(result_of(expression, context))
+    """Whether an `if:` with this expression runs: GitHub puts `success() &&` in front of one that
+    calls no status function."""
+    holds = truthy(result_of(expression, context))
+    calls = {name.casefold() for name, after in pairwise(tokens_of(expression)) if after == "("}
+    if calls & STATUS_FUNCTIONS:
+        return holds
+    return truthy(context["success()"]) and holds
 
 
 def value(written, context):
-    """What a `with:` value passes: an expression's result as a string, else the literal."""
+    """What a `with:`, `env:` or `matrix` value passes: an expression's result, a boolean as a
+    string, else the literal."""
     if written.startswith("${{"):
         result = result_of(written, context)
         return str(result).lower() if isinstance(result, bool) else result
@@ -1677,28 +1731,98 @@ def cache_hit(hit):
     return "true" if hit else ""
 
 
+RULES = {"a": "x", "b": "z", "e": "", "success()": True, "cancelled()": False}
+
+
+# Each result is the runner's, by GitHub's documented rules; the docs leave unsaid that && binds
+# before ||, and that each results in an operand.
 @pytest.mark.parametrize(
-    ("written", "passed_on"),
+    ("expression", "passed_on"),
     [
-        ("${{ a == 'x' || a == 'y' && b == 'y' }}", "true"),
-        ("${{ (a == 'x' || a == 'y') && b == 'y' }}", "false"),
-        ("${{ b != 'y' && (a == 'y' || (a == 'x')) }}", "true"),
-        ("${{ a == 'x' && 'false' || 'true' }}", "false"),
-        ("${{ (a) == 'x' }}", "true"),
-        ("${{ a == 'X' }}", "true"),
-        ("${{ a != 'X' }}", "false"),
+        pytest.param("a == 'x' || a == 'y' && b == 'y'", "true", id="and-before-or"),
+        pytest.param("(a == 'x' || a == 'y') && b == 'y'", "false", id="brackets-first"),
+        pytest.param("b != 'y' && (a == 'y' || (a == 'x'))", "true", id="nested-brackets"),
+        pytest.param("a == 'x' && 'false' || 'true'", "false", id="an-operand-as-the-result"),
+        pytest.param("(a) == 'x'", "true", id="a-bracketed-reference"),
+        pytest.param("a == 'X'", "true", id="equal-in-another-case"),
+        pytest.param("a != 'X'", "false", id="not-unequal-in-another-case"),
+        pytest.param("!(a == 'x')", "false", id="not"),
+        pytest.param("!e", "true", id="not-an-empty-string"),
+        pytest.param("!'false'", "false", id="not-a-string-false"),
+        pytest.param("!!a", "true", id="not-twice"),
+        pytest.param("!cancelled() && a == 'x'", "true", id="not-before-and"),
+        pytest.param("e == ''", "true", id="an-empty-output-is-empty"),
+        pytest.param("e || 'y'", "y", id="or-falls-back-on-empty"),
+        pytest.param("fromJSON('[1, 2]')", [1, 2], id="from-json"),
+        pytest.param("fromJSON(e || '[3]')", [3], id="from-json-fallback"),
+        pytest.param("fromJSON('[]') && 'y'", "y", id="an-empty-array-is-truthy"),
+        pytest.param("fromJson('[1]')", [1], id="from-json-in-any-case"),
+        pytest.param(
+            "fromJSON('0') || fromJSON('-0') || fromJSON('null') || fromJSON('false') || 'y'", "y",
+            id="zero-null-and-false-are-falsy",
+        ),
     ],
-    ids=["and-before-or", "brackets-first", "nested-brackets", "an-operand-as-the-result", "a-bracketed-reference",
-         "equal-in-another-case", "not-unequal-in-another-case"],
 )
-def test_an_expression_results_as_the_runner_would_read_it(written, passed_on):
-    assert value(written, {"a": "x", "b": "z"}) == passed_on
+def test_an_expression_results_as_the_runner_would_read_it(expression, passed_on):
+    assert value("${{ " + expression + " }}", RULES) == passed_on
 
 
-@pytest.mark.parametrize("expression", ["(a == 'x'", "a == 'x')", "a == 'x' b", "!(a == 'x')", "c == 'x'"])
-def test_an_expression_the_evaluator_cannot_read_raises(expression):
-    with pytest.raises((AssertionError, KeyError)):
-        evaluate(expression, {"a": "x", "b": "z"})
+@pytest.mark.parametrize(
+    ("expression", "status", "runs"),
+    [
+        pytest.param("always()", {"cancelled()": True, "success()": False}, True, id="always"),
+        pytest.param("a == 'x'", {"success()": False}, False, id="implicit-success"),
+        pytest.param(
+            "!cancelled() && a == 'x'", {"success()": False}, True,
+            id="a-status-function-drops-the-implicit-success",
+        ),
+        pytest.param("Always()", {"success()": False}, True, id="a-status-function-in-any-case"),
+        pytest.param("cancelled()", {"cancelled()": True}, True, id="cancelled"),
+        pytest.param("failure()", {"failure()": True, "success()": False}, True, id="failure"),
+        pytest.param("success() || a == 'x'", {"success()": False}, True, id="success"),
+        pytest.param("fromJSON('[]')", {}, True, id="an-if-of-an-empty-array"),
+    ],
+)
+def test_an_if_runs_as_the_runner_would_decide_it(expression, status, runs):
+    assert evaluate(expression, {**RULES, **status}) is runs
+
+
+# An AssertionError is a form the evaluator does not read; a KeyError, a name its context lacks.
+@pytest.mark.parametrize(
+    ("expression", "raised"),
+    [
+        ("(a == 'x'", AssertionError),
+        ("a == 'x')", AssertionError),
+        ("a == 'x' b", AssertionError),
+        ("a ==", AssertionError),
+        ("== 'x'", AssertionError),
+        ("c == 'x'", KeyError),
+        ("A == 'x'", KeyError),
+        ("failure()", KeyError),
+        ("a < 'x'", AssertionError),
+        ("a[0] == 'x'", AssertionError),
+        ("a == 1", AssertionError),
+        ("a == true", AssertionError),
+        ("e == null", AssertionError),
+        ("!a == 'x'", AssertionError),
+        ("format('{0}', a)", AssertionError),
+        ("contains(a, 'x')", AssertionError),
+        ("toJSON(a)", AssertionError),
+        ("success(a)", AssertionError),
+        ("fromJSON()", AssertionError),
+        ("fromJSON('[1')", AssertionError),
+        ("fromJSON(a)", AssertionError),
+        ("fromJSON(a == 'x')", AssertionError),
+    ],
+)
+def test_an_expression_the_evaluator_cannot_read_raises(expression, raised):
+    with pytest.raises(raised):
+        evaluate(expression, RULES)
+
+
+def test_an_if_over_a_context_with_no_status_raises():
+    with pytest.raises(KeyError):
+        evaluate("a == 'x'", {"a": "x"})
 
 
 # The e2e-stack action's `start`: by default every step runs as before.
@@ -1748,7 +1872,8 @@ def e2e_stack(case):
         "Install Chromium's system packages": ("cacheable", text("cacheable")),
         "Restore the images": ("cache-hit", cache_hit(case["images_hit"])),
     }
-    context = {"inputs.start": text("start"), "inputs.save-caches": text("save_caches")}
+    # Every case is a run whose earlier steps all passed, which the implicit success() reads.
+    context = {"success()": True, "inputs.start": text("start"), "inputs.save-caches": text("save_caches")}
     runs, looks_only = {}, {}
     for name, step in action()["steps"].items():
         runs[name] = "if" not in step or evaluate(step["if"], context)
@@ -1829,7 +1954,8 @@ def front_end_deps(given, modules_hit):
     restore = steps["Restore front-end/node_modules"]
     inputs = {name: spec["default"].strip('"') for name, spec in found["inputs"].items()}
     inputs.update(given)
-    context = {f"inputs.{name}": v for name, v in inputs.items()}
+    # Every case is a run whose earlier steps all passed, which the implicit success() reads.
+    context = {"success()": True, **{f"inputs.{name}": v for name, v in inputs.items()}}
     looks_only = value(restore["with"]["lookup-only"], context) == "true"
     context[f"steps.{restore['id']}.outputs.cache-hit"] = cache_hit(modules_hit)
     return {
