@@ -73,6 +73,13 @@ class Shard(NamedTuple):
     log: Optional[Sequence[str]]
 
 
+def counted(count: float, noun: str) -> str:
+    """A count and its noun, in the singular for one; a float reads without a needless point, 1.0
+    as "1"."""
+    shown = f"{count:g}" if isinstance(count, float) else str(count)
+    return f"{shown} {noun}" + ("" if count == 1 else "s")
+
+
 def function_spans(source: str, bodies: bool = False) -> List[Span]:
     """(first line, last line, qualified name) of every function and method.
 
@@ -327,7 +334,7 @@ def run_endpoints(out: Path, back_end: Path, pytest_args: Sequence[str]) -> int:
         rules = json.loads(rules_file.read_text())
         bridge = endpoint_bridge(data_file, back_end)
     out.write_text(json.dumps({"rules": rules, "endpoints": bridge}, indent=0) + "\n")
-    print(f"test_map: {len(bridge)} endpoints, {len(rules)} rules, to {out}")
+    print(f"test_map: {counted(len(bridge), 'endpoint')}, {counted(len(rules), 'rule')}, to {out}")
     return 0
 
 
@@ -337,7 +344,7 @@ def read_shards(directory: Path, expected: Optional[int]) -> Tuple[List[Shard], 
     found = sorted(p for p in directory.iterdir() if p.is_dir()) if directory.is_dir() else []
     if expected is not None and len(found) != expected:
         problems.append(
-            f"{len(found)} of {expected} shards under {directory}: "
+            f"{len(found)} of {counted(expected, 'shard')} under {directory}: "
             + ", ".join(p.name for p in found)
         )
     for shard in found:
@@ -378,8 +385,9 @@ def run_build(args: argparse.Namespace) -> int:
         print(f"test_map: {audit_line(name, found)}")
     tests = sum(len(list(filter(is_test, shard.records))) for shard in shards)
     print(
-        f"test_map: {len(specs)} specs from {tests} tests on {len(shards)} shards, "
-        f"{len(bridge['endpoints'])} endpoints, at {args.commit}, to {args.out}"
+        f"test_map: {counted(len(specs), 'spec')} from {counted(tests, 'test')} "
+        f"on {counted(len(shards), 'shard')}, "
+        f"{counted(len(bridge['endpoints']), 'endpoint')}, at {args.commit}, to {args.out}"
     )
     return 0
 

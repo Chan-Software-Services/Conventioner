@@ -20,8 +20,10 @@ import api.markets as MarketsApi
 import api.permissions as PermissionsApi
 import api.placements as PlacementsApi
 import api.vendor_export as VendorExportApi
+import invitations as Invitations
 import market_write as MarketWrite
 import public_map as PublicMap
+import utils.email as Email
 from client_errors import ForbiddenError
 from datatypes import MarketPerson, MarketPhase, MarketRole
 
@@ -302,8 +304,9 @@ _GIVEN = [MarketRole.ADMIN, MarketRole.EDITOR, MarketRole.VIEWER]
 
 
 class TestRolesAskTheirRows:
-    """Giving, taking and changing a role asks ``roles_row`` of each role involved, and answers
-    every requester as ``can_manage_roles`` did before the table, the yes cases as the no."""
+    """Giving a role by invitation, taking and changing one asks ``roles_row`` of each role
+    involved, and answers every requester as ``can_manage_roles`` did before the table, the yes
+    cases as the no."""
 
     @pytest.fixture
     def market_holding(self, monkeypatch, holding):
@@ -335,17 +338,25 @@ class TestRolesAskTheirRows:
 
     @pytest.mark.parametrize("asker", LADDER, ids=str)
     @pytest.mark.parametrize("role", _GIVEN, ids=str)
-    def test_adding(self, market_holding, asker, role):
+    def test_giving_by_invitation(self, monkeypatch, market_holding, asker, role):
+        """The invitation asks the row, and so does its accept, as the inviter's act."""
+        monkeypatch.setattr(Email, "send_mail", lambda *_a: True)
         roles, asked = market_holding(asker)
 
         if _managed_before_the_table(asker, role):
-            MarketsApi.add_market_role("market-123", "target", role, "u@x.test")
+            invitation, _emailed = MarketsApi.invite_to_market("market-123", "target", role,
+                                                               "u@x.test")
+            assert asked == [Actions.roles_row(role)]
+            MarketsApi.give_role_by_invitation(
+                Invitations.addressed(invitation["id"], "target"),
+                SimpleNamespace(id="target", email="target"))
             assert roles()["target"] == role.value
+            assert asked == [Actions.roles_row(role)] * 2
         else:
             with pytest.raises(ForbiddenError):
-                MarketsApi.add_market_role("market-123", "target", role, "u@x.test")
+                MarketsApi.invite_to_market("market-123", "target", role, "u@x.test")
             assert "target" not in roles()
-        assert asked == [Actions.roles_row(role)]
+            assert asked == [Actions.roles_row(role)]
 
     @pytest.mark.parametrize("asker", LADDER, ids=str)
     @pytest.mark.parametrize("role", _GIVEN, ids=str)

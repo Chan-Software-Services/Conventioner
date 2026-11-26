@@ -23,6 +23,8 @@ import api.market_actions as Actions
 import api.markets as MarketsApi
 import api.organizations as OrgsApi
 import history as History
+import invitations as Invitations
+import organization_people as OrganizationPeople
 from client_errors import ForbiddenError, NotFoundError
 from lookup_indexes import LOOKUP_INDEXES
 
@@ -69,6 +71,15 @@ def entries(history):
     return [doc for doc in history.docs if doc.get("organization_id") == ORG]
 
 
+def accepted(person, place, inviter=OWNER):
+    """``inviter`` invites ``person`` to ``place`` and ``person`` accepts, the one way into an
+    organization. The invitation is written as the invite writes it, without the invite's own
+    entry, so the history holds only the place given."""
+    sent = Invitations.invite(Invitations.ORGANIZATION, ORG, person.email, place, inviter.id,
+                              inviter.email, Invitations.now())
+    OrganizationPeople.place_by_invitation(Invitations.addressed(sent["id"], person.email), person)
+
+
 def only(history):
     [entry] = entries(history)
     return entry
@@ -101,40 +112,44 @@ class TestWhatIsRecorded:
 
         assert entries(history) == []
 
-    def test_an_admin_added_is_a_role_given(self, org, history):
-        OrgsApi.add_org_admin(ORG, NEWCOMER.email, OWNER.email)
+    def test_an_admin_placed_by_an_invitation_is_a_role_given(self, org, history):
+        accepted(NEWCOMER, "admin")
 
         entry = only(history)
+        assert entry["actor"] == OWNER.email
         assert entry["action"] == History.MANAGE_ORGANIZATION_ADMINS
         assert entry["kind"] == History.ROLE_GIVEN
         assert entry["subject"] == {"user_id": NEWCOMER.id, "email": NEWCOMER.email}
-        assert entry["detail"] == {"before": {"role": None}, "after": {"role": "admin"}}
+        assert entry["detail"] == {
+            "before": {"role": None}, "after": {"role": "admin"}, "by_invitation": True}
 
-    def test_a_member_made_an_admin_is_a_role_changed(self, org, history):
-        OrgsApi.add_org_admin(ORG, MEMBER.email, OWNER.email)
+    def test_a_member_accepting_admin_is_a_role_changed(self, org, history):
+        accepted(MEMBER, "admin")
 
         entry = only(history)
         assert entry["action"] == History.MANAGE_ORGANIZATION_ADMINS
         assert entry["kind"] == History.ROLE_CHANGED
-        assert entry["detail"] == {"before": {"role": "member"}, "after": {"role": "admin"}}
+        assert entry["detail"] == {
+            "before": {"role": "member"}, "after": {"role": "admin"}, "by_invitation": True}
 
-    def test_an_admin_added_again_is_refused_and_records_nothing(self, org, history):
+    def test_an_admin_accepting_admin_is_refused_and_records_nothing(self, org, history):
         from client_errors import BadRequestError
 
         with pytest.raises(BadRequestError) as refused:
-            OrgsApi.add_org_admin(ORG, ADMIN.email, OWNER.email)
+            accepted(ADMIN, "admin")
 
-        assert refused.value.message == "They are already an admin of this organization."
+        assert refused.value.message == OrganizationPeople.ALREADY_IN_IT
         assert entries(history) == []
 
-    def test_a_member_added_is_a_role_given(self, org, history):
-        OrgsApi.add_org_member(ORG, NEWCOMER.email, ADMIN.email)
+    def test_a_member_placed_by_an_invitation_is_a_role_given(self, org, history):
+        accepted(NEWCOMER, "member", inviter=ADMIN)
 
         entry = only(history)
         assert entry["actor"] == ADMIN.email
         assert entry["action"] == History.MANAGE_ORGANIZATION_MEMBERS
         assert entry["kind"] == History.ROLE_GIVEN
-        assert entry["detail"] == {"before": {"role": None}, "after": {"role": "member"}}
+        assert entry["detail"] == {
+            "before": {"role": None}, "after": {"role": "member"}, "by_invitation": True}
 
     @pytest.mark.parametrize("person,role,action", [
         (ADMIN, "admin", History.MANAGE_ORGANIZATION_ADMINS),
@@ -246,7 +261,7 @@ class TestReadingIt:
     @pytest.mark.parametrize("reader", [OWNER, ADMIN, MEMBER], ids=["owner", "admin", "member"])
     def test_its_people_read_it_newest_first(self, org, history, reader):
         OrgsApi.update_organization(ORG, OWNER.email, "Ember Collective")
-        OrgsApi.add_org_admin(ORG, NEWCOMER.email, OWNER.email)
+        accepted(NEWCOMER, "admin")
 
         body = OrgsApi.get_history(ORG, reader.email)
 
@@ -379,8 +394,6 @@ NOT_RECORDED = {
 #: through the function the route calls.
 RECORDED = {
     ("PUT", "/organizations/<org_id>"): "a rename",
-    ("POST", "/organizations/<org_id>/admins"): "an admin added",
-    ("POST", "/organizations/<org_id>/members"): "a member added",
     ("DELETE", "/organizations/<org_id>/users/<user_id>"): "a person removed",
     ("PUT", "/organizations/<org_id>/users/<user_id>"): "a person's place changed",
     ("POST", "/organizations/<org_id>/transfer"): "ownership transferred",

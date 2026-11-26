@@ -321,7 +321,7 @@ One block per action, in the order of [the actions table](../modules/market-acti
 
 **`manage-editors-and-viewers`, or `manage-admins` when an Admin or Owner role is either side**
 
-- `role_given`, `role_changed`, `role_taken`: Manage market's people
+- `role_given`, `role_changed`, `role_taken`: Manage market's people; a role is given only by an invitation accepted (below), and a `role_given` with no `by_invitation` is one given before invitations, by the add they replaced
   - Subject: `user_id`, `email`
   - Detail: `role`
 - `invited`: an address invited to a role ([invitations](../modules/invitations.md)), under the row that gives the role

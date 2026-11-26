@@ -9,10 +9,10 @@ This module builds the one filter that finds the organizations a person is in, `
 their key in the map; nothing else spells that query. ``people_key`` is the one spelling of a
 person's path in the map.
 
-It is also the only writer of a person's place: adding an admin or a member, placing someone who
-accepts an invitation (``place_by_invitation``, T538), the owner making an admin a member or a
-member an admin (``change_place``), removing someone, transferring the organization's ownership
-(``transfer``), and forgetting a deleted account. ``TABLE`` says what
+It is also the only writer of a person's place: placing someone who accepts an invitation
+(``place_by_invitation``, T538), the only way into an organization, the owner making an admin a
+member or a member an admin (``change_place``), removing someone, transferring the organization's
+ownership (``transfer``), and forgetting a deleted account. ``TABLE`` says what
 each change does to the target's place as read, ``AUTHORITY`` who may ask for it, and
 ``next_people`` answers the map a change leaves, or its refusal, without a database. Each change is
 then one conditional write (``_write``) that lands only on the places it judged: the requester's
@@ -137,7 +137,7 @@ class Move:
 PLACE_CHANGES = {ADMIN: Event.CHANGE_TO_ADMIN, MEMBER: Event.CHANGE_TO_MEMBER}
 
 #: The change inviting to each place asks for, judged when it is sent and again when it is
-#: accepted, as adding asked it (T538).
+#: accepted (T538): an invitation accepted is the only way into an organization.
 INVITED_TO = {ADMIN: Event.ADD_ADMIN, MEMBER: Event.ADD_MEMBER}
 
 
@@ -176,8 +176,8 @@ AUTHORITY: Dict[Event, Tuple[FrozenSet[str], Refusal]] = {
                      Refusal(ForbiddenError, "Only current owner can transfer ownership")),
 }
 
-#: What each change does, by the target's place as read (``None``, no place). "Add admin" of a
-#: member makes them an admin, as Manage organization's "Add admin" field always has.
+#: What each change does, by the target's place as read (``None``, no place). An invitation to be
+#: an admin accepted by someone who became a member meanwhile makes them an admin.
 TABLE: Dict[Tuple[Event, Optional[str]], Union[Move, Refusal, str]] = {
     (Event.ADD_ADMIN, None): Move(ADMIN),
     (Event.ADD_ADMIN, MEMBER): Move(ADMIN),
@@ -370,27 +370,6 @@ def _change(org: Dict[str, Any], event: Event, requester: Any, target_id: str,
                  by_invitation)
 
 
-def _add(org_id: str, email: str, requesting_user_email: str, event: Event) -> None:
-    org, requester = _requester(org_id, requesting_user_email)
-    may(organization_people_of(org), event, requester.id)
-    user = UsersApi.get_user(email)
-    if not user:
-        raise BadRequestError("User not found")
-    _change(org, event, requester, user.id, requesting_user_email)
-
-
-def add_admin(org_id: str, email: str, requesting_user_email: str) -> None:
-    """Make the account at ``email`` an admin of the organization: the owner's to do. A member is
-    made an admin; an admin, the owner, or an address with no account is refused."""
-    _add(org_id, email, requesting_user_email, Event.ADD_ADMIN)
-
-
-def add_member(org_id: str, email: str, requesting_user_email: str) -> None:
-    """Make the account at ``email`` a member of the organization: its owner's or an admin's to
-    do. A member, an admin, the owner, or an address with no account is refused."""
-    _add(org_id, email, requesting_user_email, Event.ADD_MEMBER)
-
-
 def _ended(invitation: Dict[str, Any]) -> Invitations.InvitationEnded:
     """End an invitation that can no longer be accepted, and the refusal that says so."""
     Invitations.end(invitation)
@@ -438,8 +417,8 @@ def place_by_invitation(invitation: Dict[str, Any], invitee: Any) -> Dict[str, A
 
     Judged again, at the moment it is accepted, as the inviter's act (``_judged_for_placing``); the
     table refusing the invitee (the owner, an admin, a member invited as a member) says they are
-    already in it, and a member accepting an invitation to be an admin becomes one, as "Add admin"
-    of a member does, recorded as their place changed. Then the invitation is claimed as read
+    already in it, and a member accepting an invitation to be an admin becomes one (``TABLE``'s
+    admin row for a member), recorded as their place changed. Then the invitation is claimed as read
     (``Invitations.claim``): whichever came first wins, so one withdrawn, declined or sent again to
     another place meanwhile answers ended and gives nothing. Only then is the write made,
     ``_change``'s, holding both keys as read, recording the inviter's giving it, by an invitation
@@ -504,8 +483,8 @@ def change_place(org_id: str, user_id: str, place: Any, requesting_user_email: s
 def transfer(org_id: str, requesting_user_email: str, new_owner_email: str) -> None:
     """Transfer the organization's ownership to the account at ``new_owner_email``, one of its
     admins or members: its owner's to do, who stays on it as an admin. Transferring it to its own
-    owner, to someone outside it, or to an address with no account is refused before anything is
-    written.
+    owner is refused, and to anyone outside it, whether or not the address has an account, in one
+    sentence (``HAND_IT_ONLY_TO_ITS_PEOPLE``), before anything is written.
 
     One write, filtered on the giver being owner and the new owner's place as read: an
     organization is never stored with two owners or none.
@@ -514,7 +493,7 @@ def transfer(org_id: str, requesting_user_email: str, new_owner_email: str) -> N
     may(organization_people_of(org), Event.TRANSFER, requester.id)
     new_owner = UsersApi.get_user(new_owner_email)
     if not new_owner:
-        raise BadRequestError("New owner user not found")
+        raise BadRequestError(HAND_IT_ONLY_TO_ITS_PEOPLE)
     _judged_and_written(org, Event.TRANSFER, requester, new_owner.id)
     _record_transfer(org_id, requesting_user_email, requester, new_owner)
 

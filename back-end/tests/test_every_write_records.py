@@ -698,11 +698,6 @@ def _disconnect_discord(client, world):
 
 # --- People -----------------------------------------------------------------------------------------
 
-def _give_role(client, world):
-    world.market(MarketPhase.APPLICATIONS)
-    return client.post(f"/markets/{MARKET}/roles", json={"user_email": SAM, "role": "editor"})
-
-
 def _invite(client, world):
     world.market(MarketPhase.APPLICATIONS)
     return client.post(f"/markets/{MARKET}/invitations", json={"email": SAM, "role": "editor"})
@@ -936,8 +931,6 @@ WRITES = [
           detail_keys=("username", "display_name", "nick", "answer")),
     Write("Discord disconnected", "DELETE", f"{M}/discord/connection", Actions.CONNECT_DISCORD,
           History.DISCORD_DISCONNECTED, _disconnect_discord),
-    Write("a role given", "POST", f"{M}/roles", Actions.MANAGE_EDITORS_AND_VIEWERS,
-          History.ROLE_GIVEN, _give_role, subject=SAM_BY_ID),
     Write("an address invited", "POST", f"{M}/invitations", Actions.MANAGE_EDITORS_AND_VIEWERS,
           History.INVITED, _invite, subject={"email": SAM}, before_after=False,
           detail_keys=("role",)),

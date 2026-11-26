@@ -2270,58 +2270,17 @@ def take_move(
     return []
 
 
-#: Said of giving the Owner role, by adding someone or changing their role, while the market has one:
-#: a market has one Owner, and it changes only when ownership is transferred.
+#: Said of changing someone's role to Owner while the market has one: a market has one Owner, and it
+#: changes only when ownership is transferred.
 ALREADY_HAS_AN_OWNER = (
     "This market already has an Owner. To make someone else its Owner, transfer ownership to them.")
 
 
 def _already_has_a_role(address: str) -> str:
-    """Said of adding or inviting someone who already has a role here: the inviter reads them in
-    "Users with access", so it tells nothing they cannot see."""
+    """Said of inviting someone who already has a role here: the inviter reads them in "Users with
+    access", so it tells nothing they cannot see."""
     return (f"{address} already has a role on this market. Change it in their row under Users "
             "with access.")
-
-
-def add_market_role(market_id: str, user_email: str, role: MarketRole, requesting_user: str) -> None:
-    """Add a user role to a market. Asks the row that gives the role (``Actions.roles_row``).
-
-    Sets that person's key alone, holding it absent and the requester's role as read
-    (``_write_role``), so an add never undoes another organizer's change to someone else.
-
-    Raises:
-        MarketChanged: the person was given a role, or the requester's changed, since the read.
-    """
-    context = load_market_context(market_id)
-    if context is None:
-        raise MarketNotFoundError("Market not found")
-    if context.market is None:
-        raise BadRequestError("Invalid market data")
-
-    market = context.market
-    roles = context.document.get('roles') or {}
-
-    asked = Actions.ask(Actions.roles_row(role), requesting_user, market, context.organization)
-    if asked.refused:
-        raise ForbiddenError(asked.refused)
-
-    if role == MarketRole.OWNER:
-        for uid, existing_role in roles.items():
-            if existing_role == MarketRole.OWNER.value:
-                raise BadRequestError(ALREADY_HAS_AN_OWNER)
-
-    user = UsersApi.get_user(user_email)
-    if not user:
-        raise BadRequestError("User not found")
-
-    # Adding never changes a role: overwriting one here would skip update_market_role's guards and
-    # let an Admin demote the Owner.
-    if user.id in roles:
-        raise BadRequestError(_already_has_a_role(user.email))
-
-    _write_role(market, {"$set": {_role_key(user.id): role.value}}, user.id, requesting_user,
-                owner_count_read=role == MarketRole.OWNER)
-    _record_role([asked], History.ROLE_GIVEN, user.id, None, role)
 
 
 def _people_context(market_id: str) -> MarketContext:

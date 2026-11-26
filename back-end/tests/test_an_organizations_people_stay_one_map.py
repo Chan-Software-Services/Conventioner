@@ -8,11 +8,12 @@ it with two owners or none: on ``dev`` at ``279afc56`` it was four
 unconditional writes, and the planner's probes cut between them left an organization that did not
 parse, or a new owner with no place in it at all.
 
-The property test drives random sequences of every change, by random requesters on random targets,
-a third of them with a second change landing between the first's read and its write, through the
-module over the shared organizations fake, which filters and writes as the server does; after each
-change the map holds exactly one owner and one place per person, no old list stands beside it, it
-parses, and a change nothing met leaves the map ``next_people`` answers.
+The property test drives random sequences of every change, by random requesters on random targets, a
+place given as an invitation from the requester that the target accepts, a third of them with a
+second change landing between the first's read and its write, through the module over the shared
+organizations fake, which filters and writes as the server does; after each change the map holds
+exactly one owner and one place per person, no old list stands beside it, it parses, and a change
+nothing met leaves the map ``next_people`` answers.
 """
 import copy
 import random
@@ -33,8 +34,9 @@ import api.markets as MarketsApi
 import api.organizations as OrgsApi
 import api.users as UsersApi
 import history as History
+import invitations as Invitations
 import organization_people as OrganizationPeople
-from client_errors import ClientError
+from client_errors import BadRequestError, ClientError, ForbiddenError
 from datatypes import organization_people_of
 from organization_people import PLACE_CHANGES, Event, next_people
 
@@ -176,12 +178,22 @@ def _draw(rng):
     return event, rng.choice(PEOPLE), rng.choice(PEOPLE)
 
 
+#: The place each invitation event gives.
+INVITED_AS = {event: place for place, event in OrganizationPeople.INVITED_TO.items()}
+
+
+def _accepted(requester, target, place):
+    """``requester`` invites ``target`` to ``place`` and ``target`` accepts: the invitation written
+    as the invite writes it, so the accept alone judges it, as the accept route does."""
+    sent = Invitations.invite(Invitations.ORGANIZATION, ORG, target.email, place, requester.id,
+                              requester.email, Invitations.now())
+    OrganizationPeople.place_by_invitation(Invitations.addressed(sent["id"], target.email), target)
+
+
 def _run(event, requester, target):
     """The change through the module's public function a route calls."""
-    if event is Event.ADD_ADMIN:
-        OrganizationPeople.add_admin(ORG, target.email, requester.email)
-    elif event is Event.ADD_MEMBER:
-        OrganizationPeople.add_member(ORG, target.email, requester.email)
+    if event in INVITED_AS:
+        _accepted(requester, target, INVITED_AS[event])
     elif event in (Event.CHANGE_TO_ADMIN, Event.CHANGE_TO_MEMBER):
         place = next(place for place, change in PLACE_CHANGES.items() if change is event)
         OrganizationPeople.change_place(ORG, target.id, place, requester.email)
@@ -191,6 +203,17 @@ def _run(event, requester, target):
         OrganizationPeople.transfer(ORG, requester.email, target.email)
     else:
         raise AssertionError(f"not drawn: {event}")
+
+
+def _refused_as(event, refusal):
+    """What the change answers of ``next_people``'s refusal: an accept ends an invitation whose
+    inviter may not give the place, and tells the invitee the table refuses that they are already
+    in it."""
+    if event not in INVITED_AS:
+        return refusal
+    if isinstance(refusal, ForbiddenError):
+        return Invitations.InvitationEnded()
+    return BadRequestError(OrganizationPeople.ALREADY_IN_IT)
 
 
 def _answer(run):
@@ -231,7 +254,7 @@ def test_no_sequence_of_changes_breaks_the_map(monkeypatch, accounts, recorded, 
         try:
             expected, refusal = next_people(before, event, requester.id, target.id), None
         except ClientError as refused:
-            expected, refusal = before, refused
+            expected, refusal = before, _refused_as(event, refused)
         after = organization_people_of(stored.doc)
         assert list(after.items()) == list(expected.items()), where
         if refusal is None:

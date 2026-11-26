@@ -617,17 +617,6 @@ def _taken(
     return document
 
 
-def add_org_admin(org_id: str, user_email: str, requesting_user_email: str) -> None:
-    """Make someone an admin of the organization, as its owner (``organization_people``)."""
-    OrganizationPeople.add_admin(org_id, user_email, requesting_user_email)
-
-
-def add_org_member(org_id: str, user_email: str, requesting_user_email: str) -> None:
-    """Make someone a member of the organization, as its owner or an admin
-    (``organization_people``)."""
-    OrganizationPeople.add_member(org_id, user_email, requesting_user_email)
-
-
 def remove_org_user(org_id: str, user_id: str, requesting_user_email: str) -> None:
     """Take someone's place in the organization: the owner removes anyone but themselves, an
     admin a member (``organization_people``). Someone already gone is a 404 saying so, which

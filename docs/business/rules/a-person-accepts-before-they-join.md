@@ -10,7 +10,7 @@ sources:
 
 A person invited to a role on a market, or a place in an organization, gains it only by accepting the invitation, signed in with the address it was sent to.
 Inviting someone gives one answer for every address: whether or not the address has an account, the invite answers the same status and body, the address is sent the same email, and the market's or the organization's history records the same entry.
-Manage market's "Invite someone" and Manage organization's "Invite admin" and "Invite member" invite ([managing who has access](../flows/ending-and-managing-a-market.md#l3-manage-who-has-access), [inviting an admin or a member](../flows/organizations.md#b2-invite-an-admin-or-a-member)); the routes that added a person directly, at once, remain on the server, called by no screen, only until they are removed.
+Manage market's "Invite someone" and Manage organization's "Invite admin" and "Invite member" invite ([managing who has access](../flows/ending-and-managing-a-market.md#l3-manage-who-has-access), [inviting an admin or a member](../flows/organizations.md#b2-invite-an-admin-or-a-member)); no route adds a person directly, at once.
 
 ## The rule
 
@@ -37,6 +37,7 @@ Manage market's "Invite someone" and Manage organization's "Invite admin" and "I
   An organization's place is judged the same way; a member who accepts an invitation to be an admin becomes one, and anyone else already in it is told so, and the invitation ends.
 - **Declining leaves nothing of the person on the market or in the organization**; the history records that they declined.
 - **A market's invitations go with it** when it is deleted, and an organization's with it, its markets' with each market.
+- **Transferring an organization's ownership gives one answer too**: to an address outside it, with an account or without, it says "Transfer ownership only to one of the organization's admins or members.".
 - **Everyone already holding a role keeps it**, unasked.
 
 Why a person accepts, rather than being added with one answer: [ADR 0047](../../adr/0047-a-person-joins-only-by-accepting-an-invitation.md).
