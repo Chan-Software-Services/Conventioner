@@ -338,16 +338,16 @@ class TestEveryOtherModulesRefusals:
         assert_answered_as_raised(response, raised)
         assert response.status_code == 403
 
-    def test_an_admin_with_no_account(self, client, monkeypatch, organization):
+    def test_inviting_the_organizations_owner(self, client, monkeypatch, organization):
         organization()
-        raised = refusals_raised_by(monkeypatch, OrgsApi, "add_org_admin")
+        raised = refusals_raised_by(monkeypatch, OrgsApi, "invite_to_organization")
 
         response = client.post(
-            f"/organizations/{ORG_ID}/admins", json={"user_email": "nobody@example.com"},
+            f"/organizations/{ORG_ID}/invitations", json={"email": OWNER_EMAIL, "place": "admin"},
         )
 
         assert_answered_as_raised(response, raised)
-        assert response.get_json() == {"error": "User not found"}
+        assert response.get_json() == {"error": f"{OWNER_EMAIL} owns this organization."}
 
     def test_removing_the_organizations_owner(self, client, monkeypatch, organization):
         organization()
@@ -404,10 +404,6 @@ ORGANIZATION_AND_ROLE_ROUTES = [
     ("get", f"/organizations/{ORG_ID}/deletion-preview", None,
      OrgsApi, "organization_deletion_preview"),
     ("delete", f"/organizations/{ORG_ID}", None, OrgsApi, "delete_organization"),
-    ("post", f"/organizations/{ORG_ID}/admins", {"user_email": "admin@example.com"},
-     OrgsApi, "add_org_admin"),
-    ("post", f"/organizations/{ORG_ID}/members", {"user_email": "member@example.com"},
-     OrgsApi, "add_org_member"),
     ("delete", f"/organizations/{ORG_ID}/users/user-2", None, OrgsApi, "remove_org_user"),
     ("put", f"/organizations/{ORG_ID}/users/user-2", {"place": "admin"},
      OrgsApi, "change_org_place"),
@@ -466,8 +462,6 @@ class TestTheOrganizationAndRoleRoutes:
     @pytest.mark.parametrize("method, path, body", [
         ("put", "/organizations/org-missing", {"name": "Renamed"}),
         ("delete", "/organizations/org-missing", None),
-        ("post", "/organizations/org-missing/admins", {"user_email": "admin@example.com"}),
-        ("post", "/organizations/org-missing/members", {"user_email": "member@example.com"}),
         ("delete", "/organizations/org-missing/users/user-2", None),
         ("post", "/organizations/org-missing/transfer", {"new_owner_email": "next@example.com"}),
         ("post", "/organizations/org-missing/invitations",
@@ -489,32 +483,18 @@ class TestTheOrganizationAndRoleRoutes:
         self, client, monkeypatch, organization,
     ):
         organization()
-        owner = UsersApi.get_user
-        monkeypatch.setattr(UsersApi, "get_user", lambda email: SimpleNamespace(
-            id="user-member", email=email) if email == "member@example.com" else owner(email))
         stored = OrgsApi.organizations_collection
+        stored.doc["people"]["user-member"] = "member"
         # The owner's own place changes between the read and the write.
         stored.before_write = lambda: stored.doc.update(people={"someone-else": "owner"})
-        raised = refusals_raised_by(monkeypatch, OrgsApi, "add_org_member")
+        raised = refusals_raised_by(monkeypatch, OrgsApi, "change_org_place")
 
-        response = client.post(
-            f"/organizations/{ORG_ID}/members", json={"user_email": "member@example.com"},
-        )
+        response = client.put(f"/organizations/{ORG_ID}/users/user-member", json={"place": "admin"})
 
         assert_answered_as_raised(response, raised)
         assert response.status_code == 409
         assert response.get_json() == {
             "error": OrganizationPeople.ORGANIZATION_CHANGED, "code": "organization_changed"}
-
-    def test_the_owner_cannot_be_added_as_a_member(self, client, organization):
-        organization()
-
-        response = client.post(
-            f"/organizations/{ORG_ID}/members", json={"user_email": OWNER_EMAIL},
-        )
-
-        assert response.status_code == 400
-        assert response.get_json() == {"error": "Owner cannot be added as member"}
 
     def test_ownership_handed_to_no_account(self, client, organization):
         organization()
@@ -524,7 +504,7 @@ class TestTheOrganizationAndRoleRoutes:
         )
 
         assert response.status_code == 400
-        assert response.get_json() == {"error": "New owner user not found"}
+        assert response.get_json() == {"error": OrganizationPeople.HAND_IT_ONLY_TO_ITS_PEOPLE}
 
     @pytest.mark.parametrize("method, path, body", [
         ("delete", "/markets/market-missing/roles/user-2", None),
@@ -1355,8 +1335,6 @@ class TestTheApplicantReviewImportAndDoorRoutes:
 REQUIRED_BODIES = [
     ("post", "/organizations", None),
     ("put", "/organizations/<org_id>", None),
-    ("post", "/organizations/<org_id>/admins", None),
-    ("post", "/organizations/<org_id>/members", None),
     ("put", "/organizations/<org_id>/users/<user_id>", None),
     ("post", "/organizations/<org_id>/transfer", None),
     ("post", "/organizations/<org_id>/invitations", None),

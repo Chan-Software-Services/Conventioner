@@ -241,13 +241,11 @@ class TestCreatingAnOrganization:
 
 
 class TestNamingSomeoneForARole:
-    """An organization's admin, member or new owner, a market role and who holds it, and the address
-    and role an invitation names, are refused as missing when they are not strings, before anyone
-    is looked up."""
+    """An organization's new owner, a market role and who holds it, and the address and role an
+    invitation names, are refused as missing when they are not strings, before anyone is looked
+    up."""
 
     ADDRESSED = [
-        ("/organizations/an-org-id/admins", "user_email", {}, OrgsApi, "add_org_admin"),
-        ("/organizations/an-org-id/members", "user_email", {}, OrgsApi, "add_org_member"),
         ("/organizations/an-org-id/transfer", "new_owner_email", {},
          OrgsApi, "transfer_org_ownership"),
         ("/markets/a-market-id/invitations", "email", {"role": "editor"},

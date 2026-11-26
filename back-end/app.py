@@ -891,32 +891,6 @@ def delete_organization(org_id: str) -> Response:
         return jsonify({"error": "Organization not found"}), 404
     return jsonify({"message": "Organization deleted successfully"}), 200
 
-@app.route('/organizations/<org_id>/admins', methods=['POST'])
-@login_required
-def add_org_admin(org_id: str) -> Response:
-    """Add an admin to an organization. Only owner can add admins."""
-    data = json_object(required=True)
-
-    user_email = string_field(data, 'user_email')
-    if not user_email:
-        return jsonify({"error": "user_email required"}), 400
-
-    OrgsApi.add_org_admin(org_id, user_email, authenticated_email())
-    return jsonify({"message": "Admin added successfully"}), 200
-
-@app.route('/organizations/<org_id>/members', methods=['POST'])
-@login_required
-def add_org_member(org_id: str) -> Response:
-    """Add a member to an organization. Owner or admin can add members."""
-    data = json_object(required=True)
-
-    user_email = string_field(data, 'user_email')
-    if not user_email:
-        return jsonify({"error": "user_email required"}), 400
-
-    OrgsApi.add_org_member(org_id, user_email, authenticated_email())
-    return jsonify({"message": "Member added successfully"}), 200
-
 @app.route('/organizations/<org_id>/users/<user_id>', methods=['DELETE'])
 @login_required
 def remove_org_user(org_id: str, user_id: str) -> Response:

@@ -1,17 +1,17 @@
 """One writer changes a person's place in an organization, holding the places it judged (T283).
 
-"Add admin", "Add member", "Remove" and the owner's place change ("Make member", "Make admin")
-change an organization's people only through
-``organization_people``: its table (``next_people``) says what each change does to the target's
+An invitation accepted (``place_by_invitation``), "Remove" and the owner's place change ("Make
+member", "Make admin") change an organization's people only through ``organization_people``: its table (``next_people``) says what each change does to the target's
 place as read and who may ask for it, and each change is one conditional write that lands only
 while the requester's and the target's places still stand as read, by their keys in the people
 map. Every write changes the map alone, never the old ``owner``, ``admins`` and ``members``
 lists (T583).
 
 A write that met another change answers 404 when the organization, or the person being removed, is
-gone, and otherwise ``OrganizationChanged``, a 409 in the spec's words: an "Add member" judged
-before the owner transferred ownership to that same person used to land the new owner in
-``members``, an organization that did not parse (the planner's probe on ``dev`` at ``279afc56``).
+gone, and otherwise ``OrganizationChanged``, a 409 in the spec's words; an accept that meets one
+judges again on what is true. A member's place judged before the owner transferred ownership to
+that same person used to land the new owner in ``members``, an organization that did not parse
+(the planner's probe on ``dev`` at ``279afc56``).
 
 Driven through the module's public functions and the Flask client, over the shared organizations
 fake, which filters and writes as the server does.
@@ -35,12 +35,14 @@ import api.markets as MarketsApi
 import api.organizations as OrgsApi
 import api.users as UsersApi
 import history as History
+import invitations as Invitations
 import organization_people as OrganizationPeople
 from client_errors import BadRequestError, ForbiddenError, NotFoundError
 from datatypes import organization_people_of
 from organization_people import (
     ALREADY_A_MEMBER,
     ALREADY_AN_ADMIN,
+    ALREADY_IN_IT,
     ALREADY_OWNS_IT,
     HAND_IT_ONLY_TO_ITS_PEOPLE,
     NO_LONGER_IN_THE_ORGANIZATION,
@@ -112,27 +114,39 @@ def places(doc):
     return organization_people_of(doc)
 
 
-# ── Failing first: the planner's add-member interleaving probe ───────────────────────────────
+def accepted(person, place, inviter=OWNER, org_id=ORG):
+    """``inviter`` invites ``person`` to ``place`` and ``person`` accepts: the one way into an
+    organization. The invitation is written as the invite writes it, without the invite's own
+    entry, so ``recorded`` holds only the place given."""
+    sent = Invitations.invite(Invitations.ORGANIZATION, org_id, person.email, place, inviter.id,
+                              inviter.email, Invitations.now())
+    return OrganizationPeople.place_by_invitation(
+        Invitations.addressed(sent["id"], person.email), person)
 
 
-def owner_adds_and_hands_on_to_new():
-    """The owner adds NEW and transfers ownership to them: a transfer goes only to one of its
-    people (ticket 04), so on ``dev``, which transferred it to anyone, it was the transfer alone."""
-    OrgsApi.add_org_admin(ORG, NEW.email, OWNER.email)
+# ── Failing first: the planner's member interleaving probe ───────────────────────────────────
+
+
+def new_made_an_admin_and_handed_it():
+    """NEW accepts the owner's invitation to be an admin, and the owner transfers ownership to
+    them: a transfer goes only to one of its people (ticket 04)."""
+    accepted(NEW, "admin")
     OrgsApi.transfer_org_ownership(ORG, OWNER.email, NEW.email)
 
 
-def test_an_add_member_judged_before_a_transfer_to_that_person_is_refused(stored, recorded):
-    # The admin adds NEW as a member; between its read and its write the owner hands NEW the
-    # organization. On dev the add landed: owner NEW and NEW in members, which does not parse.
-    stored.before_write = owner_adds_and_hands_on_to_new
+def test_a_member_place_judged_before_a_transfer_to_that_person_is_refused(stored, recorded):
+    # NEW accepts the admin's invitation to be a member; between its read and its write the owner
+    # hands NEW the organization. On dev that landed: owner NEW and NEW in members, which does not
+    # parse. Judged again, the owner is already in it, and the invitation ends.
+    stored.before_write = new_made_an_admin_and_handed_it
 
-    with pytest.raises(OrganizationChanged):
-        OrgsApi.add_org_member(ORG, NEW.email, ADMIN.email)
+    with pytest.raises(BadRequestError) as refused:
+        accepted(NEW, "member", inviter=ADMIN)
 
+    assert refused.value.message == ALREADY_IN_IT
     assert places(stored.doc)[NEW.id] == "owner"
     assert_one_map(stored.doc)
-    # Only the owner's changes are recorded: the refused add wrote and recorded nothing.
+    # Only the owner's changes are recorded: the refused accept wrote and recorded nothing.
     assert [args[2] for args, _ in recorded] == [
         History.MANAGE_ORGANIZATION_ADMINS, History.TRANSFER_ORGANIZATION]
 
@@ -209,7 +223,7 @@ def test_an_admin_made_a_member_keeps_their_place_in_the_maps_order():
     assert list(after) == [OWNER.id, ADMIN.id, MEMBER.id]
 
 
-def test_someone_added_joins_the_map_at_its_end():
+def test_someone_placed_joins_the_map_at_its_end():
     after = next_people(AS_READ, Event.ADD_MEMBER, OWNER.id, NEW.id)
     assert list(after) == [OWNER.id, ADMIN.id, MEMBER.id, NEW.id]
 
@@ -292,11 +306,6 @@ def signed_in(client, person):
     return client
 
 
-def add(client, person, list_name, email):
-    return signed_in(client, person).post(
-        f"/organizations/{ORG}/{list_name}", json={"user_email": email})
-
-
 def remove(client, person, user_id):
     return signed_in(client, person).delete(f"/organizations/{ORG}/users/{user_id}")
 
@@ -310,52 +319,12 @@ def hand_on(client, person, email):
         f"/organizations/{ORG}/transfer", json={"new_owner_email": email})
 
 
-ROUTE_AUTHORITY = [
-    ("admins", ADMIN, NEW.email, "Only organization owner can add admins"),
-    ("admins", MEMBER, NEW.email, "Only organization owner can add admins"),
-    ("admins", OUTSIDER, NEW.email, "Only organization owner can add admins"),
-    ("members", MEMBER, NEW.email, "Only organization owner or admin can add members"),
-    ("members", OUTSIDER, NEW.email, "Only organization owner or admin can add members"),
-]
-
-
-@pytest.mark.parametrize("list_name,requester,email,sentence", ROUTE_AUTHORITY,
-                         ids=[f"{n} by {r.id}" for n, r, _, _ in ROUTE_AUTHORITY])
-def test_an_add_by_someone_without_the_authority_is_a_403(
-        client, stored, recorded, list_name, requester, email, sentence):
-    response = add(client, requester, list_name, email)
-
-    assert (response.status_code, response.get_json()) == (403, {"error": sentence})
-    assert stored.writes == [] and recorded == []
-
-
 @pytest.mark.parametrize("requester", [MEMBER, OUTSIDER], ids=lambda p: p.id)
 def test_a_remove_by_someone_without_the_authority_is_a_403(client, stored, recorded, requester):
     response = remove(client, requester, MEMBER.id)
 
     assert (response.status_code, response.get_json()) == (
         403, {"error": "Only organization owner or admin can remove users"})
-    assert stored.writes == [] and recorded == []
-
-
-ROUTE_REFUSALS = [
-    ("admins", ADMIN.email, 400, ALREADY_AN_ADMIN),
-    ("admins", OWNER.email, 400, "Owner cannot be added as admin"),
-    ("admins", "nobody@example.com", 400, "User not found"),
-    ("members", MEMBER.email, 400, ALREADY_A_MEMBER),
-    ("members", ADMIN.email, 400, "Admin cannot be added as member"),
-    ("members", OWNER.email, 400, "Owner cannot be added as member"),
-    ("members", "nobody@example.com", 400, "User not found"),
-]
-
-
-@pytest.mark.parametrize("list_name,email,status,sentence", ROUTE_REFUSALS,
-                         ids=[f"{n} {e}" for n, e, _, _ in ROUTE_REFUSALS])
-def test_an_add_the_table_refuses_says_why_and_writes_nothing(
-        client, stored, recorded, list_name, email, status, sentence):
-    response = add(client, OWNER, list_name, email)
-
-    assert (response.status_code, response.get_json()) == (status, {"error": sentence})
     assert stored.writes == [] and recorded == []
 
 
@@ -380,18 +349,6 @@ def test_an_admin_removing_an_admin_is_a_403(client, stored, recorded):
     assert (response.status_code, response.get_json()) == (
         403, {"error": "Only owner can remove admins"})
     assert stored.writes == [] and recorded == []
-
-
-@pytest.mark.parametrize("list_name,email,message", [
-    ("admins", NEW.email, "Admin added successfully"),
-    ("admins", MEMBER.email, "Admin added successfully"),
-    ("members", NEW.email, "Member added successfully"),
-])
-def test_an_add_the_table_allows_answers_200(client, stored, list_name, email, message):
-    response = add(client, OWNER, list_name, email)
-
-    assert (response.status_code, response.get_json()) == (200, {"message": message})
-    assert_one_map(stored.doc)
 
 
 @pytest.mark.parametrize("target,place", [(ADMIN, "member"), (MEMBER, "admin")],
@@ -480,7 +437,7 @@ def test_a_transfer_by_anyone_but_the_owner_is_a_403(client, stored, recorded, r
     (OWNER.email, ALREADY_OWNS_IT),
     (NEW.email, HAND_IT_ONLY_TO_ITS_PEOPLE),
     (OUTSIDER.email, HAND_IT_ONLY_TO_ITS_PEOPLE),
-    ("nobody@example.com", "New owner user not found"),
+    ("nobody@example.com", HAND_IT_ONLY_TO_ITS_PEOPLE),
 ], ids=["to its own owner", "to someone outside it", "to another outside it", "to no account"])
 def test_a_transfer_the_table_refuses_says_why_and_writes_nothing(
         client, stored, recorded, email, sentence):
@@ -504,15 +461,16 @@ def the_write(stored):
 
 #: (what is done, the write's filter and update, the map after).
 WRITES = [
-    (lambda: OrganizationPeople.add_admin(ORG, NEW.email, OWNER.email),
+    (lambda: accepted(NEW, "admin"),
      {"id": ORG, "people.user-owner": "owner", "people.user-new": {"$exists": False}},
      {"$set": {"people.user-new": "admin"}},
      {OWNER.id: "owner", ADMIN.id: "admin", MEMBER.id: "member", NEW.id: "admin"}),
-    (lambda: OrganizationPeople.add_member(ORG, NEW.email, ADMIN.email),
+    (lambda: accepted(NEW, "member", inviter=ADMIN),
      {"id": ORG, "people.user-admin": "admin", "people.user-new": {"$exists": False}},
      {"$set": {"people.user-new": "member"}},
      {OWNER.id: "owner", ADMIN.id: "admin", MEMBER.id: "member", NEW.id: "member"}),
-    (lambda: OrganizationPeople.add_admin(ORG, MEMBER.email, OWNER.email),
+    # An invitation to be an admin, accepted by someone who became a member meanwhile.
+    (lambda: accepted(MEMBER, "admin"),
      {"id": ORG, "people.user-owner": "owner", "people.user-member": "member"},
      {"$set": {"people.user-member": "admin"}},
      {OWNER.id: "owner", ADMIN.id: "admin", MEMBER.id: "admin"}),
@@ -543,8 +501,8 @@ WRITES = [
      {"$set": {"people.user-owner": "admin", "people.user-admin": "owner"}},
      {OWNER.id: "admin", ADMIN.id: "owner", MEMBER.id: "member"}),
 ]
-WRITE_IDS = ["add admin of someone new", "add member of someone new",
-             "add admin of a member", "remove an admin", "remove a member",
+WRITE_IDS = ["someone new accepts admin", "someone new accepts member",
+             "a member accepts admin", "remove an admin", "remove a member",
              "an admin made a member", "a member made an admin",
              "handed on to a member", "handed on to an admin"]
 
@@ -566,23 +524,25 @@ def test_a_write_on_a_folded_organization_holds_both_places_and_moves_one_key(
 # ── The history ──────────────────────────────────────────────────────────────────────────────
 
 
-def test_an_add_records_it(stored, recorded):
-    OrganizationPeople.add_member(ORG, NEW.email, OWNER.email)
+def test_an_invitation_accepted_records_the_inviter_giving_the_place(stored, recorded):
+    accepted(NEW, "member")
 
     [(args, kwargs)] = recorded
     assert args == (ORG, OWNER.email, History.MANAGE_ORGANIZATION_MEMBERS)
     assert kwargs["kind"] == History.ROLE_GIVEN
     assert kwargs["subject"]() == {"user_id": NEW.id, "email": NEW.email}
-    assert kwargs["detail"]() == History.changes({"role": None}, {"role": "member"})
+    assert kwargs["detail"]() == {
+        **History.changes({"role": None}, {"role": "member"}), "by_invitation": True}
 
 
-def test_a_member_made_an_admin_is_recorded_as_the_place_changed(stored, recorded):
-    OrganizationPeople.add_admin(ORG, MEMBER.email, OWNER.email)
+def test_a_member_accepting_admin_is_recorded_as_the_place_changed(stored, recorded):
+    accepted(MEMBER, "admin")
 
     [(args, kwargs)] = recorded
     assert args == (ORG, OWNER.email, History.MANAGE_ORGANIZATION_ADMINS)
     assert kwargs["kind"] == History.ROLE_CHANGED
-    assert kwargs["detail"]() == History.changes({"role": "member"}, {"role": "admin"})
+    assert kwargs["detail"]() == {
+        **History.changes({"role": "member"}, {"role": "admin"}), "by_invitation": True}
 
 
 @pytest.mark.parametrize("target,place,before", [(ADMIN, "member", "admin"),
@@ -616,15 +576,16 @@ def deleted(stored):
 
 
 def made_admin(stored, person):
-    """The owner makes ``person`` an admin, between the other request's read and its write."""
-    return lambda: OrganizationPeople.add_admin(ORG, person.email, OWNER.email)
+    """The owner makes ``person``, a member, an admin, between the other request's read and its
+    write."""
+    return lambda: OrganizationPeople.change_place(ORG, person.id, "admin", OWNER.email)
 
 
 def test_a_write_over_an_organization_deleted_meanwhile_is_a_404(stored, recorded):
     stored.before_write = deleted(stored)
 
     with pytest.raises(NotFoundError) as refused:
-        OrganizationPeople.add_member(ORG, NEW.email, OWNER.email)
+        OrganizationPeople.change_place(ORG, MEMBER.id, "admin", OWNER.email)
 
     assert refused.value.message == "Organization not found"
     assert recorded == []
@@ -655,23 +616,27 @@ def test_an_admin_removing_a_member_made_an_admin_meanwhile_is_refused(stored, r
     assert_one_map(stored.doc)
 
 
-def test_an_add_by_an_admin_removed_meanwhile_is_refused(stored, recorded):
+def test_an_invitation_by_an_admin_removed_meanwhile_ends_when_accepted(stored, recorded):
+    # Judged again once the write meets the removal: the inviter may no longer give the place.
     stored.before_write = lambda: OrganizationPeople.remove(ORG, ADMIN.id, OWNER.email)
 
-    with pytest.raises(OrganizationChanged):
-        OrganizationPeople.add_member(ORG, NEW.email, ADMIN.email)
+    with pytest.raises(Invitations.InvitationEnded):
+        accepted(NEW, "member", inviter=ADMIN)
 
     assert NEW.id not in places(stored.doc)
+    assert len(recorded) == 1
     assert_one_map(stored.doc)
 
 
-def test_two_adds_of_one_person_land_once(stored, recorded):
-    stored.before_write = lambda: OrganizationPeople.add_member(ORG, NEW.email, OWNER.email)
+def test_an_accept_meeting_its_person_placed_meanwhile_lands_once(stored, recorded):
+    stored.before_write = lambda: accepted(NEW, "member", inviter=ADMIN)
 
-    with pytest.raises(OrganizationChanged):
-        OrganizationPeople.add_admin(ORG, NEW.email, OWNER.email)
+    with pytest.raises(BadRequestError) as refused:
+        accepted(NEW, "member")
 
+    assert refused.value.message == ALREADY_IN_IT
     assert places(stored.doc)[NEW.id] == "member"
+    assert len(recorded) == 1
     assert_one_map(stored.doc)
 
 
@@ -726,10 +691,10 @@ def test_two_transfers_judged_on_one_read_land_once(stored, recorded):
     assert_one_map(stored.doc)
 
 
-def test_a_transfer_to_an_admin_beside_an_add_admin_of_another_both_land(stored, recorded):
-    # The transfer holds only the giver's and the new owner's keys: an admin added meanwhile
+def test_a_transfer_to_an_admin_beside_another_accepting_admin_both_land(stored, recorded):
+    # The transfer holds only the giver's and the new owner's keys: an admin placed meanwhile
     # touches neither, so both land, and the map holds one owner.
-    stored.before_write = lambda: OrganizationPeople.add_admin(ORG, NEW.email, OWNER.email)
+    stored.before_write = lambda: accepted(NEW, "admin")
 
     OrganizationPeople.transfer(ORG, OWNER.email, ADMIN.email)
 
@@ -750,9 +715,9 @@ def test_a_transfer_to_someone_removed_meanwhile_is_refused(stored, recorded):
 
 
 def test_the_409_answers_the_sentence_and_its_code(client, stored, recorded):
-    stored.before_write = owner_adds_and_hands_on_to_new
+    stored.before_write = lambda: OrganizationPeople.remove(ORG, MEMBER.id, OWNER.email)
 
-    response = add(client, ADMIN, "members", NEW.email)
+    response = change(client, OWNER, MEMBER.id, {"place": "admin"})
 
     assert (response.status_code, response.get_json()) == (
         409, {"error": ORGANIZATION_CHANGED, "code": "organization_changed"})
@@ -770,11 +735,10 @@ def test_a_new_organizations_map_stays_one_through_every_writer(
     assert stored.doc["people"] == {OWNER.id: "owner"}
     assert_one_map(stored.doc)
 
-    OrgsApi.add_org_member(org_id, ADMIN.email, OWNER.email)
-    OrgsApi.add_org_member(org_id, MEMBER.email, OWNER.email)
+    accepted(ADMIN, "admin", org_id=org_id)
     assert_one_map(stored.doc)
 
-    OrgsApi.add_org_admin(org_id, ADMIN.email, OWNER.email)
+    accepted(MEMBER, "member", inviter=ADMIN, org_id=org_id)
     assert places(stored.doc) == {OWNER.id: "owner", ADMIN.id: "admin", MEMBER.id: "member"}
     assert_one_map(stored.doc)
 
