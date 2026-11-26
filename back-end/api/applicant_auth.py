@@ -2,9 +2,15 @@
 private applicant list.
 
 Every endpoint in this module is unauthenticated. Every line is attacker-facing.
-The design is the captain's ruling in full - see the decision file at
-``/home/danielc/.firstmate/data/decision-applicant-login-oracle.md``. The key
-constraints:
+They keep one rule, the applicant login ruling: nothing they answer a stranger
+says whether an address is known to a market. A refusal that did would let anyone
+walk a list of addresses and read off who applied, so no code, challenge or count
+here exists only for applicants. The design and why it is so are recorded in
+``docs/business/rules/a-vendor-signs-in-before-applying.md``, with the code's
+tries and Remember me decided in ``docs/adr/0022-the-vendor-page-is-signed-in.md``
+and the limits in
+``docs/adr/0046-a-sign-in-limit-never-shuts-out-the-person-it-protects.md``.
+The key constraints:
 
 1. **A code takes five tries, counted on the code, never on an application.**
    A code lasts ten minutes and takes ``MAX_CODE_ATTEMPTS`` tries; the fifth wrong
@@ -27,24 +33,26 @@ constraints:
    address and every market. Then it is counted per caller and address and per
    address by the hour, for every address alike, before the market is looked up.
 
-3. **Verifying a code tells nothing about who applied.** Every way a code cannot
-   pass (unknown address, no code issued, expired, already consumed, the fifth wrong
-   try, a gated or unknown market) collapses to one observable response, "spent".
-   The one other refusal, "retry", is a wrong try on a live code: it says only that
-   someone asked for a code for this address in the last ten minutes, which anyone
-   can make true by asking, so it says nothing of whether the address applied.
+3. **Verifying a code tells nothing about who applied.** A wrong try on a live code
+   with tries left answers "retry". Every other way a code cannot pass (none asked
+   for, expired, already consumed, the fifth wrong try, a missing address or code,
+   a gated or unknown market) collapses to one observable response, "spent".
+   "retry" says only that someone asked for a code for this address in the last ten
+   minutes, which anyone can make true by asking, so it says nothing of whether the
+   address applied.
 
-4. **Enforced on the back end.** The front end is 5e; this must stand alone.
+4. **Enforced on the back end.** Nothing here rests on what the front end does.
 
 5. **The login challenge lives in its own collection** keyed by ``(market_id, email)``,
-   created for any address that requests a code - applicant or not. The
-   ``Application`` document keeps engaging the D9 hard lock exactly as the
-   captain specified.
+   created for any address that requests a code at a market with a vendor page -
+   applicant or not. No endpoint here creates an ``Application``, so signing in
+   never counts toward the lock a market's first application puts on its form
+   (D9, ``docs/business/rules/the-form-locks-at-the-first-application.md``).
 
 6. **Timing is also a channel.** Identical response bodies are worthless if one
-   path is measurably slower. Every address is sent its code (E26/F07/S01), so the
-   work is the same for all, and the send runs on a thread so the response goes out
-   as soon as the challenge is stored.
+   path is measurably slower. At a market with a vendor page every address is sent
+   its code (E26/F07/S01), so the work is the same for all, and the code is sent
+   within the request, before the response goes out (E32/F03/S02).
 
 7. **Remember me spares the code, never the proof.** A right code with ``remember``
    ticked also gives the browser a remembered sign-in (``remembered_sign_ins``): an
@@ -55,7 +63,8 @@ constraints:
    caller before the cookie is read.
 
 A first-time vendor signs in exactly as a returning one does: the token names the
-address and the market, not an application, and their first save creates it.
+address and the market, not an application, and their first save that the form
+accepts creates it.
 """
 import hashlib
 import html
