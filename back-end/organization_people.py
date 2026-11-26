@@ -155,10 +155,10 @@ def already_placed(address: str, place: str, held: str) -> str:
 #: An account deletion never reaches an owner: ``delete_user`` refuses one before it forgets them.
 NEVER_REACHED = "never reached"
 
-#: Every refusal to add someone. Only an accept judges the target of an add (an invite asks only
-#: ``may`` of it, and refuses a placed address in ``already_placed``'s words), so the words are
-#: the invitee's.
-_ALREADY_IN_IT = Refusal(BadRequestError, ALREADY_IN_IT)
+#: The table's refusal of every add it does not allow, each of someone who already holds a place.
+#: Only an accept judges the target of an add (an invite asks only ``may`` of it, and refuses a
+#: placed address in ``already_placed``'s words), so the words are the invitee's.
+_REFUSES_THE_INVITEE = Refusal(BadRequestError, ALREADY_IN_IT)
 
 #: A place change is the owner's alone, whichever place it gives.
 _THE_OWNERS_ALONE = (frozenset({OWNER}), Refusal(
@@ -184,13 +184,13 @@ AUTHORITY: Dict[Event, Tuple[FrozenSet[str], Refusal]] = {
 TABLE: Dict[Tuple[Event, Optional[str]], Union[Move, Refusal, str]] = {
     (Event.ADD_ADMIN, None): Move(ADMIN),
     (Event.ADD_ADMIN, MEMBER): Move(ADMIN),
-    (Event.ADD_ADMIN, ADMIN): _ALREADY_IN_IT,
-    (Event.ADD_ADMIN, OWNER): _ALREADY_IN_IT,
+    (Event.ADD_ADMIN, ADMIN): _REFUSES_THE_INVITEE,
+    (Event.ADD_ADMIN, OWNER): _REFUSES_THE_INVITEE,
 
     (Event.ADD_MEMBER, None): Move(MEMBER),
-    (Event.ADD_MEMBER, MEMBER): _ALREADY_IN_IT,
-    (Event.ADD_MEMBER, ADMIN): _ALREADY_IN_IT,
-    (Event.ADD_MEMBER, OWNER): _ALREADY_IN_IT,
+    (Event.ADD_MEMBER, MEMBER): _REFUSES_THE_INVITEE,
+    (Event.ADD_MEMBER, ADMIN): _REFUSES_THE_INVITEE,
+    (Event.ADD_MEMBER, OWNER): _REFUSES_THE_INVITEE,
 
     (Event.REMOVE, None): Refusal(NotFoundError, NO_LONGER_IN_THE_ORGANIZATION),
     (Event.REMOVE, MEMBER): Move(None),
