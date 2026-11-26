@@ -1,22 +1,22 @@
 """Applicant-facing application endpoints and organizer monitoring endpoints.
 
 The applicant read path and the organizer review/monitoring path are in one module because they
-share the same publication gate: ``applicant_visible_status`` is the one place that decides what
-an applicant sees, and the organizer endpoints bypass it so the organizer always sees the truth.
+share the same publication gate: ``applicant_visible_status`` is the one place that decides the
+status an applicant reads, and the organizer endpoints bypass it so the organizer always sees the
+truth.
 
-Publication gate (captain ruling 2026-07-13):
-    An applicant may sign in during any phase and always see their own submitted application.
-    ``reviewer_approved`` / ``reviewer_rejected`` outcomes are HIDDEN from the applicant until
-    the organizer explicitly PUBLISHES results. Until publication, the applicant sees a neutral
-    ``under_review`` state - never the verdict.
+Publication gate (``docs/business/rules/an-applicant-never-reads-a-verdict-early.md``):
+    A vendor who applied on the market's page may read their own application in every phase but
+    draft. Their page reads "Submitted" until the results are out, whatever review has decided;
+    after that it reads whether they have a table, with their seats, and never a verdict or a
+    reason.
 
-    An organizer must not leak a half-finished review, and must retain the ability to change their
-    mind before any applicant sees an outcome. Publication is the single, deliberate,
-    organizer-controlled moment the verdict becomes visible.
+    An organizer must not leak a half-finished review, and must keep the freedom to change their
+    mind until anyone is told. Publication is the single, deliberate moment anything more is told.
 
-    The enforcement lives on the BACKEND in ``applicant_visible_status``. No client-side hiding
-    is sufficient: a verdict present in the API response is an information leak in the page markup,
-    the same class of bug as the login oracle closed in 5d.
+    The enforcement lives on the BACKEND, in ``applicant_visible_status`` and
+    ``_application_response``. No client-side hiding is sufficient: anything the applicant's
+    browser receives, the applicant can read.
 """
 
 import hashlib

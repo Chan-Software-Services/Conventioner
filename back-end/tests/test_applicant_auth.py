@@ -663,12 +663,14 @@ class TestD9LockPreservation:
         self, applicant_auth_module, test_db, monkeypatch
     ):
         """Requesting a login code must NOT create an Application document.
-        The D9 lock depends on the first Application, and this endpoint must
-        not create one - the captain has explicitly forbidden that."""
+        A vendor's first save that the form accepts creates it
+        (``docs/business/rules/a-vendor-signs-in-before-applying.md``), and a
+        market's first application locks its form for good (D9,
+        ``docs/business/rules/the-form-locks-at-the-first-application.md``)."""
         from flask import Flask
         app = Flask(__name__)
 
-        # Zero applications initially
+        # The fixture's one application
         assert test_db.applications.count_documents({}) == 1, (
             "Test setup should have exactly one application"
         )
