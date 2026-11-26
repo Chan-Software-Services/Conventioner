@@ -36,7 +36,7 @@ import api.users as UsersApi
 import history as History
 import invitations as Invitations
 import organization_people as OrganizationPeople
-from client_errors import BadRequestError, ClientError, ForbiddenError
+from client_errors import ClientError, ForbiddenError
 from datatypes import organization_people_of
 from organization_people import PLACE_CHANGES, Event, next_people
 
@@ -207,13 +207,10 @@ def _run(event, requester, target):
 
 def _refused_as(event, refusal):
     """What the change answers of ``next_people``'s refusal: an accept ends an invitation whose
-    inviter may not give the place, and tells the invitee the table refuses that they are already
-    in it."""
-    if event not in INVITED_AS:
-        return refusal
-    if isinstance(refusal, ForbiddenError):
+    inviter may not give the place, and answers every other refusal as it is."""
+    if event in INVITED_AS and isinstance(refusal, ForbiddenError):
         return Invitations.InvitationEnded()
-    return BadRequestError(OrganizationPeople.ALREADY_IN_IT)
+    return refusal
 
 
 def _answer(run):

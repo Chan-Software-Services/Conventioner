@@ -5,11 +5,12 @@ describes:
   - back-end/datatypes.py#Organization
   - back-end/datatypes.py#organization_people_of
   - back-end/organization_people.py
-verified: 2026-11-25
+verified: 2026-11-26
 sources:
   - T277
   - T283
   - T583
+  - T630
 status: accepted
 ---
 
@@ -43,8 +44,10 @@ Amended 2026-11-25 (T583): the release after this one writes the map alone, and 
 
 **One module writes a person's place**, `organization_people`: a table says what each change does to the target's place as read and who may ask for it, and each change is one conditional write that lands only while the requester's and the target's places still stand as read, or, on an organization with no map, while its three lists do, folding the map in; handing the organization on is one such write too, filtered on the giver being owner, so no cut and no read finds it with two owners, none, or an owner in a list.
 Amended 2026-11-25 (T583): every write holds the requester's and the target's keys alone and moves the target's one key, the transfer sets the two keys alone, and no write folds an organization or touches a list.
+Amended 2026-11-26 (T630): creating an organization writes its owner's place in `api/organizations.py`, and forgetting a deleted account is one `update_many`, with no requester and no read, over the organizations that hold it as an admin or a member.
 A write that met another change stores nothing and answers a 409 the screen says and reads again on; nothing is retried, so no change lands on people other than the ones it was judged on ([the organization's people](../implementation/modules/organization-people.md)).
 Amended 2026-11-26 (T538): a place is gained only by accepting an invitation ([ADR 0047](0047-a-person-joins-only-by-accepting-an-invitation.md)), and an accept whose write meets a change reads the organization again, judges again and writes again in the same request, so it too lands only on the people it was last judged on.
+Amended 2026-11-26 (T630): a write that finds the organization gone, or a person being removed already gone, answers 404 in place of the 409.
 
 A user id becomes a key of the map, and a part of a dotted path, only when it comes from a stored account or from the stored map, never from request text; `organization_people` refuses an id that is not a non-empty string, or that holds a `.` or starts with `$`, as a programming error.
 
@@ -52,6 +55,7 @@ A user id becomes a key of the map, and a part of a dotted path, only when it co
 
 - An organization's place and a market's role read the same way: a map keyed by user id, one entry a person, exactly one owner.
 - A person's organizations are found in either shape until every organization holds a map.
+  Amended 2026-11-25 (T583): they are found by the person's key in the map alone.
 - Every organization stored before the map is folded by `migrate_organization_people.py`, run after the deploy, whenever, in the same write a change makes; its dry run counts the organizations that do not parse on the release before.
   Amended 2026-11-25 (T583): production ran it on 2026-11-19, and T583 deleted it; it is still run, from a worktree of the last commit that holds it, on organizations restored from a backup older than that ([RELEASING.md](../RELEASING.md#a-backup-older-than-2026-11-19)).
 - The lists let a rollback read the same people, but they do not carry a change back: while the release before runs it writes only the lists, so each map goes stale, and this release reads the map over the lists.
