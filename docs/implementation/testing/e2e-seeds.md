@@ -34,7 +34,7 @@ describes:
   - front-end/e2e/helpers/seedMarketDayMap.ts
   - front-end/e2e/helpers/seedAPricedVendor.ts
   - front-end/e2e/helpers/grantMarketRole.ts
-verified: 2026-11-25
+verified: 2026-11-26
 sources:
   - E02
   - E11/F01/S01

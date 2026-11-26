@@ -232,8 +232,9 @@ test.describe('The MVP journey', () => {
     const setup = new MarketSetupPage(page);
     const monitor = new ApplicationMonitorPage(page);
     const results = new ResultPage(page);
-    // An address of this run's own: one address is sent at most five codes in 15 minutes, so a
-    // fixed one failed this test from its sixth repeat in one run.
+    // An address of this run's own: the codes asked for one address are limited
+    // (`back-end/sign_in_limits.py`), so a fixed one failed this test once its repeats in one run
+    // passed the limit.
     const VENDOR = `ruth-${Date.now()}@bindery.test`;
 
     // --- 1. Create and plan the market ------------------------------------------------------

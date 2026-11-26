@@ -6,11 +6,12 @@ import { waitForRoomInWindow } from './helpers/signInWindow';
 /**
  * Nobody can use the applicant sign-in to flood an address with codes (T12).
  *
- * One caller may ask for five codes to an address in a quarter of an hour; past that the back end
+ * One caller may ask for only so many codes to an address in a window
+ * (`REQUEST_CODE_PER_CALLER_AND_ADDRESS` in `back-end/sign_in_limits.py`); past that the back end
  * answers 429 with a Retry-After and sends nothing, and the sign-in screen says so in words. The
- * count is per caller and address, so the first five are asked for over the API through the dev
- * server's proxy (`APP_API`), which the page's own calls take and so reach the back end as the same
- * caller, and the one past it through the screen, as a vendor would meet it.
+ * count is per caller and address, so the ones the limit allows are asked for over the API through
+ * the dev server's proxy (`APP_API`), which the page's own calls take and so reach the back end as
+ * the same caller, and the one past it through the screen, as a vendor would meet it.
  */
 
 const ALLOWED_PER_CALLER_AND_ADDRESS = 5;

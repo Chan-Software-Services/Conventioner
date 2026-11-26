@@ -9,8 +9,8 @@ import { test, expect, LoginPage } from './fixtures';
  * nothing.
  *
  * The request goes to the real server, held until both presses are in, so the second press meets
- * a request still out whatever the machine's speed. A fresh address, so the five codes an address
- * may ask for in a quarter hour are this spec's own.
+ * a request still out whatever the machine's speed. A fresh address, so the limits on the codes
+ * asked for it (`back-end/sign_in_limits.py`) count this spec's requests alone.
  */
 
 const CODE_SENT = 'If an account exists for that address, a sign-in code has been sent to it.';

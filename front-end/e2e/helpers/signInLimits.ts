@@ -16,7 +16,7 @@ export interface SignInLimit {
   attempts: number;
 }
 
-/** Every limit filled here counts in quarter-hour windows, as `waitForRoomInWindow` waits for. */
+/** The window every limit filled here counts in, the one `waitForRoomInWindow` waits for. */
 const WINDOW_MS = 15 * 60 * 1000;
 
 /** The vendor's code sign-in's count per address alone, past which a try asks the human check. */

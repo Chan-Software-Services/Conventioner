@@ -1,8 +1,9 @@
 /**
- * The back end counts sign-in tries in fixed quarter-hour windows aligned to the clock
+ * The back end counts sign-in tries in fixed windows aligned to the clock
  * (`back-end/sign_in_limits.py`), so tries that straddle a window's end are counted in two windows,
  * and a spec that fills a limit and then meets it can find the next try in a fresh window, allowed.
- * A spec that fills a limit starts only when the window has room for the whole test.
+ * A spec that fills a limit starts only when the window has room for the whole test. `WINDOW_MS`
+ * is the window of the limits the specs fill and meet.
  */
 const WINDOW_MS = 15 * 60 * 1000;
 const ROOM_MS = 60 * 1000;
