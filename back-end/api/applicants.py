@@ -12,7 +12,9 @@ Publication gate (``docs/business/rules/an-applicant-never-reads-a-verdict-early
     reason.
 
     An organizer must not leak a half-finished review, and must keep the freedom to change their
-    mind until anyone is told. Publication is the single, deliberate moment anything more is told.
+    mind until anyone is told. Publication is the deliberate moment anything more is told; only a
+    market that reached its market days without it serves outcomes unpublished
+    (``results_are_out``).
 
     The enforcement lives on the BACKEND, in ``applicant_visible_status`` and
     ``_application_response``. No client-side hiding is sufficient: anything the applicant's
@@ -88,10 +90,12 @@ def applicant_visible_status(
 ) -> ApplicationStatus:
     """The status of an application as its applicant is allowed to know it.
 
-    Every application reads ``open`` - "Submitted" - whatever is stored (E36/F05/S01). The automatic rules judge an application in the request that saves it, so
-    "Under Review" beside "Submitted" told an applicant a rule had rejected them the moment they
-    submitted, and editing the answers flipped it back. Publication is the single, deliberate,
-    organizer-controlled moment anything more is told.
+    Every application reads ``open`` - "Submitted" - whatever is stored (E36/F05/S01). The
+    automatic rules judge an application in the request that saves it, so "Under Review" beside
+    "Submitted" told an applicant a rule had rejected them the moment they submitted, and editing
+    the answers flipped it back. Publication is the deliberate, organizer-controlled moment
+    anything more is told; only a market that reached its market days without it serves outcomes
+    unpublished (``results_are_out``).
 
     This has to be enforced here, on the way out of the process, because anything the applicant's
     browser receives, the applicant can read: a client-side label mapped over a payload that carries
@@ -99,9 +103,9 @@ def applicant_visible_status(
     There is no applicant-facing payload that does not pass through ``_application_response``, so
     this is the one place that decides. The organizer's view never passes through here.
     """
-    # After publication the applicant reads an outcome instead - a table, or none - which the
-    # response carries beside this; a verdict is never theirs to read (E36/F05/S02), so rejected
-    # and approved-without-a-seat read the same.
+    # Once the results are out the applicant reads an outcome instead - a table, or none - which
+    # the response carries beside this; a verdict is never theirs to read (E36/F05/S02), so
+    # rejected and approved-without-a-seat read the same.
     return ApplicationStatus.OPEN
 
 
