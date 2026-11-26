@@ -383,7 +383,8 @@ export async function reassignFollowUp(
 }
 
 /**
- * Publish review results, making verdicts visible to applicants (organizer only).
+ * Publish results, making each applicant's outcome (a table or none, with seats) readable, never
+ * a verdict (organizer only).
  * POST /markets/<id>/publish-results
  */
 export async function publishResults(marketId: string): Promise<{ results_published: boolean }> {

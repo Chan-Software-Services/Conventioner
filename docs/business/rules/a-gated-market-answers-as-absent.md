@@ -16,7 +16,7 @@ describes:
   - front-end/e2e/the-public-map.spec.ts
   - back-end/market_documents.py#public_map_is_open
   - front-end/src/views/MarketPublicView.vue
-verified: 2026-11-24
+verified: 2026-11-26
 sources:
   - wayfinding/v0-1-0/06
   - wayfinding/v0-1-0/07
@@ -66,7 +66,7 @@ Until the market answers, each says it is loading and draws nothing of the marke
 A gated market answers without sending anything, so the time a request takes says only that the market has a vendor page, which its public page already says.
 
 **A form market has a vendor page in every phase but draft** (`APPLICANT_SURFACE_PHASES`, E26/F07/S02).
-An applicant may always sign in and read their own application and its outcome; closing the surface with applications hid every verdict (bug 20).
+An applicant may always sign in and read their own application and its outcome; closing the surface with applications hid every applicant's outcome (bug 20).
 Applying itself stays the `applications` phase's, while the organizer takes applications ([an applicant never reads a verdict early](an-applicant-never-reads-a-verdict-early.md)).
 
 **A CSV market has a vendor page once its results are published** ([ADR 0022](../../adr/0022-the-vendor-page-is-signed-in.md)), when its vendors have a result to read there, and keeps it after, archived included.
@@ -91,7 +91,7 @@ Manage market's Delete names the market page and the vendor page among what stop
 
 - **`vendor_page_market_by_slug()`** ([`back-end/market_documents.py`](../../../back-end/market_documents.py)) decides whether a market has a vendor page: a market at the slug, in a phase of `APPLICANT_SURFACE_PHASES`, whose intake mode is `form`, or whose results are published, or that reached `market_days` (`attendance.market_ran`), or `None`, the same answer as for a slug that names nothing.
   It adds what it reads (the intake mode, the results flag, the id and the phase record) to the caller's projection, so a caller names only its own fields.
-  It is read by the page's own public read (`get_vendor_page`), requesting and verifying a sign-in code and resuming a remembered one (`request_login_code`, `verify_login_code`, `resume_sign_in` in [`back-end/api/applicant_auth.py`](../../../back-end/api/applicant_auth.py)), and the vendor's own read (`get_applicant_application` in `back-end/api/applicants.py`), which on a CSV market carries no `formData`.
+  It is read by the page's own public read (`get_vendor_page`), requesting and verifying a sign-in code and resuming a remembered one (`request_login_code`, `verify_login_code`, `resume_sign_in` in [`back-end/api/applicant_auth.py`](../../../back-end/api/applicant_auth.py)), the vendor's check-in and check-out and their undos ([`back-end/api/vendor_check_in.py`](../../../back-end/api/vendor_check_in.py)), and the vendor's own read (`get_applicant_application` in `back-end/api/applicants.py`), which on a CSV market carries no `formData`.
 - **`public_map_market_by_slug()`**, beside it, is the public map's gate, the map's read and its image both asking it (`public_map.py`, [the public map](../../implementation/modules/public-map.md#the-gate)); it is the vendor page's lookup and `public_map_is_open`, which the vendor page's read answers as `mapOpen`, so the market page never chooses a map the map's read refuses.
   [`back-end/tests/test_the_public_map.py`](../../../back-end/tests/test_the_public_map.py) closes the map one condition at a time and asserts each answers as an unknown slug.
 - **`applicant_intake_market_by_slug()`**, beside it, is the gate of applying: the public form and the save, which only a `form` market has.
