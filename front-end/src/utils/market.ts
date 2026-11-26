@@ -179,8 +179,9 @@ export function parseMarketFromApi(market: any): Market {
     // list's, reads as undecided, as the server reads an absent flag.
     nothingLeadsTheCard: market.nothingLeadsTheCard === true,
     noAutomaticRejections: market.noAutomaticRejections === true,
-    // How vendors reach the market, and whether verdicts are visible to applicants. Both were
-    // dropped here, harmlessly only while the screens read the unparsed `localStorage` copy.
+    // How vendors reach the market, and whether results are published, which makes each applicant's
+    // outcome readable, never a verdict. Both were dropped here, harmlessly only while the screens
+    // read the unparsed `localStorage` copy.
     intakeMode: market.intakeMode ?? market.intake_mode ?? undefined,
     resultsPublished: market.resultsPublished ?? market.results_published ?? undefined,
     // Why the application form cannot be edited, or null when it can: computed by the server on

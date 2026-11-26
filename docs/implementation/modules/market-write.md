@@ -52,7 +52,7 @@ describes:
   - back-end/assignment/lifecycle.py#store
   - back-end/assignment/lifecycle.py#publish
   - back-end/migrations/migrate_assignment_state.py
-verified: 2026-11-25
+verified: 2026-11-26
 sources:
   - T244
   - T274
@@ -187,7 +187,7 @@ The plan's own refusals are judged first, so a settled setup still says why it i
 The plan is sent whole, so the write holds the revision: a save from an older copy is refused rather than putting back what another person saved since.
 It holds the phase, so an edit judged in draft that lands after Open applications is refused and [the setup settles on leaving draft](../../business/rules/the-setup-settles-on-leaving-draft.md) holds against a move in flight, and `resultsPublished`, which the assignment rules' lock reads, so a rules change crossing Publish results is refused.
 
-Every other writer of `setupObject` counts it: the CSV start, the floorplan save and the table types write, each holding it as read since each builds on the plan it read, and the seeder, which saves through the plan write from the revision it read.
+Every other write of a stored market's `setupObject` through `write_market` counts it: the CSV start, the floorplan save and the table types write, each holding it as read since each builds on the plan it read, the seeder, which saves through the plan write from the revision it read, and the location rename and swap scripts above.
 So none of them puts back what another wrote between its read and its write: a layout saved while a plan save was in flight refuses the plan save, and a plan save that took a location away while that location's layout save was in flight refuses the layout save, which would otherwise write back the location and a layout naming an image already deleted.
 So a Market Setup page holding a copy from before any of them is refused too.
 Open applications holds it at its value as read and does not count it, since a move changes no part of the plan.

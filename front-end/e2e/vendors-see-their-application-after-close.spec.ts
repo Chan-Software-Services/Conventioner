@@ -15,7 +15,7 @@ import { seedApplicationWithStatus } from './helpers/seedPhaseMarket';
  *
  * Every applicant endpoint served a market whose applications were open only, so once the organizer
  * published results and closed applications - the order most organizers do it in - the sign-in
- * page showed the raw slug, no code could be requested, and the verdict could not be reached.
+ * page showed the raw slug, no code could be requested, and the outcome could not be reached.
  * The ruling the module itself records says an applicant may sign in during any phase and always
  * see their own application; applying stays open-only.
  */
@@ -31,7 +31,7 @@ async function post(request: APIRequestContext, path: string, data: object = {})
   expect(res.ok(), `${path}: ${await res.text()}`).toBeTruthy();
 }
 
-test('after results are published and applications close, a vendor still reads their verdict', async ({
+test('after results are published and applications close, a vendor still reads their outcome', async ({
   page,
   request,
 }) => {

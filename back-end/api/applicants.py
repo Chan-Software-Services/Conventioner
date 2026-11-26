@@ -748,7 +748,9 @@ def review_application(
     """Record a review verdict on an application, and who gave it (E34/F01/S01). Organizer only,
     always sees raw status.
 
-    The verdict is written but NOT revealed to the applicant until results are published.
+    The verdict is written and never revealed to the applicant: publishing the results makes their
+    outcome (a table or none, with seats) readable, not the verdict
+    (``docs/business/rules/an-applicant-never-reads-a-verdict-early.md``).
 
     ``seen`` is the application as the reviewer saw it - its status, its verdict's time and its
     answers' time - and the verdict is written only if it still is (E34/F03/S01); one naming none is
@@ -1147,14 +1149,16 @@ def set_applications_stopped(
 
 
 def publish_results(market_id: str, asked: Actions.Asked) -> Tuple[Dict[str, Any], int]:
-    """Flip the results_published flag on a market, making verdicts visible to applicants, and
+    """Flip the results_published flag on a market, making each applicant's outcome readable, and
     store the assignment revision it stood on (``lifecycle.publish``, T316), recorded through
     ``asked``, the signed-in organizer's Publish results asking.
 
-    This is the single, deliberate, organizer-controlled moment the review verdicts become
-    visible to the applicants who hold them. Before this call, every approved and rejected
-    application reads as ``under_review`` to its applicant. After it, applicants see their
-    actual outcome.
+    This is the deliberate, organizer-controlled moment applicants are told more than
+    "Submitted"; only a market that reached its market days without it serves outcomes unpublished
+    (``results_are_out``). Every application reads ``open`` to its applicant before this call and
+    after it (``applicant_visible_status``). After it their read also carries their outcome, a
+    table or none, with their seats, read off the stored seats, and never a verdict
+    (``docs/business/rules/an-applicant-never-reads-a-verdict-early.md``).
 
     On a Google Form market it is also what opens the vendor page (``vendor_page_market_by_slug``),
     since its vendors have nothing to read there before it.

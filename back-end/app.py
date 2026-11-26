@@ -2481,7 +2481,8 @@ def import_applications(market_id: str) -> Response:
 @app.route('/markets/<market_id>/publish-results', methods=['POST'])
 @login_required
 def publish_market_results(market_id: str) -> Response:
-    """Publish review results, making verdicts visible to applicants. Asks ``Actions.PUBLISH_RESULTS``."""
+    """Publish results, making each applicant's outcome (a table or none, with seats) readable,
+    never a verdict. Asks ``Actions.PUBLISH_RESULTS``."""
     requesting_user = authenticated_email()
 
     context = MarketsApi.load_market_context(market_id)
