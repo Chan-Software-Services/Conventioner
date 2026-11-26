@@ -7,9 +7,9 @@ summary file, and the exit code. The stub answers each API path with a scripted 
 every request, in the pattern of test_promote_check.py's, which this file does not import.
 
 The workflow's tests read .github/workflows/test.yml and the two actions under .github/actions/ as
-text, evaluate the actions' conditions over the cases they decide, and run steps' shells as the
-runner runs them (`bash -e`), with a stand-in for the program a step runs where the test scripts its
-answer.
+text, evaluate the workflow's and the actions' conditions over the cases they decide, and run steps'
+shells as the runner runs them (`bash -e`), with a stand-in for the program a step runs where the
+test scripts its answer.
 """
 import json
 import os
@@ -776,7 +776,7 @@ def workflow_env():
     return mapping(block(lines, lines.index("env:"), 0), 2)
 
 
-# The run cases a job's condition decides.
+# The run cases a job's or a step's condition decides.
 
 # The runs the workflow starts on, as (github.event_name, github.ref, github.base_ref), and a push
 # to another branch, which `on` starts none for and `suite` refuses all the same. Only a pull
@@ -842,13 +842,16 @@ def job_cases(name):
     ]
 
 
+def github_context(event, ref, base_ref):
+    """The `github.*` a tested expression reads, in a run of one trigger."""
+    return {"github.event_name": event, "github.ref": ref, "github.base_ref": base_ref}
+
+
 def job_context(name, case):
     """What job `name`'s condition reads in one case: of the other jobs, only the results and declared
     outputs of those it needs."""
     context = {
-        "github.event_name": case["event"],
-        "github.ref": case["ref"],
-        "github.base_ref": case["base_ref"],
+        **github_context(case["event"], case["ref"], case["base_ref"]),
         "cancelled()": case["cancelled"],
         "success()": not case["cancelled"] and all(end.result == "success" for end in case["needs"].values()),
     }
@@ -865,6 +868,25 @@ def assert_the_job_runs_exactly(name, expected):
     for case in job_cases(name):
         # As a string, which pytest prints whole: it cuts a dict short.
         assert evaluate(condition, job_context(name, case)) == expected(case), str(case)
+
+
+def step_cases(job_name):
+    """Each of job `job_name`'s cases, with a step's earlier steps all passed and not."""
+    return [{**case, "earlier_passed": passed} for case in job_cases(job_name) for passed in (True, False)]
+
+
+def step_context(job_name, case, earlier_passed):
+    """What a step's condition in job `job_name` reads in one case: the job's context, with a step's
+    `success()`, which reads the earlier steps and no needed job's result."""
+    return {**job_context(job_name, case), "success()": not case["cancelled"] and earlier_passed}
+
+
+def assert_the_step_runs_exactly(job_name, step, expected):
+    """The `if:` of this step of job `job_name` runs it in each step case that `expected` says, and in
+    no other."""
+    for case in step_cases(job_name):
+        context = step_context(job_name, case, case["earlier_passed"])
+        assert evaluate(step["if"], context) == expected(case), str(case)
 
 
 def test_the_workflow_has_exactly_these_jobs_suite_first():
@@ -978,14 +1000,17 @@ def test_the_shards_run_on_the_whole_suite_or_the_map_unless_the_selection_named
 
 
 def test_the_shard_matrix_is_the_selection_s_shards_or_else_every_shard_of_a_whole_run():
-    matrix = workflow_jobs()["e2e-shard"]["matrix"]
+    shard = workflow_jobs()["e2e-shard"]
 
-    assert list(matrix) == ["shard"]
-    fallback = re.fullmatch(
-        r"\$\{\{ fromJSON\(needs\.e2e-select\.outputs\.shards \|\| '(\[[0-9, ]+\])'\) \}\}", matrix["shard"]
-    )
-    assert fallback, matrix["shard"]
-    assert json.loads(fallback[1]) == list(range(1, whole_run_shards() + 1))
+    assert list(shard["matrix"]) == ["shard"]
+    for case in job_cases("e2e-shard"):
+        context = job_context("e2e-shard", case)
+        # The matrix expands only in a run whose job `if:` holds.
+        if not evaluate(shard["if"], context):
+            continue
+        selected = case["needs"]["e2e-select"].outputs["shards"]
+        expected = json.loads(selected) if selected else list(range(1, whole_run_shards() + 1))
+        assert value(shard["matrix"]["shard"], context) == expected, str(case)
 
 
 def test_a_shard_is_named_and_dealt_by_the_count_of_shards_the_run_has():
@@ -1065,7 +1090,13 @@ RESULTS_STEP = "A folder of results for each of this run's shards"
 def test_the_deal_is_checked_once_every_shard_passed():
     step = step_of("e2e", "name", "Every spec file ran on one shard")
 
-    assert step["if"] == "needs.e2e-shard.result == 'success'"
+    assert_the_step_runs_exactly(
+        "e2e",
+        step,
+        lambda case: not case["cancelled"]
+        and case["earlier_passed"]
+        and case["needs"]["e2e-shard"].result == "success",
+    )
     assert step["working-directory"] == "front-end"
 
 
@@ -1285,7 +1316,11 @@ def test_a_trial_commit_s_run_audits_the_pull_request_s_selection_beside_the_pul
     own, queue = e2e["steps"][first_audit:first_audit + 2]
 
     assert queue["name"] == QUEUE_AUDIT_STEP
-    assert queue["if"] == "github.event_name == 'merge_group'"
+    assert_the_step_runs_exactly(
+        "e2e",
+        queue,
+        lambda case: not case["cancelled"] and case["earlier_passed"] and case["event"] == "merge_group",
+    )
     assert queue["continue-on-error"] == "true"
     assert queue["timeout-minutes"] == "10"
     assert queue["env"] == {"GH_TOKEN": "${{ github.token }}", "GH_REPO": "${{ github.repository }}"}
@@ -1299,7 +1334,11 @@ def test_a_trial_commit_s_run_audits_the_pull_request_s_selection_beside_the_pul
     done, reports = run_queue_audit(tmp_path, 2)
     assert done.returncode == 0, done.stderr
     assert calls(tmp_path) == [["scripts/affected-specs.py", *QUEUE_AUDIT_ARGS, *reports]]
-    assert own["if"] == "github.event_name == 'pull_request'"
+    assert_the_step_runs_exactly(
+        "e2e",
+        own,
+        lambda case: not case["cancelled"] and case["earlier_passed"] and case["event"] == "pull_request",
+    )
     assert "--queue" not in own["run"]
 
 
@@ -1425,9 +1464,11 @@ def test_the_retry_report_runs_only_nightly_or_by_hand_reading_actions_and_never
 
 
 def test_only_a_nightly_or_hand_started_run_s_shards_record():
-    assert workflow_jobs()["e2e-shard"]["env"]["RECORD_TEST_MAP"] == (
-        "${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}"
-    )
+    written = workflow_jobs()["e2e-shard"]["env"]["RECORD_TEST_MAP"]
+
+    for event, ref, base_ref in TRIGGERS:
+        context = github_context(event, ref, base_ref)
+        assert value(written, context) == ("true" if event in MAPPERS else "false"), str(context)
     assert WORKFLOW.read_text().count("RECORD_TEST_MAP:") == 1
 
 
@@ -1707,8 +1748,8 @@ def test_a_missing_selection_script_runs_the_whole_suite(tmp_path):
     assert result.stdout == f"{COULD_NOT_DECIDE}\n"
 
 
-# The two actions' conditions are evaluated, as the runner would, so a test says what a step does,
-# not how its condition is written.
+# The workflow's and the actions' conditions are evaluated, as the runner would, so a test says
+# what a job or step does, not how its condition is written.
 
 TOKEN = re.compile(r"\s*('[^']*'|==|!=|&&|\|\||[!()]|[\w.-]+)")
 # A reference or a function's name starts with a letter or `_`, so no number is read as one.
