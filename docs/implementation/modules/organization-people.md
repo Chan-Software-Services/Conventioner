@@ -26,6 +26,7 @@ sources:
   - T538
   - T583
   - T637
+  - T647
 ---
 
 # The organization's people
@@ -145,7 +146,7 @@ A 404, someone removed meanwhile, is read as done, with focus on the list their 
 [`manageOrganizationPeople.test.ts`](../../../front-end/src/__tests__/manageOrganizationPeople.test.ts): Rename held and sent once, and an invitation's refusal, a rename's answers and a stale re-read after a removal kept out of Manage organization opened on another organization.
 [`manageOrganizationInvites.test.ts`](../../../front-end/src/__tests__/manageOrganizationInvites.test.ts): Invite admin and Invite member, "Invited" and Withdraw, each held, sent once and kept to its opening.
 [`manageOrganizationReadsOnOpen.test.ts`](../../../front-end/src/__tests__/manageOrganizationReadsOnOpen.test.ts): the read as it opens and at each opening, nobody of the copy listed while it is out, the name it brings, a failed first read, an organization no longer listed, focus kept inside the dialog, nothing asked as it closes, a read for a closed opening dropped, a rename kept over a read asked before it, and what a failed re-read after a removal or a change of place says.
-[`manage-organization-opens-as-it-is.spec.ts`](../../../front-end/e2e/manage-organization-opens-as-it-is.spec.ts): reopened on the stack with every read of the list held, after the person invited has accepted, it lists nobody until the read answers and then lists them.
+[`manage-organization-opens-as-it-is.spec.ts`](../../../front-end/e2e/manage-organization-opens-as-it-is.spec.ts): reopened on the stack with every read of the list held, after the person invited has accepted, it lists nobody until the read answers and then lists them; and opened from its address with the list's read failed, "Try again" opens it on the organization the address names.
 [`an-organizations-people-change-place.spec.ts`](../../../front-end/e2e/an-organizations-people-change-place.spec.ts): the owner makes an admin a member and back on the stack, each asked first, with the buttons' names, the rows, the focus, the History and a reload, at a desk and on a phone.
 
 ## Why

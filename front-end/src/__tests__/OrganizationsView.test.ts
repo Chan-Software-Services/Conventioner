@@ -165,6 +165,61 @@ describe('Manage organization from its address', () => {
     expect(manage(wrapper).props('manageOpen')).toBe(false);
     expect(router.currentRoute.value.query).toEqual({});
   });
+
+  it('keeps the key through a failed read, and opens it once Try again reads the list', async () => {
+    fetchOrganizations.mockRejectedValueOnce({ isAxiosError: true, request: {} });
+    const { router, wrapper } = await mountAt('/organizations?manage=org-1');
+    await flushPromises();
+
+    expect(manage(wrapper).props('manageOpen')).toBe(false);
+    expect(router.currentRoute.value.query).toEqual({ manage: 'org-1' });
+
+    fetchOrganizations.mockResolvedValueOnce([OLD]);
+    await wrapper.get('[data-testid="organizations-retry"]').trigger('click');
+    await flushPromises();
+
+    expect(manage(wrapper).props('manageOpen')).toBe(true);
+    expect(manage(wrapper).props('org')).toMatchObject({ id: 'org-1' });
+  });
+
+  it('drops the key once a read after a failed one names none of the reader’s', async () => {
+    fetchOrganizations.mockRejectedValueOnce({ isAxiosError: true, request: {} });
+    const { router, wrapper } = await mountAt('/organizations?manage=org-9');
+    await flushPromises();
+
+    fetchOrganizations.mockResolvedValueOnce([OLD]);
+    await wrapper.get('[data-testid="organizations-retry"]').trigger('click');
+    await flushPromises();
+
+    expect(manage(wrapper).props('manageOpen')).toBe(false);
+    expect(router.currentRoute.value.query).toEqual({});
+  });
+
+  /**
+   * A create reads the list again without "Try again": until that read answers, the page has no
+   * list, so it neither says there is none nor judges the key against one.
+   */
+  it('waits for the read a create sends after a failed one before it judges the key', async () => {
+    fetchOrganizations.mockRejectedValueOnce({ isAxiosError: true, request: {} });
+    post.mockReset().mockResolvedValue({ data: {} });
+    const { router, wrapper } = await mountAt('/organizations?manage=org-1');
+    await flushPromises();
+
+    const again = deferred<unknown[]>();
+    fetchOrganizations.mockReturnValueOnce(again.promise);
+    await create(wrapper, 'Harbour Collective');
+
+    expect(router.currentRoute.value.query).toEqual({ manage: 'org-1' });
+    expect(wrapper.text()).not.toContain('No organizations found');
+    expect(wrapper.find('[data-testid="organizations-read-failed"]').exists()).toBe(true);
+
+    again.resolve([OLD, NEW]);
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="organizations-read-failed"]').exists()).toBe(false);
+    expect(manage(wrapper).props('manageOpen')).toBe(true);
+    expect(manage(wrapper).props('org')).toMatchObject({ id: 'org-1' });
+  });
 });
 
 /**

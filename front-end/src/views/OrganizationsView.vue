@@ -36,16 +36,18 @@ const creation = useDialogSubmit({
 /**
  * Read the list, keeping only the newest read. The page opens with one, and creating or managing an
  * organization reads it again: an older read answering last put back a list without the
- * organization just made. The cards stay on screen while it reads; "Loading" is for the first.
+ * organization just made. The cards stay on screen while it reads; "Loading" is for the first and
+ * for Try again. A failure stays said until a read answers, so the page never takes the empty list
+ * a failure leaves for one that was read.
  */
 let latestRead = 0;
 async function loadOrganizations() {
   const thisRead = ++latestRead;
-  errorMessage.value = '';
   try {
     const read = await fetchOrganizations();
     if (thisRead !== latestRead) return;
     organizations.value = read;
+    errorMessage.value = '';
   } catch (err) {
     if (thisRead !== latestRead) return;
     errorMessage.value = getApiErrorMessage(err, 'The organizations could not be loaded.');
@@ -123,14 +125,15 @@ const router = useRouter();
 
 /**
  * Manage organization opened from the address, `?manage=<id>`: Manage market's "Manage
- * organization" points here (E38/F12/S01). It opens once the list holds that organization, and
- * the key goes when the dialog closes, or at once when it names none of the reader's, so a
- * refresh or Back does not open it again.
+ * organization" points here (E38/F12/S01). It opens once a read of the list holds that
+ * organization, and the key goes when the dialog closes, or as soon as a read names none of the
+ * reader's, so a refresh or Back does not open it again. A failed read names nothing, so the key
+ * stays for "Try again".
  */
 watch(
-  [loading, () => route.query.manage],
-  ([stillLoading, id]) => {
-    if (stillLoading || typeof id !== 'string' || manageOpen.value) return;
+  [listState, () => route.query.manage],
+  ([state, id]) => {
+    if (state !== 'ready' || typeof id !== 'string' || manageOpen.value) return;
     const org = organizations.value.find((o) => o.id === id);
     if (org) handleManage(org);
     else dropManageKey();

@@ -34,6 +34,7 @@ sources:
   - T469
   - T538
   - T637
+  - T647
 ---
 
 # Organizations
@@ -67,7 +68,7 @@ While the organization is being made nothing closes the dialog and "Create" is d
 
 Each organization's card says its name, your role in it, how many markets it holds and its owner.
 The cards are a [list frame](../../design-system.md) (T223): a line counts them, "3 organizations", past 12 a field, "Find an organization", finds by any part of a name, capitals and accents aside, as Markets' search does, its words held in the address as `search`, and the list shows 50 at a time, "Showing 50 of 51" and "Show 1 more".
-It says "Loading organizations…" while it first reads, "No organizations found" with none, and a failed read says why with "Try again".
+It says "Loading organizations…" while it first reads, and again after "Try again", "No organizations found" with none, and a failed read says why with "Try again" until a later read answers.
 The count is the organization read's `marketCount`, counted from the markets themselves, as is the count Remove's confirmation says from Manage organization's own read ([B3](#b3-remove-a-person)) (E38/F15/S01); [`OrganizationsView.test.ts`](../../../front-end/src/__tests__/OrganizationsView.test.ts) pins it.
 
 A person with no organization is told on the Markets list and in the create-market dialog to make one here first ([D4](creating-a-market.md#d4-create-a-market-with-no-organization-yet)).
@@ -81,7 +82,7 @@ Covered by:
 
 **Status:** Works (walked live); a Viewer's market pages draw no control they cannot use (bug 37); inviting as of T538, driven by `inviting-someone-to-an-organization.spec.ts`.
 
-1. On an organization card, "Manage"; or Manage market's "Manage organization", under its "Users with access" ([L3](ending-and-managing-a-market.md#l3-manage-who-has-access)), which opens `/organizations?manage=<id>`: the page ([`OrganizationsView.vue`](../../../front-end/src/views/OrganizationsView.vue)) opens that organization's Manage organization once its list holds it, and drops the key when the dialog closes, or at once when it names none of the reader's organizations, so a refresh or Back does not open it again; a read of the list that fails drops it too, so "Try again" opens nothing.
+1. On an organization card, "Manage"; or Manage market's "Manage organization", under its "Users with access" ([L3](ending-and-managing-a-market.md#l3-manage-who-has-access)), which opens `/organizations?manage=<id>`: the page ([`OrganizationsView.vue`](../../../front-end/src/views/OrganizationsView.vue)) opens that organization's Manage organization once a read of its list holds it, and drops the key when the dialog closes, or as soon as a read names none of the reader's organizations, so a refresh or Back does not open it again; a read of the list that fails names none, so the key stays, and "Try again" opens the dialog once a read holds the organization.
    The dialog reads the organization as it opens, since the card's copy can be older than what is true: the copy names it meanwhile, and Admins and Members say "Loading admins…" and "Loading members…" and list nobody until the read answers ([the organization's people](../../implementation/modules/organization-people.md#manage-organization-reads-it-as-it-opens)).
    A first read that fails leaves the copy's people listed, with the failure said; an organization no longer among the reader's is shown no further, with "You are no longer in this organization, or it has been deleted.".
 2. Under Admins, "Invite admin", the owner's alone; under Members, "Invite member", the owner's and the admins'.
@@ -114,11 +115,11 @@ Covered by:
 - `dialog-idiom.spec.ts` (two invitations in a row, and a refusal keeping the address)
 - [`everyone-with-access.spec.ts`](../../../front-end/e2e/everyone-with-access.spec.ts) (Manage organization from its address)
 - [`inviting-someone-to-an-organization.spec.ts`](../../../front-end/e2e/inviting-someone-to-an-organization.spec.ts) (an address with an account and one without each answered "Invitation sent to <address>." in each row and waiting under "Invited", nobody under Admins or Members; a member invited as an admin pointed at "Make admin"; a withdrawal asked first, Cancel's focus and the row gone; the invitee accepting and listed under Admins; an admin's Withdraw on the member invitations alone; at 1440 and 390, each address the run's own and what it left withdrawn after it)
-- [`manage-organization-opens-as-it-is.spec.ts`](../../../front-end/e2e/manage-organization-opens-as-it-is.spec.ts) (reopened before the list is read again, the person who accepted meanwhile listed)
+- [`manage-organization-opens-as-it-is.spec.ts`](../../../front-end/e2e/manage-organization-opens-as-it-is.spec.ts) (reopened before the list is read again, the person who accepted meanwhile listed; after a failed list read, "Try again" opening it on the organization the address names, and the key gone once it closes)
 - [`manageOrganizationInvites.test.ts`](../../../front-end/src/__tests__/manageOrganizationInvites.test.ts) (the rows' words, the sent and mail lines, the limit and a refusal in the server's words, "Invited" and its rows, where it stands, its find and pages, who reads it and who may withdraw, its failed read, and the withdrawal asked first, done, read as done on a 404 with the people read again so one accepted meanwhile shows, and said on a 409, each held, sent once, and kept out of Manage organization opened on another organization)
 - [`manageOrganizationPeople.test.ts`](../../../front-end/src/__tests__/manageOrganizationPeople.test.ts) (the shown count kept through a removal, and a refusal and a re-read kept out of Manage organization opened on another organization)
 - [`manageOrganizationReadsOnOpen.test.ts`](../../../front-end/src/__tests__/manageOrganizationReadsOnOpen.test.ts) (the read as it opens, and what it shows while it is out, when it fails and when the organization is no longer listed)
-- `OrganizationsView.test.ts` for the key it opens on and drops
+- `OrganizationsView.test.ts` for the key it opens on, drops and keeps through a failed read, and a re-read sent after a failed one judged only once it answers
 - [`people-at-scale-organization.spec.ts`](../../../front-end/e2e/people-at-scale-organization.spec.ts) (Members at 150 people: a page at a time, finding one member, the words kept through a removal; on a phone at 390 and 320)
 - `screen-sweeps-*.spec.ts`, the sweeps' states "the manage-organization dialog, its people and both invite rows" and "the manage-organization dialog, invitations waiting"
 - `screens-match-roles.spec.ts` ("an organization admin with no role on the market")
