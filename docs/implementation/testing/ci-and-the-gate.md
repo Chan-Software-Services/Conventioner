@@ -354,7 +354,7 @@ A [nightly run](#the-nightly-test-map) asks for `suite` and `e2e-retries`, then 
 That is why the five short checks (drift, the real-data scan with gitleaks, zizmor offline, zizmor online and actionlint) are steps of `knowledge-graph` and `real-data-and-workflows`: as five jobs of their own they made one run at ten shards ask for 24, more than the account runs at once.
 `python-advisories` is a job of its own, since a step's failure would fail a required check, so it waits for `real-data-and-workflows` instead, and takes the runner that job leaves.
 With another run going, shards still wait: on one run at ten shards four shards queued 9 to 12 minutes, and the run ended at 23 minutes while each shard's own time was 10.5 to 12.5.
-The matrix lists the shards and their `total`, which move together.
+The matrix lists the shards, and each shard's `total` is `strategy.job-total`, the count of shards the matrix expanded, so the two move together.
 
 ## The e2e stack and its caches
 
