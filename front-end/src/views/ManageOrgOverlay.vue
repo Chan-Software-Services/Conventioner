@@ -162,7 +162,7 @@ const read = useServerRead<string, Organization>(openOn, readOrganization, {
   failure: 'Could not re-read the organization',
   missing: (error) => error instanceof NotListed,
 });
-/** The list's copy it was opened with, each change made here taken into it. */
+/** The list's copy it was opened with, a new name or default table saved here taken into it. */
 const openedCopy = shallowRef<Organization | null>(null);
 /** The organization as last read, or the opened copy until a read lands; nothing once not listed. */
 const orgData = computed(() =>

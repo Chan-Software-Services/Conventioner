@@ -9,7 +9,7 @@ describes:
   - front-end/src/components/InvitationsWaiting.vue
   - front-end/src/components/InvitationSent.vue
   - front-end/src/utils/useInvitationsWaiting.ts
-verified: 2026-11-25
+verified: 2026-11-26
 sources:
   - E26/F06/S02
   - E26/F08/S01

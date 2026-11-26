@@ -38,7 +38,7 @@ describes:
   - back-end/migrations/migrate_drop_organization_lists.py
   - back-end/tests/test_migrate_drop_organization_lists.py
   - back-end/tests/real_mongo/test_the_organization_lists_migration_on_the_server.py
-verified: 2026-11-25
+verified: 2026-11-26
 sources:
   - E20/F04/S01
   - E21/F03/S01

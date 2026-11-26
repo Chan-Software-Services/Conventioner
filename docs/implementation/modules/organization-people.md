@@ -18,7 +18,7 @@ describes:
   - front-end/e2e/manage-organization-opens-as-it-is.spec.ts
   - front-end/src/__tests__/manageOrganizationReadsOnOpen.test.ts
   - front-end/src/__tests__/manageOrganizationInvites.test.ts
-verified: 2026-11-25
+verified: 2026-11-26
 sources:
   - T283
   - T315
