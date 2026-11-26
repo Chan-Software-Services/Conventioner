@@ -25,22 +25,28 @@
  *
  *   node scripts/e2e-shards.ts --shard=3/5 --timings=<that file>
  *
- * and writes its deal record (`test-results/e2e-deal.json`: the timings' source, the timings, every
- * listed file, its hand, the serial files and the workers) beside Playwright's report. Without
- * `--timings` it deals by the committed file. It runs its hand in two passes, both whatever the
- * first's result: the files of the serial list (`e2e/serialSpecs.ts`), which need the stack to
- * themselves, at one worker, then the rest at the config's workers (`E2E_WORKERS`). Each pass
- * keeps its own output folder and HTML report (`test-results/<pass>/`, `playwright-report/<pass>/`);
- * `test-results/results.json` is their JSON reports merged, and `test-results/e2e-phases.json` each
- * pass's name, file count, wall seconds and exit status. Once every shard has passed, CI's `e2e`
- * job runs
+ * and writes its deal record (`test-results/e2e-deal.json`: the timings' source, the timings,
+ * whether it dealt the whole suite or a named list, how many spec files Playwright listed, the files
+ * it dealt from, its hand, the serial files and the workers) beside Playwright's report. Without
+ * `--timings` it deals by the committed file. With `--specs=<file>`, a JSON array of spec file names
+ * relative to `testDir`, it deals those files alone, by the same timings, and fails before running
+ * anything on a name Playwright does not list; CI passes it on a pull request whose selection named
+ * specs. It runs its hand in two passes, both whatever the first's result: the files of the serial
+ * list (`e2e/serialSpecs.ts`), which need the stack to themselves, at one worker, then the rest at
+ * the config's workers (`E2E_WORKERS`). Each pass keeps its own output folder and HTML report
+ * (`test-results/<pass>/`, `playwright-report/<pass>/`); `test-results/results.json` is their JSON
+ * reports merged, and `test-results/e2e-phases.json` each pass's name, file count, wall seconds and
+ * exit status. Once every shard has passed, CI's `e2e` job runs
  *
- *   node scripts/e2e-shards.ts check <dir of the shards' artifacts> [--publish=<out file>]
+ *   node scripts/e2e-shards.ts check <dir of the shards' artifacts> [--publish=<file> | --named=<file>]
  *
- * which fails unless every shard dealt by the same timings, serial files and workers and their
- * reports hold every listed spec file exactly once, writes each shard's seconds, its passes' wall
- * seconds and the spread to the job summary, and with `--publish` writes the next timings: the
- * ones the run dealt by, blended with what it measured.
+ * which fails unless every shard dealt the whole suite, all by the same timings, serial files and
+ * workers, and their reports hold every listed spec file exactly once. With `--named=<file>`, a list
+ * as `--specs` takes, it demands instead that every shard dealt exactly those files, so only a run
+ * that is asked for a selection passes on one. It writes each shard's seconds, its passes' wall
+ * seconds and the spread to the job summary, opening with what ran when the check passes, and with
+ * `--publish` writes the next timings: the ones the run dealt by, blended with what it measured. A
+ * run that publishes timings is never a pull request's, so the two flags never come together.
  *
  * The committed file is only the fallback. Refresh it by hand from CI runs' reports, each run's
  * `e2e-results-shard-*` artifacts in a folder of their own, oldest first, the newest whole:
@@ -146,6 +152,18 @@ export function parseShard(value: string): { current: number; total: number } {
     throw new Error(`--shard takes "current/total", 1-based, as 3/6, not "${value}"`);
   }
   return { current, total };
+}
+
+/** The files a shard deals from: every listed file, or the named ones, with each named file
+ * Playwright does not list (any makes the shard fail before it runs). */
+export function filesToDeal(
+  listed: readonly string[],
+  named: readonly string[] | undefined,
+): { scope: 'whole' | 'named'; files: string[]; unlisted: string[] } {
+  if (named === undefined) return { scope: 'whole', files: [...listed], unlisted: [] };
+  const files = sorted(named);
+  const suite = new Set(listed);
+  return { scope: 'named', files, unlisted: files.filter((file) => !suite.has(file)) };
 }
 
 /** Escapes a path for a regular expression, its slashes too, since the filter is `/source/`. */
@@ -352,6 +370,9 @@ const tenth = (seconds: number) => Math.round(seconds * 10) / 10;
 /** A list's spec files in alphabetical order, each once. */
 const sorted = (files: Iterable<string>) => [...new Set(files)].sort();
 
+/** The noun after a count of spec files: "1 spec file", "2 spec files". */
+const specFileNoun = (count: number) => (count === 1 ? 'spec file' : 'spec files');
+
 /** Timings read from JSON, refusing anything but a non-empty object of finite, non-negative seconds. */
 export function parseTimings(text: string): Timings {
   const value: unknown = JSON.parse(text);
@@ -481,7 +502,11 @@ export interface DealRecord {
   /** Where the timings came from, the same words on every shard that took the same timings. */
   source: string;
   timings: Timings;
-  /** Every spec file the suite listed. */
+  /** Whether the shard dealt every listed file, or the list `--specs` named. */
+  scope: 'whole' | 'named';
+  /** How many spec files Playwright listed. */
+  listed: number;
+  /** What the shard dealt from: every listed file, or the named list. */
   files: string[];
   hand: string[];
   /** The listed files of the serial list, sorted; none in a record from before the passes. */
@@ -499,12 +524,16 @@ export interface ShardResult {
 }
 
 /**
- * The check that the shards dealt alike and ran every spec file once: every shard of the total its
- * deal records name uploaded a deal record and a report, every deal record holds the same timings
- * and the same files, each report holds exactly its shard's hand, and every listed file is in
+ * The check that the shards dealt what the run must run, alike, and ran every file of it once: every
+ * shard of the total its deal records name uploaded a deal record and a report, every deal record is
+ * of the whole suite, or with `named` of exactly those files, every one holds the same timings and
+ * the same files, each report holds exactly its shard's hand, and every file dealt from is in
  * exactly one report. Also each shard's seconds of tests, by its report, 0 for none.
  */
-export function checkShards(shards: readonly ShardResult[]): {
+export function checkShards(
+  shards: readonly ShardResult[],
+  named?: readonly string[],
+): {
   problems: string[];
   seconds: number[];
 } {
@@ -514,6 +543,26 @@ export function checkShards(shards: readonly ShardResult[]): {
   if (deals.length === 0) return { problems: ['no shard uploaded a deal record'], seconds: [] };
   const problems: string[] = [];
   const total = Math.max(...deals.map((deal) => deal.total));
+  const selection = named && sorted(named);
+  for (const deal of deals) {
+    const shard = `shard ${deal.shard}/${total}`;
+    if (!selection) {
+      if (deal.scope !== 'whole') {
+        problems.push(`${shard} dealt the test map's selection, but this run must run every spec`);
+      }
+      continue;
+    }
+    if (deal.scope !== 'named') {
+      problems.push(`${shard} dealt the whole suite, but this run ran the test map's selection`);
+    }
+    const dealt = sorted(deal.files);
+    if (JSON.stringify(dealt) !== JSON.stringify(selection)) {
+      problems.push(
+        `${shard} dealt ${dealt.join(', ')}, not the ${selection.length} ` +
+          `${specFileNoun(selection.length)} the selection named`,
+      );
+    }
+  }
   // What decides the hands, not the words of the source: shards that fell back to the committed file
   // for different reasons dealt alike. A record from before the passes dealt by no serial file at
   // one worker.
@@ -603,18 +652,27 @@ export function publishedTimings(shards: readonly ShardResult[]): Record<string,
 }
 
 /**
- * The `e2e` job's summary of the deal: the timings' source, each shard's seconds of tests and its
- * passes' wall seconds (`phases`, by shard, a dash for a pass it did not run or a shard with none),
- * and the spread: over the passes' wall seconds summed when every shard has phases, else over the
- * seconds of tests.
+ * The `e2e` job's summary of the deal: what ran and the timings' source, each shard's seconds of
+ * tests and its passes' wall seconds (`phases`, by shard, a dash for a pass it did not run or a
+ * shard with none), the spread, the problems. The spread is over the passes' wall seconds summed
+ * when every shard has phases, else over the seconds of tests. With `problems` its opening names
+ * only the timings' source, since what `ran` says the shards dealt may never have run.
  */
 export function shardSummary(
   source: string,
   seconds: readonly number[],
   problems: readonly string[],
+  ran: { scope: DealRecord['scope']; files: number; listed: number },
   phases: readonly (readonly Phase[] | undefined)[] = [],
 ): string {
-  const lines = ['### E2E shards', '', `Dealt by ${source}.`, ''];
+  const subject =
+    ran.scope === 'whole'
+      ? 'Every spec file the suite lists'
+      : `The ${ran.files} ${specFileNoun(ran.files)} the test map named, ` +
+        `of the ${ran.listed} the suite lists,`;
+  const opening =
+    problems.length > 0 ? `Dealt by ${source}.` : `${subject} ran, dealt by ${source}.`;
+  const lines = ['### E2E shards', '', opening, ''];
   lines.push(
     '| Shard | Seconds of tests | Serial pass | Parallel pass |',
     '|-------|------------------|-------------|---------------|',
@@ -844,31 +902,81 @@ function readChosen(path: string | undefined): ChosenTimings {
 /** The deal record, beside Playwright's report, which Playwright empties the folder of first. */
 const dealRecordFile = () => join(import.meta.dirname, '..', 'test-results', 'e2e-deal.json');
 
+/** The spec files a `--specs` file names: a JSON array of strings. */
+function readSpecList(path: string): string[] {
+  try {
+    const value: unknown = JSON.parse(readFileSync(path, 'utf8'));
+    if (Array.isArray(value) && value.every((name) => typeof name === 'string')) return value;
+    throw new Error('it is not a JSON array of strings');
+  } catch (error) {
+    throw new Error(
+      `${path} could not be read as a list of spec files: ${(error as Error).message}`,
+    );
+  }
+}
+
 /**
- * Lists the suite, deals it, checks Playwright selects exactly this shard's hand, runs it, and
- * writes the deal record.
+ * Lists the suite, deals it, or the files `--specs` names, checks Playwright selects exactly this
+ * shard's hand, runs it, and writes the deal record.
  */
 function runShard(
   shard: string,
   timingsPath: string | undefined,
+  specsPath: string | undefined,
   playwrightArgs: readonly string[],
 ): number {
   const { current, total } = parseShard(shard);
+  let named: string[] | undefined;
+  try {
+    if (specsPath !== undefined) named = readSpecList(specsPath);
+  } catch (error) {
+    console.log(`::error::${(error as Error).message}`);
+    return 1;
+  }
   const suite = list();
   const rootDir = suite.config?.rootDir;
   if (!rootDir) throw new Error("Playwright's list names no rootDir");
   const { source, timings } = readChosen(timingsPath);
-  const files = specFiles(suite);
+  const listed = specFiles(suite);
+  const { scope, files, unlisted } = filesToDeal(listed, named);
   // Both from the one list: a file's project, and the config's workers, are the same in every list.
   const serial = serialFiles(suite);
   const workers = Math.max(1, suite.config?.workers ?? 1);
+  const writeRecord = (hand: string[]) => {
+    const record: DealRecord = {
+      shard: current,
+      total,
+      source,
+      timings,
+      scope,
+      listed: listed.length,
+      files,
+      hand,
+      serial: [...serial].sort(),
+      workers,
+    };
+    mkdirSync(join(import.meta.dirname, '..', 'test-results'), { recursive: true });
+    writeFileSync(dealRecordFile(), `${JSON.stringify(record)}\n`);
+  };
+  if (unlisted.length > 0) {
+    for (const file of unlisted) {
+      console.log(`::error::${file} is named by the selection but Playwright does not list it`);
+    }
+    writeRecord([]);
+    return 1;
+  }
+
   const hand = dealShards(files, timings, total, { serial, workers })[current - 1]!;
   const weight = fileWeight(files, timings, { serial, workers });
   const minutes = hand.reduce((sum, file) => sum + weight(file), 0) / 60;
   const isSerial = new Set(serial);
+  const dealtFrom =
+    scope === 'whole'
+      ? `${files.length} spec files`
+      : `the ${files.length} named ${specFileNoun(files.length)} (of ${listed.length} listed)`;
   console.log(
-    `e2e shard ${current}/${total}: ${hand.length} of ${files.length} spec files ` +
-      `(${hand.filter((file) => isSerial.has(file)).length} serial), ` +
+    `e2e shard ${current}/${total}: ${hand.length} of ${dealtFrom}, ` +
+      `${hand.filter((file) => isSerial.has(file)).length} serial, ` +
       `about ${minutes.toFixed(1)} minutes by ${source}`,
   );
   for (const file of hand) {
@@ -876,22 +984,8 @@ function runShard(
     const said = notes.filter(Boolean).join(', ');
     console.log(`  ${file}${said ? ` (${said})` : ''}`);
   }
-  const record: DealRecord = {
-    shard: current,
-    total,
-    source,
-    timings,
-    files,
-    hand,
-    serial: [...serial].sort(),
-    workers,
-  };
-  const writeRecord = () => {
-    mkdirSync(join(import.meta.dirname, '..', 'test-results'), { recursive: true });
-    writeFileSync(dealRecordFile(), `${JSON.stringify(record)}\n`);
-  };
   if (hand.length === 0) {
-    writeRecord();
+    writeRecord(hand);
     return 0;
   }
 
@@ -899,7 +993,7 @@ function runShard(
   const selected = specFiles(list(filters));
   if (JSON.stringify(selected) !== JSON.stringify(hand)) {
     console.error(`The filters select ${JSON.stringify(selected)}, not this shard's hand.`);
-    writeRecord();
+    writeRecord(hand);
     return 1;
   }
   // The serial project's files first, at one worker, then the rest at the config's workers, so no
@@ -951,7 +1045,7 @@ function runShard(
   mkdirSync(resultsDir, { recursive: true });
   writeFileSync(join(resultsDir, 'results.json'), `${JSON.stringify(mergeReports(reports))}\n`);
   writeFileSync(join(resultsDir, 'e2e-phases.json'), `${JSON.stringify(phases)}\n`);
-  writeRecord();
+  writeRecord(hand);
   return shardStatus(phases.map((phase) => phase.status));
 }
 
@@ -978,13 +1072,37 @@ function shardResults(dir: string): ShardResult[] {
     });
 }
 
-/** The `e2e` job's check of the deal, its summary, and with `publish` the next timings. */
-function checkCommand(dir: string, publish: string | undefined): number {
+/** The `e2e` job's check of the deal, of the whole suite or of the files `--named` names, its
+ * summary, and with `publish` the next timings. */
+function checkCommand(
+  dir: string,
+  publish: string | undefined,
+  namedPath: string | undefined,
+): number {
+  let named: string[] | undefined;
+  try {
+    if (namedPath !== undefined) named = readSpecList(namedPath);
+  } catch (error) {
+    console.log(`::error::${(error as Error).message}`);
+    return 1;
+  }
   const shards = shardResults(dir);
-  const { problems, seconds } = checkShards(shards);
-  const source = dealtBy(shards.flatMap((shard) => (shard.deal ? [shard.deal] : [])));
+  const { problems, seconds } = checkShards(shards, named);
+  const deals = shards.flatMap((shard) => (shard.deal ? [shard.deal] : []));
+  // With no deal record the check has failed, and the summary says nothing of what ran.
+  const [deal] = deals;
   const phases = seconds.map((_, n) => shards.find((shard) => shard.shard === n + 1)?.phases);
-  const summary = shardSummary(source, seconds, problems, phases);
+  const summary = shardSummary(
+    dealtBy(deals),
+    seconds,
+    problems,
+    {
+      scope: deal?.scope ?? 'whole',
+      files: deal?.files.length ?? 0,
+      listed: deal?.listed ?? 0,
+    },
+    phases,
+  );
   console.log(summary);
   const summaryFile = process.env.GITHUB_STEP_SUMMARY;
   if (summaryFile) appendFileSync(summaryFile, summary);
@@ -1041,32 +1159,51 @@ function refresh(dirs: readonly string[]): number {
   return 0;
 }
 
+/** The arguments after `--shard=`: its own flags, `--timings=` and `--specs=` in either order and
+ * each at most once, then Playwright's. Undefined when a flag is given twice. */
+function shardArguments(args: readonly string[]) {
+  const flags: { timings?: string; specs?: string } = {};
+  let first = 0;
+  for (; first < args.length; first++) {
+    const match = /^--(timings|specs)=(.*)$/.exec(args[first]!);
+    if (!match) break;
+    const name = match[1] as 'timings' | 'specs';
+    if (flags[name] !== undefined) return undefined;
+    flags[name] = match[2]!;
+  }
+  return { ...flags, playwright: args.slice(first) };
+}
+
+/** `check`'s arguments: the folder, then at most one of `--publish=<file>` and `--named=<file>`,
+ * since a run that publishes timings is never a pull request's. Undefined for anything else. */
+function checkArguments(args: readonly string[]) {
+  const [dir, flag, ...more] = args;
+  if (dir === undefined || more.length > 0) return undefined;
+  if (flag === undefined) return { dir };
+  // An empty `--named=` is a file that cannot be read, never a check without the flag.
+  const match = /^--(?:publish=(?<publish>.+)|named=(?<named>.*))$/.exec(flag);
+  return match ? { dir, publish: match.groups!.publish, named: match.groups!.named } : undefined;
+}
+
 if (import.meta.main) {
   const [first, ...rest] = process.argv.slice(2);
+  const shardArgs = first?.startsWith('--shard=') ? shardArguments(rest) : undefined;
+  const checkArgs = first === 'check' ? checkArguments(rest) : undefined;
   if (first === 'refresh' && rest.length > 0) {
     process.exitCode = refresh(rest);
   } else if (first === 'timings' && rest.length === 1) {
     process.exitCode = await timingsCommand(rest[0]!);
-  } else if (first === 'check' && (rest.length === 1 || rest.length === 2)) {
-    const publish = rest[1]?.startsWith('--publish=')
-      ? rest[1].slice('--publish='.length)
-      : undefined;
-    if (rest.length === 2 && !publish) process.exitCode = 2;
-    else process.exitCode = checkCommand(rest[0]!, publish);
-  } else if (first?.startsWith('--shard=')) {
-    const timings = rest[0]?.startsWith('--timings=')
-      ? rest[0].slice('--timings='.length)
-      : undefined;
-    process.exitCode = runShard(
-      first.slice('--shard='.length),
-      timings,
-      timings === undefined ? rest : rest.slice(1),
-    );
+  } else if (checkArgs) {
+    const { dir, publish, named } = checkArgs;
+    process.exitCode = checkCommand(dir, publish, named);
+  } else if (shardArgs) {
+    const { timings, specs, playwright } = shardArgs;
+    process.exitCode = runShard(first!.slice('--shard='.length), timings, specs, playwright);
   } else {
     console.error(
-      'Usage: node scripts/e2e-shards.ts --shard=<current>/<total> [--timings=<file>] [playwright args]\n' +
+      'Usage: node scripts/e2e-shards.ts --shard=<current>/<total> [--timings=<file>] [--specs=<file>] [playwright args]\n' +
         '       node scripts/e2e-shards.ts timings <out file>\n' +
-        "       node scripts/e2e-shards.ts check <dir of the shards' artifacts> [--publish=<out file>]\n" +
+        "       node scripts/e2e-shards.ts check <dir of the shards' artifacts> [--publish=<file> | --named=<file>]\n" +
         "       node scripts/e2e-shards.ts refresh <dir of one run's Playwright JSON reports>...",
     );
   }

@@ -26,9 +26,9 @@ describes:
   - back-end/migrations/migrate_owed_day_state.py
   - back-end/migrations/migrate_application_status.py
   - back-end/migrations/migrate_business_name.py
-  - front-end/vite.config.ts#assertHumanCheckSiteKey
   - back-end/migrations/migrate_drop_organization_lists.py
-verified: 2026-11-25
+  - front-end/vite.config.ts#assertHumanCheckSiteKey
+verified: 2026-11-26
 sources:
   - T74
   - T254
@@ -38,10 +38,11 @@ sources:
   - T273
   - T317
   - T567
-  - T539
-  - T584
   - T583
+  - T539
   - T617
+  - T612
+  - T584
 ---
 
 # Release Process
@@ -57,8 +58,9 @@ This project uses a **dev → main promotion flow**:
   It is deployed only by hand, through the Deploy workflow, and is reached **only** by promoting `dev` → `main` as a deliberate, versioned release.
   Never commit or open PRs directly against `main` (the release-please Release PR and a `hotfix/` PR are the exceptions, [below](#hotfixes)).
 
-**Both branches are protected**: a PR into either needs the `backend`, `frontend-unit`, `frontend-lint-and-types`, `docker-build`, `e2e` and `real-data-and-workflows` checks to pass (`e2e` passes only when every shard does and [the shards ran every spec file once](implementation/testing/ci-and-the-gate.md#the-timings-refresh-themselves)).
+**Both branches are protected**: a PR into either needs the `backend`, `frontend-unit`, `frontend-lint-and-types`, `docker-build`, `e2e` and `real-data-and-workflows` checks to pass.
 A PR into `dev` also needs `knowledge-graph`, CodeQL's three `Analyze (<language>)` checks and `agent-review`, eleven in all; `main` asks only the six ([CI and the gate](implementation/testing/ci-and-the-gate.md#ci)).
+`e2e` passes only when every shard does and [the shards ran each spec file the run owes once](implementation/testing/ci-and-the-gate.md#the-timings-refresh-themselves): every spec file on a trial commit, a pull request into `main`, a push to `main` and a push to `dev` the queue did not test, and on a pull request into `dev` [the spec files the test map names](implementation/testing/ci-and-the-gate.md#what-a-pull-requests-e2e-run-runs), none when it names none, or every one when the selection chose the whole suite.
 Branches need not be up to date before merging, because a promotion is only ever made from a commit with a green Test run on it, from `dev`'s merge queue or a push to `dev`, and a PR into `dev` merges through a merge queue, which runs the checks again on the commit it would merge.
 `dev`'s is a ruleset with no bypass actor, so it binds admins too: nothing merges into `dev`, the merge of `main` back into it included, without all eleven checks, short of changing the ruleset itself; its code scanning rule holds back a PR with a new CodeQL alert ([CodeQL](implementation/testing/ci-and-the-gate.md#codeql)), and force pushes to it and its deletion are blocked.
 `main`'s are two rulesets ([ADR 0027](adr/0027-main-moves-only-through-promote.md)), each targeting `main` alone, and a ruleset rebuilt from these lines holds what it holds now.

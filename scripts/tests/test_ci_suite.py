@@ -1,4 +1,5 @@
-"""Which suite the Test workflow runs, and the workflow's jobs that read it (T510).
+"""Which suite the Test workflow runs, and the workflow's jobs that read it (T510), with what a
+pull request's E2E run runs (T612).
 
 The script's tests run its command line as the `suite` job's `decide` step does, against a stub
 GitHub API, and read what the step reads: the one word on stdout, the sentence on stderr and in the
@@ -6,8 +7,9 @@ summary file, and the exit code. The stub answers each API path with a scripted 
 every request, in the pattern of test_promote_check.py's, which this file does not import.
 
 The workflow's tests read .github/workflows/test.yml and the two actions under .github/actions/ as
-text, evaluate the actions' conditions over the cases they decide, and run the `decide` step's shell
-as the runner runs it (`bash -e`) with a fake `python3`.
+text, evaluate the actions' conditions over the cases they decide, and run steps' shells as the
+runner runs them (`bash -e`), with a stand-in for the program a step runs where the test scripts its
+answer.
 """
 import json
 import os
@@ -679,6 +681,7 @@ JOBS = [
     "frontend-unit",
     "frontend-lint-and-types",
     "docker-build",
+    "e2e-select",
     "e2e-shard",
     "warm-caches",
     "test-map",
@@ -751,16 +754,25 @@ def workflow_jobs():
             body = block(jobs_block, i, 2)
             steps_at = body.index("    steps:") if "    steps:" in body else len(body)
             job_keys = mapping(body[:steps_at], 4)
-            permissions = body.index("    permissions:") if "    permissions:" in body else None
-            outputs = body.index("    outputs:") if "    outputs:" in body else None
+            nested = {
+                key: mapping(block(body, body.index(f"    {key}:"), 4), 6) if f"    {key}:" in body else {}
+                for key in ("permissions", "outputs", "env")
+            }
+            nested["matrix"] = (
+                mapping(block(body, body.index("      matrix:"), 6), 8) if "      matrix:" in body else {}
+            )
             found[named.group(1)] = {
                 **job_keys,
+                **nested,
                 "order": len(found),
-                "permissions": mapping(block(body, permissions, 4), 6) if permissions is not None else {},
-                "outputs": mapping(block(body, outputs, 4), 6) if outputs is not None else {},
                 "steps": steps_of(body[steps_at + 1:], 6),
             }
     return found
+
+
+def workflow_env():
+    lines = WORKFLOW.read_text().splitlines()
+    return mapping(block(lines, lines.index("env:"), 0), 2)
 
 
 def test_the_workflow_has_exactly_these_jobs_suite_first():
@@ -826,22 +838,453 @@ def test_each_short_job_runs_only_on_the_whole_suite(name):
     assert job_found["if"] == FULL
 
 
-def test_the_shards_run_on_the_whole_suite_or_the_map():
+def test_e2e_select_decides_only_for_a_pull_request_into_dev_reading_and_nothing_more():
+    select = workflow_jobs()["e2e-select"]
+
+    assert select["name"] == "e2e-select"
+    assert select["if"] == "github.event_name == 'pull_request' && github.base_ref == 'dev'"
+    assert select["permissions"] == {"contents": "read", "actions": "read"}
+    assert select["outputs"] == {
+        "scope": "${{ steps.decide.outputs.scope }}",
+        "shards": "${{ steps.decide.outputs.shards }}",
+        "specs": "${{ steps.decide.outputs.specs }}",
+    }
+    assert "needs" not in select
+
+
+def test_e2e_select_checks_out_two_commits_with_no_credentials_and_asks_github_with_the_run_s_token():
+    checkout, step = workflow_jobs()["e2e-select"]["steps"]
+
+    assert checkout["uses"].startswith("actions/checkout@")
+    assert checkout["with"] == {"persist-credentials": "false", "fetch-depth": "2"}
+    assert step["id"] == "decide"
+    assert step["env"] == {"GH_TOKEN": "${{ github.token }}", "GH_REPO": "${{ github.repository }}"}
+
+
+def test_the_shards_run_on_the_whole_suite_or_the_map_unless_the_selection_named_no_shard():
     shard = workflow_jobs()["e2e-shard"]
 
-    assert shard["needs"] == "suite"
+    assert shard["needs"] == "[suite, e2e-select]"
+    # An empty list of shards skips the job before its matrix expands: an empty matrix is an error.
+    # A skipped or failed `e2e-select` left no list, so the job runs.
     assert shard["if"] == (
         "${{ !cancelled() && (needs.suite.outputs.run == '' || needs.suite.outputs.run == 'full'"
-        " || needs.suite.outputs.run == 'map') }}"
+        " || needs.suite.outputs.run == 'map') && needs.e2e-select.outputs.shards != '[]' }}"
     )
+
+
+def test_the_shard_matrix_is_the_selection_s_shards_or_else_every_shard_of_a_whole_run():
+    matrix = workflow_jobs()["e2e-shard"]["matrix"]
+
+    assert list(matrix) == ["shard"]
+    fallback = re.fullmatch(
+        r"\$\{\{ fromJSON\(needs\.e2e-select\.outputs\.shards \|\| '(\[[0-9, ]+\])'\) \}\}", matrix["shard"]
+    )
+    assert fallback, matrix["shard"]
+    assert json.loads(fallback[1]) == list(range(1, whole_run_shards() + 1))
+
+
+def test_a_shard_is_named_and_dealt_by_the_count_of_shards_the_run_has():
+    shard = workflow_jobs()["e2e-shard"]
+    totals = [step["env"]["TOTAL"] for step in shard["steps"] if "TOTAL" in step["env"]]
+
+    assert shard["name"] == "e2e shard ${{ matrix.shard }}/${{ strategy.job-total }}"
+    assert totals == ["${{ strategy.job-total }}"] * 2
+
+
+def test_a_shard_runs_the_specs_the_selection_named():
+    step = step_of("e2e-shard", "name", "Run Playwright tests")
+
+    assert step["env"]["E2E_SPECS"] == "${{ needs.e2e-select.outputs.specs }}"
+    assert step["working-directory"] == "front-end"
+
+
+@pytest.mark.parametrize("named", ["", '["a.spec.ts","market/b+c.spec.ts"]'], ids=["the-whole-suite", "a-named-list"])
+def test_a_shard_passes_the_dealer_the_named_list_only_when_there_is_one(tmp_path, named):
+    temp = tmp_path / "runner temp"
+    temp.mkdir()
+
+    result, _ = run_step(
+        tmp_path,
+        step_of("e2e-shard", "name", "Run Playwright tests")["run"],
+        "node",
+        SHARD="2",
+        TOTAL="3",
+        E2E_SPECS=named,
+        RUNNER_TEMP=str(temp),
+    )
+
+    assert result.returncode == 0, result.stderr
+    dealt = ["scripts/e2e-shards.ts", "--shard=2/3", f"--timings={temp}/e2e-shard-timings.json"]
+    if named:
+        assert calls(tmp_path) == [[*dealt, f"--specs={temp}/e2e-specs.json"]]
+        assert (temp / "e2e-specs.json").read_text() == named
+    else:
+        assert calls(tmp_path) == [dealt]
+        assert not (temp / "e2e-specs.json").exists()
+
+
+def test_a_shard_that_fails_fails_its_step(tmp_path):
+    result, _ = run_step(
+        tmp_path,
+        step_of("e2e-shard", "name", "Run Playwright tests")["run"],
+        "node",
+        SHARD="1",
+        TOTAL="1",
+        E2E_SPECS="",
+        RUNNER_TEMP=str(tmp_path),
+        FAKE_EXIT="1",
+    )
+
+    assert result.returncode == 1
 
 
 def test_e2e_runs_only_on_the_whole_suite():
     e2e = workflow_jobs()["e2e"]
 
     assert e2e["name"] == "e2e"
-    assert e2e["needs"] == "[suite, e2e-shard]"
+    assert e2e["needs"] == "[suite, e2e-select, e2e-shard]"
     assert e2e["if"] == FULL
+
+
+def test_e2e_reads_the_event_and_what_the_selection_decided():
+    env = workflow_jobs()["e2e"]["env"]
+
+    assert env["EVENT"] == "${{ github.event_name }}"
+    assert env["SCOPE"] == "${{ needs.e2e-select.outputs.scope }}"
+    assert env["E2E_SPECS"] == "${{ needs.e2e-select.outputs.specs }}"
+
+
+NAMED_SPECS = '["a.spec.ts","market/b+c.spec.ts"]'
+RESULTS_STEP = "A folder of results for each of this run's shards"
+
+
+def test_the_deal_is_checked_once_every_shard_passed():
+    step = step_of("e2e", "name", "Every spec file ran on one shard")
+
+    assert step["if"] == "needs.e2e-shard.result == 'success'"
+    assert step["working-directory"] == "front-end"
+
+
+# Only a pull request's run with a named list may deal a subset: the queue, a push and a whole pull
+# request's run demand every spec file, whatever `e2e-select` printed.
+@pytest.mark.parametrize(
+    ("event", "scope", "publishes", "flag"),
+    [
+        ("pull_request", "named", "false", "named"),
+        ("pull_request", "named", "true", "named"),
+        ("pull_request", "whole", "false", None),
+        ("pull_request", "", "false", None),
+        ("merge_group", "", "true", "publish"),
+        ("merge_group", "named", "true", "publish"),
+        ("merge_group", "named", "false", None),
+        ("push", "", "true", "publish"),
+        ("push", "named", "false", None),
+        ("schedule", "", "false", None),
+        ("workflow_dispatch", "", "false", None),
+    ],
+)
+def test_the_check_demands_the_named_list_only_of_a_slimmed_pull_request_run(tmp_path, event, scope, publishes, flag):
+    temp = tmp_path / "runner temp"
+    temp.mkdir()
+
+    result, _ = run_step(
+        tmp_path,
+        step_of("e2e", "name", "Every spec file ran on one shard")["run"],
+        "node",
+        EVENT=event,
+        SCOPE=scope,
+        E2E_SPECS=NAMED_SPECS if scope == "named" else "",
+        PUBLISHES_TIMINGS=publishes,
+        RUNNER_TEMP=str(temp),
+    )
+
+    assert result.returncode == 0, result.stderr
+    flags = {
+        "named": [f"--named={temp}/e2e-named.json"],
+        "publish": [f"--publish={temp}/e2e-shard-timings.json"],
+        None: [],
+    }[flag]
+    assert calls(tmp_path) == [["scripts/e2e-shards.ts", "check", f"{temp}/e2e-results", *flags]]
+    if flag == "named":
+        assert (temp / "e2e-named.json").read_text() == NAMED_SPECS
+
+
+@pytest.mark.parametrize("event", ["pull_request", "merge_group"])
+def test_a_check_that_fails_fails_its_step(tmp_path, event):
+    result, _ = run_step(
+        tmp_path,
+        step_of("e2e", "name", "Every spec file ran on one shard")["run"],
+        "node",
+        EVENT=event,
+        SCOPE="named",
+        E2E_SPECS=NAMED_SPECS,
+        PUBLISHES_TIMINGS="false",
+        RUNNER_TEMP=str(tmp_path),
+        FAKE_EXIT="1",
+    )
+
+    assert result.returncode == 1
+
+
+# The shards' results as `e2e` finds them. `actions/download-artifact` makes a folder for each
+# artifact its pattern matches, except that it unpacks a lone match straight into the path
+# (`artifacts.length === 1`, in its source at the pinned commit), and a run keeps the artifacts of
+# its earlier attempts, the newest of each name. These tests run the job's own steps from the
+# download to the deal's check, with the real dealer.
+
+
+def upload(folder, shard, total, scope, files, hand):
+    """The two files a shard's artifact holds, in `folder`."""
+    folder.mkdir(parents=True, exist_ok=True)
+    deal = {
+        "shard": shard, "total": total, "source": "the test timings", "timings": {},
+        "scope": scope, "listed": 20, "files": sorted(files), "hand": sorted(hand),
+    }
+    (folder / "e2e-deal.json").write_text(json.dumps(deal))
+    (folder / "results.json").write_text(json.dumps({"suites": [{"file": file} for file in hand]}))
+
+
+def whole_run_upload(results):
+    total = whole_run_shards()
+    files = [f"{n:02}.spec.ts" for n in range(1, total + 1)]
+    for shard in range(1, total + 1):
+        upload(results / f"e2e-results-shard-{shard}", shard, total, "whole", files, [files[shard - 1]])
+
+
+def check_the_downloaded_results(tmp_path, temp, scope, shards, specs):
+    """The first of the steps after the download that fails, else the deal's check."""
+    steps = workflow_jobs()["e2e"]["steps"]
+    [download] = [n for n, step in enumerate(steps) if step.get("uses", "").startswith("actions/download-artifact@")]
+    [check] = [n for n, step in enumerate(steps) if step.get("name") == "Every spec file ran on one shard"]
+    for step in steps[download + 1:check + 1]:
+        if not step["run"]:
+            continue
+        done, _ = run_step(
+            tmp_path,
+            step["run"],
+            cwd=ROOT / step.get("working-directory", "."),
+            RUNNER_TEMP=str(temp),
+            E2E_SHARDS=str(whole_run_shards()),
+            EVENT="pull_request",
+            SCOPE=scope,
+            E2E_SPECS=specs,
+            SELECTED_SHARDS=shards,
+            PUBLISHES_TIMINGS="false",
+        )
+        if done.returncode:
+            break
+    return done
+
+
+def test_the_results_are_put_in_order_between_the_download_and_the_check():
+    steps = workflow_jobs()["e2e"]["steps"]
+    names = [step.get("name") for step in steps]
+    step = steps[names.index(RESULTS_STEP)]
+
+    assert steps[names.index(RESULTS_STEP) - 1]["uses"].startswith("actions/download-artifact@")
+    assert names.index(RESULTS_STEP) < names.index("Every spec file ran on one shard")
+    assert step["env"] == {"SELECTED_SHARDS": "${{ needs.e2e-select.outputs.shards }}"}
+    # Whatever the shards' result: the audit reads the reports of a run whose shards failed.
+    assert "if" not in step
+
+
+def test_a_one_shard_run_s_lone_artifact_is_checked_as_shard_1_s(tmp_path):
+    results = tmp_path / "temp" / "e2e-results"
+    upload(results, 1, 1, "named", ["a.spec.ts", "b.spec.ts"], ["a.spec.ts", "b.spec.ts"])
+
+    done = check_the_downloaded_results(tmp_path, tmp_path / "temp", "named", "[1]", '["a.spec.ts","b.spec.ts"]')
+
+    assert done.returncode == 0, done.stdout + done.stderr
+    # Where the audit looks for reports.
+    assert (results / "e2e-results-shard-1" / "results.json").exists()
+    assert not (results / "results.json").exists()
+
+
+def test_a_lone_artifact_of_a_run_with_more_shards_still_fails_the_check(tmp_path):
+    upload(tmp_path / "temp" / "e2e-results", 1, 2, "named", ["a.spec.ts", "b.spec.ts"], ["a.spec.ts"])
+
+    done = check_the_downloaded_results(
+        tmp_path, tmp_path / "temp", "named", "[1,2]", '["a.spec.ts","b.spec.ts"]'
+    )
+
+    assert done.returncode == 1
+    assert "shard 2/2 uploaded no deal record" in done.stdout
+
+
+@pytest.mark.parametrize("asked", [1, 2])
+def test_a_re_run_that_asks_for_fewer_shards_checks_its_own_alone(tmp_path, asked):
+    results = tmp_path / "temp" / "e2e-results"
+    # The first attempt ran the whole suite; this one's shards replaced the first of its folders.
+    whole_run_upload(results)
+    named = ["a.spec.ts", "b.spec.ts"][:asked]
+    for shard, file in enumerate(named, start=1):
+        upload(results / f"e2e-results-shard-{shard}", shard, asked, "named", named, [file])
+
+    done = check_the_downloaded_results(
+        tmp_path, tmp_path / "temp", "named", json.dumps(list(range(1, asked + 1))), json.dumps(named)
+    )
+
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert sorted(folder.name for folder in results.iterdir()) == [
+        f"e2e-results-shard-{shard}" for shard in range(1, asked + 1)
+    ]
+
+
+# `e2e-select` skipped, failed or answered whole: no list of shards, and a whole run's count holds.
+@pytest.mark.parametrize("scope", ["", "whole"])
+def test_a_whole_run_keeps_every_shard_s_results(tmp_path, scope):
+    results = tmp_path / "temp" / "e2e-results"
+    whole_run_upload(results)
+
+    done = check_the_downloaded_results(tmp_path, tmp_path / "temp", scope, "", "")
+
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert len(list(results.iterdir())) == whole_run_shards()
+
+
+@pytest.mark.parametrize("shards", ["", "[]", "[1]"])
+def test_a_run_with_nothing_downloaded_passes_the_results_step(tmp_path, shards):
+    done, _ = run_step(
+        tmp_path,
+        step_of("e2e", "name", RESULTS_STEP)["run"],
+        RUNNER_TEMP=str(tmp_path / "temp"),
+        E2E_SHARDS=str(whole_run_shards()),
+        SELECTED_SHARDS=shards,
+    )
+
+    assert done.returncode == 0, done.stderr
+
+
+QUEUE_AUDIT_STEP = "Audit the pull request's selection"
+QUEUE_AUDIT_ARGS = ["audit", "--queue", "--github", "--base", "HEAD^1", "--head", "HEAD"]
+
+
+def run_queue_audit(tmp_path, shards):
+    """The queue audit's step over the reports of `shards` shards, with a stand-in `python3`; the
+    finished process and the reports."""
+    temp = tmp_path / "runner temp"
+    reports = []
+    for shard in range(1, shards + 1):
+        folder = temp / "e2e-results" / f"e2e-results-shard-{shard}"
+        folder.mkdir(parents=True)
+        (folder / "results.json").write_text("{}")
+        reports.append(f"{folder}/results.json")
+    done, _ = run_step(
+        tmp_path, step_of("e2e", "name", QUEUE_AUDIT_STEP)["run"], "python3", RUNNER_TEMP=str(temp)
+    )
+    return done, reports
+
+
+def test_a_trial_commit_s_run_audits_the_pull_request_s_selection_beside_the_pull_request_s_own_audit(tmp_path):
+    e2e = workflow_jobs()["e2e"]
+    checkout = e2e["steps"][0]
+    first_audit = [step.get("name") for step in e2e["steps"]].index("Audit the selection")
+    own, queue = e2e["steps"][first_audit:first_audit + 2]
+
+    assert queue["name"] == QUEUE_AUDIT_STEP
+    assert queue["if"] == "github.event_name == 'merge_group'"
+    assert queue["continue-on-error"] == "true"
+    assert queue["timeout-minutes"] == "10"
+    assert queue["env"] == {"GH_TOKEN": "${{ github.token }}", "GH_REPO": "${{ github.repository }}"}
+    # The step continues on error, so what it needs would be missed in silence. It runs the script
+    # from the repository's root, reads dev's newest map with `actions: read`, and diffs the trial
+    # commit from its first parent, so the checkout takes both.
+    assert "working-directory" not in queue
+    assert e2e["permissions"] == {"contents": "read", "actions": "read"}
+    assert checkout["uses"].startswith("actions/checkout@")
+    assert checkout["with"]["fetch-depth"] == "2"
+    done, reports = run_queue_audit(tmp_path, 2)
+    assert done.returncode == 0, done.stderr
+    assert calls(tmp_path) == [["scripts/affected-specs.py", *QUEUE_AUDIT_ARGS, *reports]]
+    assert own["if"] == "github.event_name == 'pull_request'"
+    assert "--queue" not in own["run"]
+
+
+def test_the_queue_s_audit_with_no_report_downloaded_passes_the_script_none(tmp_path):
+    done, _ = run_queue_audit(tmp_path, 0)
+
+    assert done.returncode == 0, done.stderr
+    # Not the pattern that matched nothing, which the script would name as a report it could not read.
+    assert calls(tmp_path) == [["scripts/affected-specs.py", *QUEUE_AUDIT_ARGS]]
+
+
+NO_SPEC_RAN = "No E2E spec ran: the test map names none for this change."
+LAST_STEP = "Every shard passed, or the selection named no spec"
+
+
+def run_last_step(tmp_path, result, event, scope, specs):
+    summary = tmp_path / "summary.md"
+    summary.write_text("")
+    done, _ = run_step(
+        tmp_path,
+        step_of("e2e", "name", LAST_STEP)["run"],
+        SHARDS_RESULT=result,
+        EVENT=event,
+        SCOPE=scope,
+        E2E_SPECS=specs,
+        GITHUB_STEP_SUMMARY=str(summary),
+    )
+    return done, summary.read_text()
+
+
+def test_the_last_step_comes_last_and_reads_the_shards_result():
+    steps = workflow_jobs()["e2e"]["steps"]
+
+    assert steps[-1]["name"] == LAST_STEP
+    assert steps[-1]["env"] == {"SHARDS_RESULT": "${{ needs.e2e-shard.result }}"}
+    assert "if" not in steps[-1]
+    assert "continue-on-error" not in steps[-1]
+
+
+@pytest.mark.parametrize(
+    ("event", "scope", "specs"),
+    [
+        ("pull_request", "named", NAMED_SPECS),
+        ("pull_request", "whole", ""),
+        ("pull_request", "", ""),
+        ("merge_group", "", ""),
+        ("push", "", ""),
+    ],
+)
+def test_e2e_passes_when_every_shard_passed(tmp_path, event, scope, specs):
+    done, summary = run_last_step(tmp_path, "success", event, scope, specs)
+
+    assert done.returncode == 0
+    assert summary == ""
+
+
+def test_e2e_passes_with_no_shard_when_the_selection_named_no_spec(tmp_path):
+    done, summary = run_last_step(tmp_path, "skipped", "pull_request", "named", "[]")
+
+    assert done.returncode == 0
+    assert done.stdout == f"{NO_SPEC_RAN}\n"
+    assert summary == f"{NO_SPEC_RAN}\n"
+
+
+@pytest.mark.parametrize(
+    ("result", "event", "scope", "specs"),
+    [
+        ("skipped", "pull_request", "named", NAMED_SPECS),
+        ("skipped", "pull_request", "named", ""),
+        ("skipped", "pull_request", "whole", "[]"),
+        ("skipped", "pull_request", "", ""),
+        ("skipped", "merge_group", "named", "[]"),
+        ("skipped", "merge_group", "", ""),
+        ("skipped", "push", "named", "[]"),
+        ("failure", "pull_request", "named", "[]"),
+        ("failure", "pull_request", "named", NAMED_SPECS),
+        ("failure", "merge_group", "", ""),
+        ("cancelled", "pull_request", "named", "[]"),
+        ("", "pull_request", "named", "[]"),
+    ],
+)
+def test_e2e_fails_on_any_other_end_of_the_shards(tmp_path, result, event, scope, specs):
+    done, summary = run_last_step(tmp_path, result, event, scope, specs)
+
+    assert done.returncode == 1
+    assert done.stdout == f"::error::The e2e shards ended {result}\n"
+    assert summary == ""
 
 
 def test_the_test_map_is_built_only_on_a_nightly_or_hand_started_run_whose_shards_ran():
@@ -853,6 +1296,12 @@ def test_the_test_map_is_built_only_on_a_nightly_or_hand_started_run_whose_shard
         " && needs.e2e-shard.result != 'skipped' }}"
     )
     assert test_map["continue-on-error"] == "true"
+
+
+def test_the_test_map_expects_every_shard_of_a_whole_run():
+    build = step_of("test-map", "name", "Build the map")
+
+    assert '--shards-expected "$E2E_SHARDS"' in build["run"]
 
 
 def test_the_retry_report_runs_only_nightly_or_by_hand_reading_actions_and_never_fails_the_run():
@@ -872,12 +1321,7 @@ def test_the_retry_report_runs_only_nightly_or_by_hand_reading_actions_and_never
 
 
 def test_only_a_nightly_or_hand_started_run_s_shards_record():
-    lines = WORKFLOW.read_text().splitlines()
-    jobs_block = block(lines, lines.index("jobs:"), 0)
-    shard = block(jobs_block, jobs_block.index("  e2e-shard:"), 2)
-    shard_env = mapping(block(shard, shard.index("    env:"), 4), 6)
-
-    assert shard_env["RECORD_TEST_MAP"] == (
+    assert workflow_jobs()["e2e-shard"]["env"]["RECORD_TEST_MAP"] == (
         "${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}"
     )
     assert WORKFLOW.read_text().count("RECORD_TEST_MAP:") == 1
@@ -934,9 +1378,9 @@ def test_a_warm_push_s_jobs_pin_the_same_actions_as_the_rest_of_the_workflow():
                 assert step["uses"] in pinned, step["uses"]
 
 
-# The `decide` step's own shell, with a fake python3 that answers as told.
+# Steps' own shells, each with a stand-in for the program it runs, which answers as told.
 
-FAKE_PYTHON = """#!/bin/sh
+FAKE_PROGRAM = """#!/bin/sh
 printf '%s\\037' "$@" >> "$FAKE_CALLS_LOG"
 printf '\\n' >> "$FAKE_CALLS_LOG"
 printf '%b' "$FAKE_STDOUT"
@@ -944,27 +1388,52 @@ exit "${FAKE_EXIT:-0}"
 """
 
 
-def run_decide(tmp_path, **fakes):
+def run_step(tmp_path, script_text, fake=None, cwd=None, **env):
+    """A step's shell as the runner runs it (`bash -e`), with `fake` on its PATH answering as the
+    FAKE_* variables say. Returns the finished process and the step's outputs."""
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir(exist_ok=True)
-    fake = bin_dir / "python3"
-    fake.write_text(FAKE_PYTHON)
-    fake.chmod(0o755)
+    if fake:
+        stand_in = bin_dir / fake
+        stand_in.write_text(FAKE_PROGRAM)
+        stand_in.chmod(0o755)
     script = tmp_path / "step.sh"
-    script.write_text(workflow_jobs()["suite"]["steps"][1]["run"])
+    script.write_text(script_text)
     outputs = tmp_path / "outputs"
     outputs.write_text("")
-    env = {
-        "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
-        "HOME": str(tmp_path),
-        "FAKE_CALLS_LOG": str(tmp_path / "calls.log"),
-        "GITHUB_OUTPUT": str(outputs),
-        "EVENT": "push",
-        "COMMIT": SHA,
-        **fakes,
-    }
-    result = subprocess.run(["bash", "-e", str(script)], env=env, capture_output=True, text=True, timeout=30)
-    return result.returncode, outputs.read_text()
+    result = subprocess.run(
+        ["bash", "-e", str(script)],
+        env={
+            "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+            "HOME": str(tmp_path),
+            "FAKE_CALLS_LOG": str(tmp_path / "calls.log"),
+            "GITHUB_OUTPUT": str(outputs),
+            **env,
+        },
+        cwd=cwd or tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    return result, outputs.read_text()
+
+
+def calls(tmp_path):
+    """The arguments of each call the fake program got."""
+    log = tmp_path / "calls.log"
+    return [line.split("\x1f")[:-1] for line in log.read_text().splitlines()] if log.exists() else []
+
+
+def step_of(job_name, key, value):
+    [step] = [step for step in workflow_jobs()[job_name]["steps"] if step.get(key) == value]
+    return step
+
+
+def run_decide(tmp_path, **fakes):
+    result, outputs = run_step(
+        tmp_path, step_of("suite", "id", "decide")["run"], "python3", EVENT="push", COMMIT=SHA, **fakes
+    )
+    return result.returncode, outputs
 
 
 @pytest.mark.parametrize("word", ["warm", "full", "map", "none"])
@@ -978,8 +1447,7 @@ def test_the_step_passes_each_word_on(tmp_path, word):
 def test_the_step_runs_the_script_on_the_event_and_the_commit(tmp_path):
     run_decide(tmp_path, FAKE_STDOUT="warm\\n")
 
-    [call] = (tmp_path / "calls.log").read_text().splitlines()
-    assert call.split("\x1f")[:-1] == ["scripts/ci_suite.py", "--event", "push", "--commit", SHA]
+    assert calls(tmp_path) == [["scripts/ci_suite.py", "--event", "push", "--commit", SHA]]
 
 
 @pytest.mark.parametrize(
@@ -996,21 +1464,135 @@ def test_anything_but_a_word_from_a_script_that_passed_is_the_whole_suite(tmp_pa
 
 
 def test_a_missing_script_is_the_whole_suite(tmp_path):
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    script = tmp_path / "step.sh"
-    script.write_text(workflow_jobs()["suite"]["steps"][1]["run"].replace("python3 ", f"{bin_dir}/missing "))
-    outputs = tmp_path / "outputs"
-    outputs.write_text("")
-
-    result = subprocess.run(
-        ["bash", "-e", str(script)],
-        env={"PATH": os.environ["PATH"], "GITHUB_OUTPUT": str(outputs), "EVENT": "push", "COMMIT": SHA},
-        capture_output=True, text=True, timeout=30,
+    # The real python3, in a folder that holds no scripts/ci_suite.py.
+    result, outputs = run_step(
+        tmp_path, step_of("suite", "id", "decide")["run"], EVENT="push", COMMIT=SHA
     )
 
     assert result.returncode == 0
-    assert outputs.read_text() == "run=full\n"
+    assert outputs == "run=full\n"
+
+
+# `e2e-select`'s `decide` step: what a pull request's E2E run runs, from what `affected-specs.py ci`
+# prints. The runner's own jq reads it.
+
+COULD_NOT_DECIDE = "The selection could not decide, so the whole suite runs."
+
+
+def whole_run_shards():
+    return int(workflow_env()["E2E_SHARDS"].strip('"'))
+
+
+def decision(**fields):
+    """What `affected-specs.py ci` prints for a named decision, with `fields` in place of its own."""
+    printed = {
+        "scope": "named",
+        "why": "the test map names 2 spec files for this change",
+        "specs": ["a.spec.ts", "market/b+c.spec.ts"],
+        "shards": 2,
+        "minutes": 3.5,
+        "suite_minutes": 101.2,
+        "map": {"run": 1},
+        **fields,
+    }
+    return json.dumps(printed) + "\n"
+
+
+def run_select(tmp_path, fake="python3", **fakes):
+    return run_step(
+        tmp_path,
+        step_of("e2e-select", "id", "decide")["run"],
+        fake,
+        E2E_SHARDS=str(whole_run_shards()),
+        **fakes,
+    )
+
+
+def test_the_selection_step_asks_for_this_change_s_decision_under_the_whole_run_s_shards(tmp_path):
+    run_select(tmp_path, FAKE_STDOUT=decision())
+
+    assert whole_run_shards() == 5
+    assert calls(tmp_path) == [
+        ["scripts/affected-specs.py", "ci", "--github", "--base", "HEAD^1", "--head", "HEAD", "--max-shards", "5"]
+    ]
+
+
+@pytest.mark.parametrize(
+    ("printed", "outputs"),
+    [
+        (decision(), 'scope=named\nshards=[1,2]\nspecs=["a.spec.ts","market/b+c.spec.ts"]\n'),
+        (decision(specs=[], shards=0), "scope=named\nshards=[]\nspecs=[]\n"),
+        (
+            decision(specs=[f"{n}.spec.ts" for n in range(5)], shards=5),
+            "scope=named\nshards=[1,2,3,4,5]\nspecs="
+            + json.dumps([f"{n}.spec.ts" for n in range(5)], separators=(",", ":"))
+            + "\n",
+        ),
+    ],
+    ids=["two-specs-on-two-shards", "no-spec", "a-whole-run-s-shards"],
+)
+def test_a_named_decision_gives_the_run_its_shards_and_specs(tmp_path, printed, outputs):
+    result, written = run_select(tmp_path, FAKE_STDOUT=printed)
+
+    assert result.returncode == 0
+    assert written == outputs
+
+
+def test_a_whole_decision_runs_the_whole_suite(tmp_path):
+    printed = decision(scope="whole", why="the change names every spec", specs=[], shards=10)
+
+    result, written = run_select(tmp_path, FAKE_STDOUT=printed)
+
+    assert result.returncode == 0
+    assert written == "scope=whole\n"
+    assert result.stdout == "The selection chose the whole suite.\n"
+
+
+@pytest.mark.parametrize(
+    ("printed", "exit_code"),
+    [
+        (decision(), "1"),
+        (decision(scope="whole", specs=[], shards=10), "1"),
+        ("", "0"),
+        ("", "2"),
+        ("not json\n", "0"),
+        ("null\n", "0"),
+        (decision() + decision(), "0"),
+        (decision(scope="whole", specs=[], shards=10) + decision(), "0"),
+        (decision(scope="some"), "0"),
+        (decision(shards=11), "0"),
+        (decision(shards=-1), "0"),
+        (decision(shards=1.5), "0"),
+        (decision(shards="2"), "0"),
+        (decision(shards=None), "0"),
+        (decision(shards=0), "0"),
+        (decision(specs=[], shards=2), "0"),
+        (decision(specs=["a.spec.ts", 2]), "0"),
+        (decision(specs="a.spec.ts"), "0"),
+        (decision(specs={"first": "a.spec.ts"}), "0"),
+        (decision(specs=None, shards=0), "0"),
+    ],
+    ids=[
+        "failed-after-a-named-decision", "failed-after-a-whole-one", "silent", "usage-error", "not-json",
+        "null", "two-objects", "two-objects-whole-first", "an-unknown-scope", "more-shards-than-a-whole-run",
+        "negative-shards", "a-part-of-a-shard", "shards-as-text", "no-shard-count", "no-shard-for-some-specs",
+        "shards-for-no-spec", "a-spec-that-is-not-text", "specs-as-one-name", "specs-as-an-object", "no-list",
+    ],
+)
+def test_any_doubt_about_the_selection_runs_the_whole_suite(tmp_path, printed, exit_code):
+    result, written = run_select(tmp_path, FAKE_STDOUT=printed, FAKE_EXIT=exit_code)
+
+    assert result.returncode == 0
+    assert written == "scope=whole\n"
+    assert result.stdout == f"{COULD_NOT_DECIDE}\n"
+
+
+def test_a_missing_selection_script_runs_the_whole_suite(tmp_path):
+    result, written = run_select(tmp_path, fake=None)
+
+    assert result.returncode == 0
+    assert written == "scope=whole\n"
+    assert result.stdout == f"{COULD_NOT_DECIDE}\n"
 
 
 # The two actions' conditions are evaluated, as the runner would, so a test says what a step does,

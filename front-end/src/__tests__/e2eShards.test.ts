@@ -1,11 +1,22 @@
 /**
  * The e2e shards (T234) are dealt by measured minutes, not cut from the alphabetical list by test
  * count: Playwright's own `--shard` put the three people-at-scale files, whose names sort together,
- * on one shard, which ran 24 minutes of tests while another ran 6. Each shard deals the whole list
- * itself and runs its own hand, so the dealing must be the same on every runner and must hand every
- * spec file to exactly one shard.
+ * on one shard, which ran 24 minutes of tests while another ran 6. Each shard deals the list itself,
+ * every spec file or the ones the run names, and runs its own hand, so the dealing must be the same
+ * on every runner and must hand every file it deals to exactly one shard.
  */
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
@@ -21,6 +32,7 @@ import {
   defaultSeconds,
   fileFilter,
   fileWeight,
+  filesToDeal,
   type GitHubReads,
   parseShard,
   parseTimings,
@@ -214,6 +226,218 @@ describe('dealShards by wall time', () => {
       hand.reduce((sum, file) => sum + weight(file), 0),
     );
     expect(bySeconds).toEqual([220, 330]);
+  });
+});
+
+describe('filesToDeal', () => {
+  const listed = ['a.spec.ts', 'b.spec.ts', 'c.spec.ts', 'd.spec.ts'];
+
+  it('deals the whole list when no names are given', () => {
+    expect(filesToDeal(listed, undefined)).toEqual({
+      scope: 'whole',
+      files: listed,
+      unlisted: [],
+    });
+  });
+
+  it('deals the named list alone, in alphabetical order, each file once', () => {
+    expect(filesToDeal(listed, ['c.spec.ts', 'a.spec.ts', 'c.spec.ts'])).toEqual({
+      scope: 'named',
+      files: ['a.spec.ts', 'c.spec.ts'],
+      unlisted: [],
+    });
+  });
+
+  it('names every named file Playwright does not list, in order, and none when all are listed', () => {
+    // The shard fails on any of them, so each is named, not the first alone.
+    expect(
+      filesToDeal(listed, ['y.spec.ts', 'b.spec.ts', 'x.spec.ts', 'y.spec.ts']).unlisted,
+    ).toEqual(['x.spec.ts', 'y.spec.ts']);
+    expect(filesToDeal(listed, listed).unlisted).toEqual([]);
+  });
+
+  it('deals an empty named list as named, with no files, not as the whole suite', () => {
+    expect(filesToDeal(listed, [])).toEqual({ scope: 'named', files: [], unlisted: [] });
+  });
+
+  it('puts each named file in exactly one hand, and no other file in any', () => {
+    const named = FILES.filter((_, n) => n % 3 === 0);
+    const hands = dealShards(filesToDeal(FILES, named).files, SECONDS, 4);
+    expect(hands.flat().sort()).toEqual(named);
+  });
+});
+
+/**
+ * A shard run from the command line, as CI's `e2e-shard` job runs it: a copy of the script in a
+ * folder of its own, since it writes its deal record beside itself, with a stand-in for `npx` that
+ * lists the suite, or the files the filters name, and notes what Playwright was asked to run.
+ */
+describe('a shard from the command line', () => {
+  const ROOT = '/repo/front-end/e2e';
+  const SUITE = ['a.spec.ts', 'b.spec.ts', 'c.spec.ts', 'd.spec.ts'];
+  const DEALT_BY = {
+    source: 'the test timings',
+    timings: { 'a.spec.ts': 60, 'b.spec.ts': 120, 'c.spec.ts': 180, 'd.spec.ts': 240 },
+  };
+  const NPX = `#!${process.execPath}
+const args = process.argv.slice(2);
+if (args.includes('--list')) {
+  const filters = args.filter((arg) => arg.startsWith('/')).map((arg) => new RegExp(arg.slice(1, -1)));
+  const files = ${JSON.stringify(SUITE)}.filter(
+    (file) => filters.length === 0 || filters.some((filter) => filter.test('${ROOT}/' + file)),
+  );
+  console.log(JSON.stringify({ config: { rootDir: '${ROOT}' }, suites: files.map((file) => ({ file })) }));
+} else {
+  require('node:fs').appendFileSync(process.env.RAN, JSON.stringify(args) + '\\n');
+}
+`;
+
+  /** Runs the script with the arguments `args` makes of the paths of its two files: the timings,
+   * and the `--specs` file, which holds `specs` when that is given and is missing otherwise. */
+  function run(args: (files: { timings: string; specs: string }) => string[], specs?: string) {
+    const folder = mkdtempSync(join(tmpdir(), 'e2e-shards-'));
+    try {
+      const scripts = join(folder, 'scripts');
+      const bin = join(folder, 'bin');
+      mkdirSync(scripts);
+      mkdirSync(bin);
+      for (const name of ['e2e-shards.ts', 'e2e-shard-timings.json']) {
+        copyFileSync(join(dirname(timingsFile()), name), join(scripts, name));
+      }
+      writeFileSync(join(scripts, 'package.json'), '{ "type": "module" }');
+      writeFileSync(join(bin, 'npx'), NPX, { mode: 0o755 });
+      const files = {
+        timings: join(folder, 'timings.json'),
+        specs: join(folder, 'specs.json'),
+      };
+      writeFileSync(files.timings, JSON.stringify(DEALT_BY));
+      if (specs !== undefined) writeFileSync(files.specs, specs);
+      const ran = join(folder, 'ran');
+      const shard = spawnSync(process.execPath, [join(scripts, 'e2e-shards.ts'), ...args(files)], {
+        encoding: 'utf8',
+        env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, RAN: ran },
+      });
+      const lines = (path: string) =>
+        existsSync(path) ? readFileSync(path, 'utf8').trim().split('\n') : [];
+      const [record] = lines(join(folder, 'test-results', 'e2e-deal.json'));
+      return {
+        code: shard.status,
+        said: shard.stdout + shard.stderr,
+        specsFile: files.specs,
+        record: record === undefined ? undefined : (JSON.parse(record) as DealRecord),
+        ran: lines(ran).map((line) => JSON.parse(line) as string[]),
+      };
+    } finally {
+      rmSync(folder, { recursive: true, force: true });
+    }
+  }
+
+  const named = JSON.stringify(['d.spec.ts', 'b.spec.ts']);
+
+  it('deals the named list alone, records that it did, and runs its hand', () => {
+    const shard = run(
+      ({ timings, specs }) => [
+        '--shard=1/2',
+        `--specs=${specs}`,
+        `--timings=${timings}`,
+        '--retries=0',
+      ],
+      named,
+    );
+    expect(shard.code, shard.said).toBe(0);
+    expect(shard.said).toContain(
+      'e2e shard 1/2: 1 of the 2 named spec files (of 4 listed), 0 serial, ' +
+        'about 4.0 minutes by the test timings',
+    );
+    expect(shard.record).toEqual({
+      shard: 1,
+      total: 2,
+      ...DEALT_BY,
+      scope: 'named',
+      listed: 4,
+      files: ['b.spec.ts', 'd.spec.ts'],
+      hand: ['d.spec.ts'],
+      serial: [],
+      workers: 1,
+    });
+    // The hand has no serial file, so it runs in the parallel pass alone.
+    expect(shard.ran).toEqual([
+      [
+        'playwright',
+        'test',
+        '--project=chromium',
+        expect.stringMatching(/^--output=.*\/test-results\/parallel$/),
+        fileFilter(ROOT, 'd.spec.ts'),
+        '--retries=0',
+      ],
+    ]);
+  });
+
+  it('words a one-file named list in the singular', () => {
+    const shard = run(
+      ({ timings, specs }) => ['--shard=1/1', `--specs=${specs}`, `--timings=${timings}`],
+      JSON.stringify(['d.spec.ts']),
+    );
+    expect(shard.code, shard.said).toBe(0);
+    expect(shard.said).toContain(
+      'e2e shard 1/1: 1 of the 1 named spec file (of 4 listed), 0 serial, ',
+    );
+  });
+
+  it('deals every listed file without --specs, and records the whole suite', () => {
+    const shard = run(({ timings }) => ['--shard=2/2', `--timings=${timings}`]);
+    expect(shard.code, shard.said).toBe(0);
+    expect(shard.said).toContain(
+      'e2e shard 2/2: 2 of 4 spec files, 0 serial, about 5.0 minutes by the test timings',
+    );
+    expect(shard.record).toMatchObject({
+      scope: 'whole',
+      listed: 4,
+      files: SUITE,
+      hand: ['b.spec.ts', 'c.spec.ts'],
+    });
+  });
+
+  it('fails before running anything, naming each named spec Playwright does not list', () => {
+    const shard = run(
+      ({ timings, specs }) => ['--shard=1/2', `--timings=${timings}`, `--specs=${specs}`],
+      JSON.stringify(['y.spec.ts', 'b.spec.ts', 'x.spec.ts']),
+    );
+    expect(shard.code, shard.said).toBe(1);
+    for (const file of ['x.spec.ts', 'y.spec.ts']) {
+      expect(shard.said).toContain(
+        `::error::${file} is named by the selection but Playwright does not list it`,
+      );
+    }
+    expect(shard.ran).toEqual([]);
+    // Written all the same, so the shard's artifact says what it was asked to deal.
+    expect(shard.record).toMatchObject({
+      scope: 'named',
+      listed: 4,
+      files: ['b.spec.ts', 'x.spec.ts', 'y.spec.ts'],
+      hand: [],
+    });
+  });
+
+  it('fails on a --specs file that is not a JSON array of strings, naming the file', () => {
+    for (const bad of [undefined, 'not json', '{}', '"a.spec.ts"', '["a.spec.ts", 1]']) {
+      const shard = run(({ specs }) => ['--shard=1/2', `--specs=${specs}`], bad);
+      expect(shard.code, `${bad}: ${shard.said}`).toBe(1);
+      expect(shard.said, String(bad)).toContain(`::error::${shard.specsFile}`);
+      expect(shard.ran, String(bad)).toEqual([]);
+    }
+  });
+
+  it('refuses a second --specs or --timings as a usage error', () => {
+    for (const flag of ['specs', 'timings'] as const) {
+      const shard = run(
+        (files) => ['--shard=1/2', `--${flag}=${files[flag]}`, `--${flag}=${files[flag]}`],
+        named,
+      );
+      expect(shard.code, shard.said).toBe(2);
+      expect(shard.said).toContain('--specs=<file>');
+      expect(shard.ran).toEqual([]);
+    }
   });
 });
 
@@ -491,31 +715,88 @@ describe('checkShards', () => {
     'd.spec.ts': 1,
   };
   const SOURCE = "run 5's e2e-shard-timings";
+  /** The shards of a run that dealt the whole suite, or with `named` those files alone, as a
+   * shard given `--specs` does; `deal` the serial files and workers it dealt by. */
   function shards(
     total = 2,
     source = SOURCE,
     dealtBy: Record<string, number> = timings,
+    named?: string[],
     deal: Pick<DealRecord, 'serial' | 'workers'> = {},
   ) {
-    return dealShards(files, dealtBy, total, deal).map((hand, n) => ({
+    const dealt = named ?? files;
+    return dealShards(dealt, dealtBy, total, deal).map((hand, n) => ({
       shard: n + 1,
       deal: {
         shard: n + 1,
         total,
         source,
         timings: dealtBy,
-        files,
+        scope: named ? 'named' : 'whole',
+        listed: files.length,
+        files: dealt,
         hand,
         ...deal,
       } satisfies DealRecord,
       report: report(Object.fromEntries(hand.map((file) => [file, [[timings[file]! * 1000]]]))),
     }));
   }
+  const NAMED = ['a.spec.ts', 'c.spec.ts', 'd.spec.ts'];
+  const namedShards = (named = NAMED) => shards(2, SOURCE, timings, named);
 
   it('passes when the shards dealt alike and their reports hold every spec file once', () => {
     const { problems, seconds } = checkShards(shards());
     expect(problems).toEqual([]);
     expect(seconds).toEqual([5, 5]);
+  });
+
+  it("refuses a shard that dealt the test map's selection when the run must run every spec", () => {
+    // The merge queue's, a push's and a whole pull request's check: a named deal that ran each of
+    // its own files once would otherwise pass for the suite.
+    expect(checkShards(namedShards()).problems).toEqual([
+      "shard 1/2 dealt the test map's selection, but this run must run every spec",
+      "shard 2/2 dealt the test map's selection, but this run must run every spec",
+    ]);
+  });
+
+  it('passes a named run whose shards dealt exactly the named files, in whatever order named', () => {
+    const { problems, seconds } = checkShards(namedShards(), [...NAMED].reverse());
+    expect(problems).toEqual([]);
+    expect(seconds).toEqual([4, 3]);
+  });
+
+  it('refuses a shard that dealt the whole suite when the run ran the selection', () => {
+    // Naming every file all the same, so only the scope is wrong.
+    expect(checkShards(shards(), files).problems).toEqual([
+      "shard 1/2 dealt the whole suite, but this run ran the test map's selection",
+      "shard 2/2 dealt the whole suite, but this run ran the test map's selection",
+    ]);
+  });
+
+  it('names a shard that dealt other files than the selection named', () => {
+    const [one] = namedShards();
+    // As many files as the selection, one of them another, so the names are what is compared.
+    const [, two] = namedShards(['a.spec.ts', 'b.spec.ts', 'c.spec.ts']);
+    expect(checkShards([one!, two!], NAMED).problems).toContain(
+      'shard 2/2 dealt a.spec.ts, b.spec.ts, c.spec.ts, not the 3 spec files the selection named',
+    );
+  });
+
+  it('words a selection of one file in the singular', () => {
+    const [, two] = namedShards();
+    expect(checkShards([two!], ['a.spec.ts']).problems).toContain(
+      'shard 2/2 dealt a.spec.ts, c.spec.ts, d.spec.ts, not the 1 spec file the selection named',
+    );
+  });
+
+  it('names a spec file of the selection run twice or by no shard', () => {
+    const [one, two] = namedShards();
+    const twice = { ...two!, report: report({ 'a.spec.ts': [[1]], 'd.spec.ts': [[1]] }) };
+    expect(checkShards([one!, twice], NAMED).problems).toEqual([
+      'shard 2/2 was dealt c.spec.ts, d.spec.ts but its report holds a.spec.ts, d.spec.ts',
+      'a.spec.ts ran on more than one shard',
+      'c.spec.ts ran on no shard',
+    ]);
   });
 
   it('names a shard whose deal record or report is missing, as when its upload failed', () => {
@@ -563,8 +844,11 @@ describe('checkShards', () => {
   });
 
   it('names shards that dealt by different serial files', () => {
-    const [one] = shards(2, SOURCE, timings, { serial: ['a.spec.ts'], workers: 2 });
-    const [, two] = shards(2, SOURCE, timings, { serial: ['a.spec.ts', 'b.spec.ts'], workers: 2 });
+    const [one] = shards(2, SOURCE, timings, undefined, { serial: ['a.spec.ts'], workers: 2 });
+    const [, two] = shards(2, SOURCE, timings, undefined, {
+      serial: ['a.spec.ts', 'b.spec.ts'],
+      workers: 2,
+    });
     expect(checkShards([one!, two!]).problems[0]).toBe(
       `the shards dealt by different serial files: shard 1 by ${SOURCE}, 1 serial file; ` +
         `shard 2 by ${SOURCE}, 2 serial files`,
@@ -572,8 +856,8 @@ describe('checkShards', () => {
   });
 
   it('names shards that dealt by different worker counts', () => {
-    const [one] = shards(2, SOURCE, timings, { serial: ['a.spec.ts'], workers: 2 });
-    const [, two] = shards(2, SOURCE, timings, { serial: ['a.spec.ts'], workers: 3 });
+    const [one] = shards(2, SOURCE, timings, undefined, { serial: ['a.spec.ts'], workers: 2 });
+    const [, two] = shards(2, SOURCE, timings, undefined, { serial: ['a.spec.ts'], workers: 3 });
     expect(checkShards([one!, two!]).problems[0]).toBe(
       `the shards dealt by different worker counts: shard 1 by ${SOURCE}, 2 workers; ` +
         `shard 2 by ${SOURCE}, 3 workers`,
@@ -583,17 +867,156 @@ describe('checkShards', () => {
   it('reads a deal record from before the passes as no serial file at one worker', () => {
     const [oldOne, oldTwo] = shards();
     expect(checkShards([oldOne!, oldTwo!]).problems).toEqual([]);
-    const [, newTwo] = shards(2, SOURCE, timings, { serial: ['a.spec.ts'], workers: 2 });
+    const [, newTwo] = shards(2, SOURCE, timings, undefined, { serial: ['a.spec.ts'], workers: 2 });
     expect(checkShards([oldOne!, newTwo!]).problems[0]).toBe(
       'the shards dealt by different serial files and worker counts: ' +
         `shard 1 by ${SOURCE}, no serial file, 1 worker; shard 2 by ${SOURCE}, 1 serial file, 2 workers`,
     );
-    const [, sameTwo] = shards(2, SOURCE, timings, { serial: [], workers: 1 });
+    const [, sameTwo] = shards(2, SOURCE, timings, undefined, { serial: [], workers: 1 });
     expect(checkShards([oldOne!, sameTwo!]).problems).toEqual([]);
   });
 
   it('refuses with no deal record at all', () => {
     expect(checkShards([]).problems).toEqual(['no shard uploaded a deal record']);
+  });
+});
+
+/**
+ * The `e2e` job's check run from the command line, over the shards' artifacts laid out as
+ * `actions/download-artifact` lays them, with the job summary and the published timings in files of
+ * its own.
+ */
+describe('the check from the command line', () => {
+  const SUITE = ['a.spec.ts', 'b.spec.ts', 'c.spec.ts'];
+  const SELECTION = ['a.spec.ts', 'c.spec.ts'];
+  const SOURCE = 'the test timings';
+
+  /** Checks a run of one shard that dealt and ran `dealt`, or of no shard at all without it, with
+   * the arguments `args` makes of the paths: the folder, the `--named` file, which holds `list`
+   * when that is given and is missing otherwise, and the `--publish` file. */
+  function check(
+    dealt: { scope: DealRecord['scope']; files: string[] } | undefined,
+    args: (paths: { dir: string; named: string; publish: string }) => string[],
+    list?: string,
+  ) {
+    const folder = mkdtempSync(join(tmpdir(), 'e2e-check-'));
+    try {
+      const paths = {
+        dir: join(folder, 'results'),
+        named: join(folder, 'named.json'),
+        publish: join(folder, 'publish.json'),
+      };
+      mkdirSync(paths.dir);
+      if (list !== undefined) writeFileSync(paths.named, list);
+      if (dealt) {
+        const shard = join(paths.dir, 'e2e-results-shard-1');
+        mkdirSync(shard);
+        const record: DealRecord = {
+          shard: 1,
+          total: 1,
+          source: SOURCE,
+          timings: {},
+          listed: SUITE.length,
+          hand: dealt.files,
+          ...dealt,
+        };
+        writeFileSync(join(shard, 'e2e-deal.json'), JSON.stringify(record));
+        const ran = Object.fromEntries(dealt.files.map((file) => [file, [[1000]]]));
+        writeFileSync(join(shard, 'results.json'), JSON.stringify(report(ran)));
+      }
+      const summary = join(folder, 'summary.md');
+      const script = join(dirname(timingsFile()), 'e2e-shards.ts');
+      const run = spawnSync(process.execPath, [script, 'check', ...args(paths)], {
+        encoding: 'utf8',
+        env: { ...process.env, GITHUB_STEP_SUMMARY: summary },
+      });
+      const text = (path: string) => (existsSync(path) ? readFileSync(path, 'utf8') : '');
+      return {
+        code: run.status,
+        said: run.stdout + run.stderr,
+        namedFile: paths.named,
+        summary: text(summary),
+        published: text(paths.publish),
+      };
+    } finally {
+      rmSync(folder, { recursive: true, force: true });
+    }
+  }
+
+  const whole = { scope: 'whole', files: SUITE } as const;
+  const selection = { scope: 'named', files: SELECTION } as const;
+  const selectionList = JSON.stringify(SELECTION);
+
+  it('passes a whole run without --named, and publishes its timings with --publish', () => {
+    const run = check(whole, ({ dir, publish }) => [dir, `--publish=${publish}`]);
+    expect(run.code, run.said).toBe(0);
+    expect(run.summary).toContain(
+      'Every spec file the suite lists ran, dealt by the test timings.',
+    );
+    expect(JSON.parse(run.published)).toEqual({
+      'a.spec.ts': 1,
+      'b.spec.ts': 1,
+      'c.spec.ts': 1,
+    });
+  });
+
+  it('passes a named run with --named, saying how much of the suite ran', () => {
+    const run = check(selection, ({ dir, named }) => [dir, `--named=${named}`], selectionList);
+    expect(run.code, run.said).toBe(0);
+    expect(run.summary).toContain(
+      'The 2 spec files the test map named, of the 3 the suite lists, ran, ' +
+        'dealt by the test timings.',
+    );
+  });
+
+  it('fails a named run without --named', () => {
+    const run = check(selection, ({ dir }) => [dir]);
+    expect(run.code, run.said).toBe(1);
+    expect(run.said).toContain(
+      "::error::shard 1/1 dealt the test map's selection, but this run must run every spec",
+    );
+    expect(run.summary).toContain('**The deal is broken:**');
+  });
+
+  it('fails a whole run with --named', () => {
+    const run = check(whole, ({ dir, named }) => [dir, `--named=${named}`], selectionList);
+    expect(run.code, run.said).toBe(1);
+    expect(run.said).toContain(
+      "::error::shard 1/1 dealt the whole suite, but this run ran the test map's selection",
+    );
+  });
+
+  it('fails with no deal record at all, and says so in the summary', () => {
+    const run = check(undefined, ({ dir }) => [dir]);
+    expect(run.code, run.said).toBe(1);
+    expect(run.summary).toContain('- no shard uploaded a deal record');
+  });
+
+  it('fails on a --named file that is not a JSON array of strings, naming the file', () => {
+    for (const bad of [undefined, 'not json', '{}', '"a.spec.ts"', '["a.spec.ts", 1]']) {
+      const run = check(selection, ({ dir, named }) => [dir, `--named=${named}`], bad);
+      expect(run.code, `${bad}: ${run.said}`).toBe(1);
+      expect(run.said, String(bad)).toContain(`::error::${run.namedFile}`);
+      expect(run.summary, String(bad)).toBe('');
+    }
+    // An empty value is a file that cannot be read, never a check without --named.
+    const empty = check(whole, ({ dir }) => [dir, '--named=']);
+    expect(empty.code, empty.said).toBe(1);
+  });
+
+  it('refuses --named with --publish, or any other second argument, as a usage error', () => {
+    const refused: ((paths: { named: string; publish: string }) => string[])[] = [
+      ({ named, publish }) => [`--named=${named}`, `--publish=${publish}`],
+      ({ named, publish }) => [`--publish=${publish}`, `--named=${named}`],
+      () => ['--other'],
+      () => ['--publish='],
+    ];
+    for (const flags of refused) {
+      const run = check(whole, (paths) => [paths.dir, ...flags(paths)], JSON.stringify(SUITE));
+      expect(run.code, `${flags}: ${run.said}`).toBe(2);
+      expect(run.said, String(flags)).toContain('[--publish=<file> | --named=<file>]');
+      expect(run.summary + run.published, String(flags)).toBe('');
+    }
   });
 });
 
@@ -603,6 +1026,8 @@ describe('dealtBy', () => {
     total: 3,
     source,
     timings: {},
+    scope: 'whole',
+    listed: 0,
     files: [],
     hand: [],
   });
@@ -631,6 +1056,8 @@ describe('publishedTimings', () => {
       total: 2,
       source: 'x',
       timings,
+      scope: 'whole',
+      listed: files.length,
       files,
       hand,
     });
@@ -644,17 +1071,39 @@ describe('publishedTimings', () => {
 });
 
 describe('shardSummary', () => {
-  it("names the timings' source, each shard's seconds and the spread", () => {
-    const text = shardSummary("run 5's e2e-shard-timings", [600, 750.4, 700], []);
-    expect(text).toContain("Dealt by run 5's e2e-shard-timings.");
+  const whole = { scope: 'whole', files: 287, listed: 287 } as const;
+  const named = { scope: 'named', files: 23, listed: 287 } as const;
+
+  it("opens saying the whole suite ran, by which timings, then each shard's seconds", () => {
+    const text = shardSummary("run 5's e2e-shard-timings", [600, 750.4, 700], [], whole);
+    expect(text).toContain(
+      "Every spec file the suite lists ran, dealt by run 5's e2e-shard-timings.",
+    );
     expect(text).toContain('| 2/3 | 750 |');
     expect(text).toContain('Spread: 150 seconds between the fastest and the slowest shard');
   });
 
-  it('lists the problems the check found', () => {
-    expect(shardSummary('x', [1], ['c.spec.ts ran on no shard'])).toContain(
-      '- c.spec.ts ran on no shard',
+  it('opens saying how much of the suite ran when the test map named the files', () => {
+    expect(shardSummary("run 5's e2e-shard-timings", [600], [], named)).toContain(
+      'The 23 spec files the test map named, of the 287 the suite lists, ran, ' +
+        "dealt by run 5's e2e-shard-timings.",
     );
+  });
+
+  it('opens in the singular when the test map named one file', () => {
+    expect(shardSummary('x', [1], [], { scope: 'named', files: 1, listed: 287 })).toContain(
+      'The 1 spec file the test map named, of the 287 the suite lists, ran, dealt by x.',
+    );
+  });
+
+  it('lists the problems the check found, and claims no file ran above them', () => {
+    for (const ran of [whole, named]) {
+      const text = shardSummary('x', [1], ['c.spec.ts ran on no shard'], ran);
+      expect(text).toContain('- c.spec.ts ran on no shard');
+      expect(text).toContain('\nDealt by x.\n');
+      expect(text).not.toContain(', ran, dealt by');
+      expect(text).not.toContain('lists ran');
+    }
   });
 
   const phase = (name: Phase['name'], seconds: number): Phase => ({
@@ -665,16 +1114,11 @@ describe('shardSummary', () => {
   });
 
   it("gives each shard's serial and parallel pass, and the spread over their sum", () => {
-    const text = shardSummary(
-      'x',
-      [600, 750.4, 700],
-      [],
-      [
-        [phase('serial', 120.4), phase('parallel', 500)],
-        [phase('parallel', 800)],
-        [phase('serial', 100), phase('parallel', 650)],
-      ],
-    );
+    const text = shardSummary('x', [600, 750.4, 700], [], whole, [
+      [phase('serial', 120.4), phase('parallel', 500)],
+      [phase('parallel', 800)],
+      [phase('serial', 100), phase('parallel', 650)],
+    ]);
     expect(text).toContain('| Shard | Seconds of tests | Serial pass | Parallel pass |');
     expect(text).toContain('| 1/3 | 600 | 120 | 500 |');
     expect(text).toContain('| 2/3 | 750 | - | 800 |');
@@ -685,18 +1129,17 @@ describe('shardSummary', () => {
   });
 
   it('gives a dash for a shard with no phases, and the spread by seconds of tests unless every shard has them', () => {
-    const text = shardSummary(
-      'x',
-      [600, 750.4, 700],
-      [],
-      [[phase('serial', 120), phase('parallel', 500)], undefined, [phase('parallel', 650)]],
-    );
+    const text = shardSummary('x', [600, 750.4, 700], [], whole, [
+      [phase('serial', 120), phase('parallel', 500)],
+      undefined,
+      [phase('parallel', 650)],
+    ]);
     expect(text).toContain('| 2/3 | 750 | - | - |');
     expect(text).toContain('| 3/3 | 700 | - | 650 |');
     expect(text).toContain(
       'Spread: 150 seconds between the fastest and the slowest shard (20% of the slowest).',
     );
-    expect(shardSummary('x', [600, 750], [])).toContain('| 2/2 | 750 | - | - |');
+    expect(shardSummary('x', [600, 750], [], whole)).toContain('| 2/2 | 750 | - | - |');
   });
 });
 
