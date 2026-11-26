@@ -19,6 +19,7 @@ One line per node, sorted by file name.
 - [The CSV import](csv-import.md) - a Google Form's responses as applications: the CSV path's in Draft and Review, one row per applicant, one mapping format
 - [The CSV proposal and start](csv-proposal-and-start.md) - a draft started from its Google Form's responses: a proposal that writes nothing, a confirm that writes all or nothing
 - [The Discord connection](discord.md) - a market connected to a server through Discord's approval screen: one bot, REST only, the card editable until archived, who is in the server and giving its role, optional values
+- [Error tracking](error-tracking.md) - `error_tracking.py`, `errorTracking.ts` and its client chunk: both sides' errors and the browser's policy violations to Sentry only with a DSN, each event built from ADR 0049's allowlist; the back end flushes before the response and on a boot refusal, the browser loads its client after the first paint; no DSN, no SDK
 - [Essential fields](essential-fields.md) - the questions every form asks: asked, required, the offering and its freeze, the reserved prefix
 - [A location's layout](floorplan-placement.md) - its page, its drawing, its editor and Fill an area, its save, its routes and who may use them; geometry, not AI; no `pyckingsolver` in production
 - [The form amendment](form-amendment.md) - fixing the form from inside the first import through the one form writer, in draft; the phase walk is gone

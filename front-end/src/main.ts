@@ -9,10 +9,14 @@ import { routerSettled } from '@/utils/routerReady';
 import { installSessionEnded } from '@/utils/sessionEnded';
 import { installMarketChanged } from '@/stores/market';
 import { PAGE_FAILED, watchPageFailed } from '@/utils/pageFailed';
+import { installErrorTracking, loadErrorTrackingAfterFirstPaint } from '@/utils/errorTracking';
 
 const app = createApp(App);
 
 app.use(createPinia());
+// Before the router is installed, so an error in the first navigation reaches Sentry too; with no
+// VITE_SENTRY_DSN it installs nothing (ADR 0049).
+installErrorTracking(app, router);
 // Before the router is installed, which starts the first navigation: a page whose code could not
 // be fetched says so, the first one included (E38/F11/S01).
 app.provide(PAGE_FAILED, watchPageFailed(router));
@@ -29,4 +33,6 @@ installMarketChanged();
 // can run until the router knows where it is.
 routerSettled(router).then(() => {
   app.mount('#app');
+  // The tracker's SDK is a chunk of its own, fetched once the first page has painted.
+  loadErrorTrackingAfterFirstPaint();
 });
