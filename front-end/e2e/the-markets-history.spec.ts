@@ -8,6 +8,7 @@ import { approvedVendorApplication, insertApplications } from './helpers/seedApp
 import { seedPhaseMarket, transitionMarket } from './helpers/seedPhaseMarket';
 import { uniqueMarketName } from './helpers/uniqueName';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { putVerdict } from './helpers/putVerdict';
 
 /**
@@ -15,7 +16,7 @@ import { putVerdict } from './helpers/putVerdict';
  *
  * The changes are made the way the screens make them, through the API, on a fixture market: a
  * setup change and a run of renames in draft, a verdict in review, a table assigned by hand in
- * assignment, and a colleague given a role and then a different one. The section reads them back
+ * assignment, and a colleague invited to a role, accepting it, and then given a different one. The section reads them back
  * newest first, each a sentence, a page at a time.
  */
 test.use({ viewport: { width: 1440, height: 900 } });
@@ -26,8 +27,10 @@ const VENDOR_NAME = 'Hollis Vendor';
 /** Enough renames that the first page of 25 ends before the setup change. */
 const RENAMES = 20;
 /** The form, the review setup's two decisions, the setup change, the renames, two phase moves, the
- * verdict, the assignment, two roles. */
-const WHOLE_HISTORY = 1 + 2 + 1 + RENAMES + 2 + 1 + 1 + 2;
+ * verdict, the assignment, the colleague's invitation, and two roles. */
+const WHOLE_HISTORY = 1 + 2 + 1 + RENAMES + 2 + 1 + 1 + 1 + 2;
+/** The People filter's entries: the colleague's invitation, the role they accepted, its change. */
+const PEOPLE_ENTRIES = 3;
 const PAGE = 25;
 /** The box's maximum at a desk, `PagedList`'s 28rem. */
 const BOX_MOST = 28 * 16;
@@ -96,11 +99,7 @@ async function seedAHistory(request: APIRequestContext) {
       },
     }),
   );
-  await ok(
-    await request.post(`${BACKEND_URL}/markets/${seed.marketId}/roles`, {
-      data: { user_email: COLLEAGUE.email, role: 'editor' },
-    }),
-  );
+  await grantMarketRole(request, seed.marketId, COLLEAGUE, 'editor');
   const colleagueId = await request
     .get(`${BACKEND_URL}/markets/${seed.marketId}`)
     .then(async (response) => {
@@ -139,9 +138,10 @@ test('every kind of change reads as a sentence, newest first, and older ones com
 
   await expect(manage.historySentences).toHaveCount(PAGE);
   const first = await manage.historySentences.allInnerTexts();
-  expect(first.slice(0, 5)).toEqual([
+  expect(first.slice(0, 6)).toEqual([
     `${me} changed ${COLLEAGUE.email} from Editor to Viewer`,
-    `${me} gave ${COLLEAGUE.email} the Editor role`,
+    `${me} gave ${COLLEAGUE.email} the Editor role, which they accepted`,
+    `${me} invited ${COLLEAGUE.email} as an Editor`,
     expect.stringMatching(
       new RegExp(
         `^${me} assigned ${VENDOR_NAME} ${VENDOR} at Hall A 1 \\(Full Table\\) on May 1, 2099$`,
@@ -404,7 +404,7 @@ test('a filter changed on the second page starts again at the top', async ({
   await expect(manage.historyBox.evaluate((box) => box.scrollTop)).resolves.toBeGreaterThan(0);
 
   await manage.historyKind.selectOption('People');
-  await expect(manage.historySentences).toHaveCount(2);
+  await expect(manage.historySentences).toHaveCount(PEOPLE_ENTRIES);
   await manage.historyKind.selectOption('');
 
   await expect(manage.historySentences).toHaveCount(PAGE);
@@ -535,7 +535,7 @@ test('closing the section and opening it again keeps what it read and its filter
   await manage.scrollHistoryToEnd();
   await expect(manage.historySentences).toHaveCount(WHOLE_HISTORY);
   await manage.historyKind.selectOption('People');
-  await expect(manage.historySentences).toHaveCount(2);
+  await expect(manage.historySentences).toHaveCount(PEOPLE_ENTRIES);
 
   const asked: string[] = [];
   page.on('request', (sent) => {
@@ -545,7 +545,7 @@ test('closing the section and opening it again keeps what it read and its filter
   await expect(manage.historySentences.first()).toBeHidden();
   await manage.historyToggle.click();
 
-  await expect(manage.historySentences).toHaveCount(2);
+  await expect(manage.historySentences).toHaveCount(PEOPLE_ENTRIES);
   await expect(manage.historyKind).toHaveValue('People');
   expect(asked).toEqual([]);
 });
@@ -559,7 +559,7 @@ test('each filter narrows the list, and a vendor links to their drawer', async (
   await expect(manage.historySentences).toHaveCount(PAGE);
 
   await manage.historyKind.selectOption('People');
-  await expect(manage.historySentences).toHaveCount(2);
+  await expect(manage.historySentences).toHaveCount(PEOPLE_ENTRIES);
 
   await manage.historyKind.selectOption('');
   await manage.historyVendor.field.fill(VENDOR);

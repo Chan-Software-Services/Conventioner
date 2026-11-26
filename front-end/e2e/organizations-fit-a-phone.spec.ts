@@ -2,6 +2,7 @@ import type { APIRequestContext, Locator, Page } from '@playwright/test';
 import { test, expect, BACKEND_URL, LoginPage } from './fixtures';
 import { loginViaApi } from './helpers/seeds';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { placeInOrganization } from './helpers/grantMarketRole';
 import { OrganizationsPage } from './pages/OrganizationsPage';
 
 /**
@@ -37,10 +38,12 @@ async function ensureTheOrganization(request: APIRequestContext): Promise<void> 
     org = (await mine())!;
   }
   if (!org.memberPeople?.some((member) => member.email === MEMBER)) {
-    const added = await request.post(`${BACKEND_URL}/organizations/${org.id}/members`, {
-      data: { user_email: MEMBER },
-    });
-    expect(added.ok(), await added.text()).toBe(true);
+    await placeInOrganization(
+      request,
+      org.id,
+      { email: MEMBER, password: OWNER.password },
+      'member',
+    );
   }
 }
 
@@ -105,14 +108,17 @@ test.describe('on a phone', () => {
       addressBox.y + addressBox.height,
     );
 
-    // Its add row: the field takes the row, Add and Cancel beneath it.
+    // Its invite row: the field takes the row, Send invitation and Cancel beneath it.
     await orgs.addMemberButton.tap();
     await expect(orgs.addMemberInput).toBeVisible();
     const field = await box(orgs.addMemberInput);
-    const add = await box(orgs.addMemberSubmit);
-    expect(add.y, 'Add is beneath the field').toBeGreaterThanOrEqual(field.y + field.height);
+    const send = await box(orgs.addMemberSubmit);
+    expect(send.y, 'Send invitation is beneath the field').toBeGreaterThanOrEqual(
+      field.y + field.height,
+    );
     expect(field.width, 'the field takes the row').toBeGreaterThan(250);
     await expectInside(orgs.addMemberInput, 'the email field');
+    await expectInside(orgs.addMemberSubmit, 'Send invitation');
     await expectInside(page.getByTestId('manage-org-add-member-cancel'), 'Cancel');
     expect(await widths(page)).toEqual({ layout: 390, page: 390, zoom: 1 });
 

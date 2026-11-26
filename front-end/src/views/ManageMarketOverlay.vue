@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * Manage market: who has access and their roles, who may do what, the market's history, its name,
- * its ownership and its deletion.
+ * Manage market: who has access and their roles, whom it has invited, who may do what, the market's
+ * history, its name, its ownership and its deletion.
  *
  * Each write belongs to the opening it was sent from (T411): its handle (`useDialogSubmit`) is keyed
  * by the market Manage market is open on, or by what its confirmation was opened with, and handed to
@@ -12,7 +12,8 @@
  * Its own copy of the market is a keyed read (`useServerRead`, T277 ticket 11), keyed by the market
  * it is open on: a read of the market it had been open on never lands in another opening, each
  * write is sent to the address of that key, and a write's re-read overtakes every read asked before
- * it, so an older answer never puts back what the write changed.
+ * it, so an older answer never puts back what the write changed. The invitations waiting on it are a
+ * keyed read of their own, by the same rules (T538).
  */
 import { computed, nextTick, ref, shallowRef, watch } from 'vue';
 import {
@@ -20,7 +21,9 @@ import {
   MarketPhase,
   MarketRole,
   type PermissionTableRow,
+  type MarketInvitationRole,
   type PersonWithAccess,
+  type SentInvitation,
 } from '@/assets/types/datatypes';
 import { api, getApiErrorMessage, getApiErrorStatus, isMarketChanged } from '@/utils/api';
 import { parseMarketFromApi } from '@/utils/market';
@@ -32,6 +35,8 @@ import EmailAddress from '@/components/EmailAddress.vue';
 import HandOnMarketDialog from '@/components/HandOnMarketDialog.vue';
 import MarketPermissions from '@/components/MarketPermissions.vue';
 import HistorySection from '@/components/HistorySection.vue';
+import InvitationSent from '@/components/InvitationSent.vue';
+import InvitationsWaiting from '@/components/InvitationsWaiting.vue';
 import ListFrame, { LIST_FIND_FROM } from '@/components/ListFrame.vue';
 import MarketHistory from '@/components/MarketHistory.vue';
 import {
@@ -52,6 +57,14 @@ import {
   roleAddingNothing,
   roleWords,
 } from '@/utils/peopleWithAccess';
+import {
+  fetchMarketInvitations,
+  inviteToMarket,
+  saidOf,
+  withdrawMarketInvitation,
+  type InviteSaid,
+} from '@/utils/invitations';
+import { useInvitationsWaiting } from '@/utils/useInvitationsWaiting';
 
 const props = defineProps<{
   manageOpen: boolean;
@@ -67,6 +80,8 @@ const showAddUserForm = ref(false);
 const newUserEmail = ref('');
 const newUserRole = ref<MarketRole>(MarketRole.Editor);
 const addUserErrorLine = ref<HTMLElement | null>(null);
+/** What the invite row says of the invitation it last sent, until the next is sent or the row closes. */
+const inviteSent = ref<InviteSaid | null>(null);
 const deleteConfirming = ref(false);
 /** Counts the changes this dialog has made, so its History reads them as they land. */
 const changesMade = ref(0);
@@ -119,7 +134,7 @@ const read = useServerRead<string, Market>(
   { failure: 'The market could not be loaded.' },
 );
 // The rename field takes each name a read brings that differs from the last, so a re-read after
-// an add, a role change or a refused rename leaves a name being typed alone.
+// a role change or a refused rename leaves a name being typed alone.
 watch(
   () => read.data.value?.name,
   (name) => {
@@ -165,10 +180,13 @@ const over =
   () =>
     props.manageOpen ? asked() : null;
 
-/** Add user's and Rename's writes, each said beside its row; Manage market holds while either sends. */
+/**
+ * Invite someone's and Rename's writes, each said beside its row; Manage market holds while either
+ * sends.
+ */
 const addUser = useDialogSubmit({
   opening: openOn,
-  failure: 'The person was not added.',
+  failure: 'The invitation was not sent.',
   says: 'self',
 });
 const rename = useDialogSubmit({
@@ -204,6 +222,7 @@ watch(
     if (open && market) {
       renameValue.value = market.name;
       showAddUserForm.value = false;
+      inviteSent.value = null;
       deleteConfirming.value = false;
       removing.value = null;
       peopleWords.value = '';
@@ -223,7 +242,8 @@ function refreshTheOpenMarket(marketId: string | undefined) {
 
 /**
  * Everyone with access, in the order the read serves them (E38/F12/S01): the owner first, then by
- * the role that counts, then by address, so someone just added takes their place, never the top.
+ * the role that counts, then by address, so someone who just accepted an invitation takes their
+ * place, never the top.
  */
 const accessList = computed(() =>
   (marketData.value?.peopleWithAccess ?? []).map((person) => ({
@@ -264,12 +284,36 @@ function changeableRoles(role: MarketRole): MarketRole[] {
 }
 
 /**
- * The roles this person may grant, in the order they are offered. Empty for a Viewer or an Editor,
- * who were shown "Add user" and refused with a 403 (bug 37).
+ * The roles this person may grant, in the order they are offered. Empty for anyone neither roles
+ * row lets through, a Viewer or an Editor on the built-in table, who were shown "Add user" and
+ * refused with a 403 (bug 37), and who see no "Invited".
  */
 const grantableRoles = computed(() =>
   GIVEN_ROLES.filter((role) => canManageRoles(marketData.value, role)),
 );
+
+/**
+ * The invitations waiting on the market, read for a reader whom either roles row lets through, as
+ * the server serves them only to such a reader; keyed by the market Manage market is open on, so an
+ * answer for the market it was open on never lands in another opening.
+ */
+const invitations = useInvitationsWaiting({
+  key: () => (grantableRoles.value.length ? read.key.value : null),
+  fetch: fetchMarketInvitations,
+  withdraw: withdrawMarketInvitation,
+  ended: rereadAfterAWrite,
+});
+// Each opening starts with nothing finding in "Invited".
+watch(
+  () => [props.manageOpen, props.market] as const,
+  ([open, market]) => {
+    if (open && market) invitations.reset();
+  },
+  { immediate: true },
+);
+/** Whoever may give an invitation's role may withdraw it, as the server asks that role's row. */
+const mayWithdraw = (invitation: SentInvitation<MarketInvitationRole>) =>
+  canManageRoles(marketData.value, invitation.role);
 
 /** Transferring a market's ownership is the table's "Transfer ownership" row, its Owner's alone (T283). */
 const canHandOn = computed(() => mayTake(marketData.value, MarketAction.HandOnMarket));
@@ -297,8 +341,10 @@ const canReadHistory = computed(() => mayTake(marketData.value, MarketAction.Rea
 const renameRefusal = computed(() => actionRefusal(marketData.value, MarketAction.ChangeSetup));
 
 /**
- * The person is added and who has access read again, both inside the write, so a second press
- * sends nothing until the list shows them. A refusal is said under the form.
+ * The invitation is sent and the invitations read again, both inside the write, so a second press
+ * sends nothing until "Invited" lists it. The answer is the same for every address, and nobody is
+ * under "Users with access" until they accept. A refusal is said under the form in the server's
+ * words, the address kept.
  */
 async function handleAddUser() {
   const email = newUserEmail.value.trim();
@@ -306,38 +352,29 @@ async function handleAddUser() {
   const marketId = read.key.value;
   if (!market || !marketId || !email) return;
   const role = newUserRole.value;
+  inviteSent.value = null;
   await addUser.submit(
     async (isCurrent) => {
-      try {
-        await api.post(`/markets/${encodeURIComponent(marketId)}/roles`, {
-          user_email: email,
-          role,
-        });
-      } catch (err) {
-        // The market changed under the add (ADR 0024): who has access is re-read, the sentence kept.
-        if (isMarketChanged(err)) await rereadAfterAWrite(isCurrent);
-        throw err;
-      }
-      await rereadAfterAWrite(isCurrent);
+      const sent = await inviteToMarket(marketId, email, role);
+      await invitations.reread(isCurrent);
+      return saidOf(sent, email);
     },
     {
-      done: () => {
-        // The form stays open with an empty field: adding two people in a row is the case
+      done: (sent) => {
+        // The form stays open with an empty field: inviting two people in a row is the case
         // E20/F01/S02 is named after, and this dialog is the same shape.
         newUserEmail.value = '';
         newUserRole.value = MarketRole.Editor;
-        // A later change ends a refusal's words, as choosing a role or removing someone does, and
-        // adding back the person it named must not bring them back with the row.
+        inviteSent.value = sent;
+        // A later change ends a refusal's words, as choosing a role or removing someone does.
         userError.value = null;
         changesMade.value++;
-        // Someone just added takes their place by role and address, which may be past the fold.
-        findPerson(email);
       },
     },
   );
 }
 
-// A refused add stands under the form, which a short window's body can hold at its very foot.
+// A refused invitation stands under the form, which a short window's body can hold at its foot.
 watch(
   addUserSentence,
   (sentence) => {
@@ -365,7 +402,7 @@ function cancelRemove() {
  * open. The Remove that opened the confirmation is gone with the role, so focus goes to the list. A
  * 404 is a role another admin took first: what was asked for is true, so it is read as done. Any
  * other refusal stays in the confirmation, which said what was about to happen; one saying the
- * market changed under it re-reads the list too, as an add's does.
+ * market changed under it re-reads the list too, as a role change's does.
  */
 async function handleRemoveUser() {
   const target = removing.value;
@@ -619,8 +656,8 @@ const addUserButton = ref<HTMLButtonElement | null>(null);
 const addUserInput = ref<HTMLInputElement | null>(null);
 
 /**
- * Opening the row takes away "Add user", and closing it its Cancel, so focus goes where the person
- * is next: the field, and then "Add user" again. Left alone it fell to `<body>`.
+ * Opening the row takes away "Invite someone", and closing it its Cancel, so focus goes where the
+ * person is next: the field, and then "Invite someone" again. Left alone it fell to `<body>`.
  */
 async function openAddUser() {
   showAddUserForm.value = true;
@@ -632,6 +669,7 @@ async function openAddUser() {
 async function closeAddUser() {
   showAddUserForm.value = false;
   newUserEmail.value = '';
+  inviteSent.value = null;
   addUser.edit();
   await nextTick();
   addUserButton.value?.focus();
@@ -761,6 +799,17 @@ async function closeAddUser() {
             >Manage organization</RouterLink
           ><template v-else>Manage organization</template>.
         </p>
+        <!-- The invitations waiting, for a reader who may give some role: nobody in them has access
+             until they accept, so they are their own list, after the people who have it. -->
+        <InvitationsWaiting
+          :waiting="invitations"
+          kind="market"
+          :mayWithdraw="mayWithdraw"
+          :open="manageOpen"
+          testid="manage-market"
+          :focusWhenNoneLeft="peopleList"
+          @withdrawn="changesMade++"
+        />
         <!-- Opens the row it adds; that row carries its own Cancel. The button used to turn into a
              Cancel of its own, left alone above the row it cancelled (bug 43). -->
         <button
@@ -771,9 +820,9 @@ async function closeAddUser() {
           data-testid="manage-market-add-user-button"
           @click="openAddUser"
         >
-          Add user
+          Invite someone
         </button>
-        <!-- Its own form, so Enter in the field adds the user through the very same handler. -->
+        <!-- Its own form, so Enter in the field sends the invitation through the very same handler. -->
         <form v-if="showAddUserForm" class="add-user-form" @submit.prevent="handleAddUser">
           <div class="add-org-row">
             <input
@@ -782,8 +831,8 @@ async function closeAddUser() {
               type="email"
               name="email"
               autocomplete="off"
-              placeholder="User email"
-              aria-label="Email of the person to add"
+              placeholder="Email address"
+              aria-label="Email of the person to invite"
               class="field"
               data-testid="manage-market-add-user-input"
             />
@@ -804,7 +853,7 @@ async function closeAddUser() {
               :disabled="!newUserEmail.trim()"
               data-testid="manage-market-add-user-submit"
             >
-              Add
+              Send invitation
             </button>
             <button
               type="button"
@@ -815,6 +864,9 @@ async function closeAddUser() {
               Cancel
             </button>
           </div>
+          <p class="form-hint" data-testid="manage-market-add-user-hint">
+            They get an email, and join once they accept it signed in with this address.
+          </p>
           <p
             v-if="addUserSentence"
             ref="addUserErrorLine"
@@ -823,6 +875,7 @@ async function closeAddUser() {
           >
             {{ addUserSentence }}
           </p>
+          <InvitationSent :sent="inviteSent" testid="manage-market-add-user" />
         </form>
       </section>
 
@@ -912,7 +965,7 @@ async function closeAddUser() {
           </button>
         </template>
         <p v-else class="section-line" data-testid="manage-market-hand-on-nobody">
-          Nobody else has access to this market yet. Add someone under Users with access first.
+          Nobody else has access to this market yet. Invite someone under Users with access first.
         </p>
       </section>
 
@@ -1161,21 +1214,22 @@ async function closeAddUser() {
   gap: var(--space-2);
 }
 
-/* On a phone the email field takes the add row, with the role at the start of a row beneath it
-   and Add and Cancel at that row's end: beside them at 390 the field and the role were squeezed to
-   66px each, reading "User e" and "Edi" (T142). */
+/* On a phone the email field and the role each take a line of the invite row, with Send invitation
+   and Cancel at the end of a line beneath them: beside them at 390 the field and the role were
+   squeezed to 66px each, reading "User e" and "Edi" (T142), and beside the role alone the two
+   buttons left Cancel a line of its own. */
 @media (width <= 640px) {
   .add-user-form .add-org-row {
     flex-wrap: wrap;
   }
 
-  .add-user-form input.field {
+  .add-user-form input.field,
+  .add-user-form .field--select {
     flex-basis: 100%;
   }
 
-  .add-user-form .field--select {
-    width: auto;
-    margin-right: auto;
+  .add-user-form .btn--primary {
+    margin-left: auto;
   }
 }
 
@@ -1210,7 +1264,7 @@ async function closeAddUser() {
   font-size: var(--text-xs);
 }
 
-/* After `.form-hint`, whose margin it overrides: the note keeps its distance from "Add user". */
+/* After `.form-hint`, whose margin it overrides: the note keeps its distance from "Invite someone". */
 .organization-people {
   margin-bottom: var(--space-3);
 }

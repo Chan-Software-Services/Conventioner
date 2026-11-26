@@ -4,6 +4,7 @@ import { SEED_MARKET_DATE, seedMarketWithVendors } from './helpers/seeds';
 import { seedApprovedVendor } from './helpers/seedApplication';
 import { savePlan } from './helpers/savePlan';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { withUser } from './helpers/withUser';
 import { marketScreenPath } from './helpers/marketScreens';
 import { mongoEval } from './helpers/mongo';
@@ -87,10 +88,7 @@ async function threeVendorsPaying(
       { $set: { 'form_data.essential_section_ranking': ['North Wing', 'Landing'] } })`,
   );
   await savePlan(request, BACKEND_URL, TEST_USER.email, marketId, plan(pricing));
-  await call(request, 'post', `/markets/${marketId}/roles`, {
-    user_email: VIEWER.email,
-    role: 'viewer',
-  });
+  await grantMarketRole(request, marketId, VIEWER, 'viewer');
   for (const toPhase of ['applications', 'assignment']) {
     await call(request, 'post', `/markets/${marketId}/transition`, { toPhase });
   }

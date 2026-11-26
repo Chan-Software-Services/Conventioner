@@ -207,35 +207,9 @@ export async function ensureTestOrgAuthenticated(
 }
 
 /**
- * Make `email` an admin of the organization, as its owner, whose session the request carries.
- *
- * An organization's admins run its markets (T15), so this makes them Admin on every market the
- * organization holds. Idempotent across runs: a second add changes nothing and answers 400, so the
- * organization is asked instead.
- */
-export async function ensureOrganizationAdmin(
-  request: APIRequestContext,
-  baseURL: string,
-  orgId: string,
-  email: string,
-): Promise<void> {
-  const made = await request.post(`${baseURL}/organizations/${orgId}/admins`, {
-    data: { user_email: email },
-  });
-  if (made.ok()) return;
-  const orgs = await request.get(`${baseURL}/organizations`);
-  const { organizations = [] } = (await orgs.json()) as {
-    organizations?: { id: string; adminPeople?: { email: string }[] }[];
-  };
-  const admins = organizations.find((o) => o.id === orgId)?.adminPeople ?? [];
-  if (!admins.some((admin) => admin.email === email)) {
-    throw new Error(`Making ${email} an organization admin failed: ${await made.text()}`);
-  }
-}
-
-/**
  * Take `email` off the organization, as its owner, whose session the request carries: the undo of
- * `ensureOrganizationAdmin` (or of a member added), and nothing when they are not on it.
+ * `ensureOrganizationAdmin` or `placeInOrganization` (`grantMarketRole.ts`), and nothing when they
+ * are not on it.
  *
  * A spec that grants on the seed's shared organization undoes it in a teardown, `afterEach` or
  * `afterAll`, which runs however the test ends: the shards are dealt by time, so any spec may come

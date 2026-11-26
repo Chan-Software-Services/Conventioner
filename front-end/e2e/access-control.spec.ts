@@ -3,6 +3,7 @@ import { test, expect, TEST_USER, OrganizationsPage, BACKEND_URL } from './fixtu
 import { loginViaApi } from './helpers/seeds';
 import { withUser } from './helpers/withUser';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole, placeInOrganization } from './helpers/grantMarketRole';
 
 // ── Test user credentials ──
 const ORG_MEMBER = {
@@ -61,23 +62,6 @@ async function createTestOrg(
   return { orgId, orgName };
 }
 
-/** Add a user to an org as TEST_USER (the org owner). Throws on rejection. */
-async function addOrgMember(
-  request: APIRequestContext,
-  orgId: string,
-  userEmail: string,
-): Promise<void> {
-  const res = await request.post(`${BACKEND_URL}/organizations/${orgId}/members`, {
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    data: { user_email: userEmail },
-  });
-  if (!res.ok()) {
-    throw new Error(`Add member failed: ${res.status()} ${await res.text()}`);
-  }
-}
-
 /** Create a market owned by TEST_USER in `orgId`. Throws on rejection. */
 async function createMarket(
   request: APIRequestContext,
@@ -134,8 +118,8 @@ test.describe('Market visibility - org membership', () => {
 
     const org = await createTestOrg(request, 'E2E Access Org');
 
-    // Add ORG_MEMBER to the org (org-based VIEWER access, no explicit market role)
-    await addOrgMember(request, org.orgId, ORG_MEMBER.email);
+    // Place ORG_MEMBER in the org (org-based VIEWER access, no explicit market role)
+    await placeInOrganization(request, org.orgId, ORG_MEMBER, 'member');
 
     marketName = `E2E Org Access ${Date.now()}`;
     marketId = await createMarket(request, marketName, org.orgId);
@@ -190,15 +174,7 @@ test.describe('Market visibility - explicit role', () => {
     marketId = await createMarket(request, marketName, org.orgId);
 
     // Give EXPLICIT_USER a viewer role on the market (they are NOT in the org)
-    const roleRes = await request.post(`${BACKEND_URL}/markets/${marketId}/roles`, {
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      data: { user_email: EXPLICIT_USER.email, role: 'viewer' },
-    });
-    if (!roleRes.ok()) {
-      throw new Error(`Viewer role grant failed: ${roleRes.status()} ${await roleRes.text()}`);
-    }
+    await grantMarketRole(request, marketId, EXPLICIT_USER, 'viewer');
   });
 
   test('user with explicit role sees market; outsider does not (paired)', async ({
@@ -265,7 +241,7 @@ test.describe('Market visibility - org membership changes', () => {
 
       // ── Phase 2: Owner adds ORG_MEMBER to the org via API ──
       await loginViaApi(request, BACKEND_URL, TEST_USER.email, TEST_USER.password);
-      await addOrgMember(request, orgId, ORG_MEMBER.email);
+      await placeInOrganization(request, orgId, ORG_MEMBER, 'member');
 
       // ── Phase 3: Now ORG_MEMBER sees the market ──
       await gotoMarketsLoaded(page);
@@ -320,8 +296,8 @@ test.describe('Market visibility - org deletion', () => {
     orgId = org.orgId;
     orgName = org.orgName;
 
-    // Add ORG_MEMBER to the org
-    await addOrgMember(request, orgId, ORG_MEMBER.email);
+    // Place ORG_MEMBER in the org
+    await placeInOrganization(request, orgId, ORG_MEMBER, 'member');
 
     marketName = `E2E DeleteOrg ${Date.now()}`;
     marketId = await createMarket(request, marketName, orgId);
@@ -351,13 +327,8 @@ test.describe('Market visibility - org deletion', () => {
       await expect(marketCard(page, marketName)).toBeVisible({ timeout: 10000 });
     });
 
-    // An explicit role, so Phase 3 proves the market is GONE rather than merely unreachable.
-    await loginViaApi(request, BACKEND_URL, TEST_USER.email, TEST_USER.password);
-    await request.post(`${BACKEND_URL}/markets/${marketId}/roles`, {
-      headers: { 'Content-Type': 'application/json' },
-      data: { user_email: TEST_USER.email, role: 'owner' },
-    });
-
+    // The owner's explicit role, so Phase 3 proves the market is GONE rather than merely
+    // unreachable: creating the market gave TEST_USER its Owner role, so nothing is given here.
     // ── Phase 2: Owner deletes the org, and the confirmation names what goes with it ──
     await withUser(browser, TEST_USER.email, TEST_USER.password, async (page) => {
       await page.goto('/organizations');

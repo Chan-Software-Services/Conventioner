@@ -11,12 +11,20 @@
  * it did.
  */
 import { computed, reactive, ref } from 'vue';
-import { IntakeMode, MarketPhase } from '@/assets/types/datatypes';
+import {
+  IntakeMode,
+  MarketPhase,
+  MarketRole,
+  type MarketInvitationRole,
+  type SentInvitation,
+} from '@/assets/types/datatypes';
 import AnswerValue from '@/components/AnswerValue.vue';
 import BarLedger from '@/components/BarLedger.vue';
 import CodeInput from '@/components/CodeInput.vue';
 import EmailAddress from '@/components/EmailAddress.vue';
 import FileDropZone from '@/components/FileDropZone.vue';
+import InvitationSent from '@/components/InvitationSent.vue';
+import InvitationsWaiting from '@/components/InvitationsWaiting.vue';
 import ListFreshness from '@/components/ListFreshness.vue';
 import PhaseBadge from '@/components/PhaseBadge.vue';
 import ReadFailed from '@/components/ReadFailed.vue';
@@ -32,6 +40,8 @@ import { formSteps, type FormStepId } from '@/utils/marketGuide';
 import { getRoleDisplayName } from '@/utils/permissions';
 import { LINK_RESENT, type SignInNotice } from '@/utils/signInNotice';
 import type { SummaryFact } from '@/utils/summary';
+import type { OrganizationPlace } from '@/utils/organizations';
+import { useInvitationsWaiting } from '@/utils/useInvitationsWaiting';
 import { getDateRange } from '@/utils/utils';
 import { statusLabel } from '@/utils/verdicts';
 import { vendorHeadline, type VendorNames } from '@/utils/vendorIdentity';
@@ -220,6 +230,64 @@ const refreshes = ref(0);
 const scrolling = applications.slice(0, 40);
 const shrinkingCount = ref(40);
 const shrinking = computed(() => applications.slice(0, shrinkingCount.value));
+
+// InvitationsWaiting: the real component over the real read, its fetch and its withdrawal answered
+// here from the fixture's people in place of the server, each invitation ending 14 days on.
+const ENDS_AT = new Date(OPENED_AT + 14 * 24 * 60 * 60 * 1000).toISOString();
+function invitationsOf<Role extends string>(roles: readonly Role[], count: number) {
+  return people.slice(1, 1 + count).map((person, index): SentInvitation<Role> => ({
+    id: `library-invitation-${index}`,
+    email: person.email,
+    role: roles[index % roles.length]!,
+    invitedBy: owner.email,
+    sentAt: new Date(OPENED_AT).toISOString(),
+    endsAt: ENDS_AT,
+  }));
+}
+/** A list the read serves and the withdrawal takes from, as the server would. */
+function waitingOn<Role extends string>(
+  served: SentInvitation<Role>[],
+  withdrawals: { count: number },
+) {
+  return useInvitationsWaiting<Role>({
+    key: () => 'library',
+    fetch: async () => [...served],
+    withdraw: async (_key, id) => {
+      served.splice(
+        served.findIndex((invitation) => invitation.id === id),
+        1,
+      );
+      withdrawals.count++;
+    },
+  });
+}
+const marketWithdrawals = reactive({ count: 0 });
+const marketInvitations = waitingOn<MarketInvitationRole>(
+  invitationsOf([MarketRole.Admin, MarketRole.Editor, MarketRole.Viewer], 3),
+  marketWithdrawals,
+);
+/** As an Admin reads them on the built-in table: every role but the Owner's is theirs to give. */
+const anAdminMayWithdraw = () => true;
+const organizationWithdrawals = reactive({ count: 0 });
+const organizationInvitations = waitingOn<OrganizationPlace>(
+  invitationsOf<OrganizationPlace>(['member', 'member', 'admin'], 60),
+  organizationWithdrawals,
+);
+/** As an organization's admin reads them: they withdraw only a member's invitation. */
+const anAdminWithdrawsMembers = (invitation: SentInvitation<OrganizationPlace>) =>
+  invitation.role === 'member';
+const readTries = ref(0);
+const failedInvitations = useInvitationsWaiting<MarketInvitationRole>({
+  key: () => 'library',
+  fetch: async () => {
+    readTries.value++;
+    throw new Error(OFFLINE_MESSAGE);
+  },
+  withdraw: async () => {},
+});
+
+// InvitationSent: what an invite row says once the invitation went, and once its email did not.
+const invitee = people[1]!.email;
 </script>
 
 <template>
@@ -731,6 +799,64 @@ const shrinking = computed(() => applications.slice(0, shrinkingCount.value));
     </LibraryPanel>
     <LibraryPanel label="Refresh, pressed">
       <ReadOut label="Asked to read again" :value="times(refreshes)" />
+    </LibraryPanel>
+  </LibrarySection>
+
+  <LibrarySection
+    title="InvitationsWaiting"
+    about="Used on: Manage market (in Users with access), Manage organization (a section of its own)"
+  >
+    <LibraryPanel label="A market's: Withdraw on every role the reader may give">
+      <div class="library-stack">
+        <InvitationsWaiting
+          :waiting="marketInvitations"
+          kind="market"
+          :mayWithdraw="anAdminMayWithdraw"
+          :open="true"
+          testid="library-market"
+        />
+      </div>
+      <ReadOut label="Withdrawn" :value="times(marketWithdrawals.count)" />
+    </LibraryPanel>
+    <LibraryPanel label="An organization's 60, paged and found; an admin withdraws members only">
+      <div class="library-stack">
+        <InvitationsWaiting
+          :waiting="organizationInvitations"
+          kind="organization"
+          :mayWithdraw="anAdminWithdrawsMembers"
+          :open="true"
+          testid="library-organization"
+        />
+      </div>
+      <ReadOut label="Withdrawn" :value="times(organizationWithdrawals.count)" />
+    </LibraryPanel>
+    <LibraryPanel label="Failed: the read, with Try again in the list's place">
+      <div class="library-stack">
+        <InvitationsWaiting
+          :waiting="failedInvitations"
+          kind="market"
+          :mayWithdraw="anAdminMayWithdraw"
+          :open="true"
+          testid="library-failed"
+        />
+      </div>
+      <ReadOut label="Asked to read" :value="times(readTries)" />
+    </LibraryPanel>
+  </LibrarySection>
+
+  <LibrarySection
+    title="InvitationSent"
+    about="Used on: Manage market (Invite someone), Manage organization (Invite admin, Invite member)"
+  >
+    <LibraryPanel label="Sent">
+      <InvitationSent :sent="{ address: invitee, emailed: true }" testid="library-sent" />
+    </LibraryPanel>
+    <LibraryPanel label="Sent, but its email could not be: a warning">
+      <InvitationSent :sent="{ address: invitee, emailed: false }" testid="library-not-emailed" />
+    </LibraryPanel>
+    <LibraryPanel label="Empty: nothing sent yet">
+      <InvitationSent :sent="null" testid="library-nothing-sent" />
+      <p class="library-quiet">Nothing is drawn, and the region stays for a screen reader.</p>
     </LibraryPanel>
   </LibrarySection>
 

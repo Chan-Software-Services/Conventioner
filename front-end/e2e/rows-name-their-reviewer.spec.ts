@@ -7,6 +7,7 @@ import {
 } from './helpers/seedPhaseMarket';
 import { marketScreenPath } from './helpers/marketScreens';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { ApplicationsAllPage } from './pages/ApplicationsAllPage';
 import { VendorsPage } from './pages/VendorsPage';
 
@@ -36,8 +37,7 @@ async function reviewedByTheOwnerAndAna(request: APIRequestContext): Promise<str
   const api = `${BACKEND_URL}/markets/${marketId}`;
   // Seeded one after another, so they arrive, and are dealt, in this order.
   for (const vendor of VENDORS) seedApplicationWithStatus(marketId, 'open', vendor);
-  const role = await request.post(`${api}/roles`, { data: { user_email: ANA, role: 'viewer' } });
-  expect(role.ok(), await role.text()).toBeTruthy();
+  await grantMarketRole(request, marketId, { email: ANA, password: PASSWORD }, 'viewer');
   const chosen = await request.put(`${api}/reviewers`, {
     data: { reviewers: [ANA, TEST_USER.email] },
   });

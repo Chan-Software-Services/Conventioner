@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 
 import ManageOrgOverlay from '@/views/ManageOrgOverlay.vue';
-import type { Organization } from '@/assets/types/datatypes';
+import type { Organization, SentInvitation } from '@/assets/types/datatypes';
 import { entryChanges, entryParts, type MarketHistoryEntry } from '@/utils/marketHistory';
 import { installIntersectionObserver } from './support/intersection';
 
@@ -306,6 +306,8 @@ function renamed(id: string, minutes: number, name: string): MarketHistoryEntry 
 function serve(...pages: Array<{ entries: MarketHistoryEntry[]; next: string | null }>) {
   const asked: string[] = [];
   api.get.mockImplementation(async (url: string) => {
+    // The owner's and the admins' read of the invitations waiting, which is not the History's.
+    if (url.endsWith('/invitations')) return { data: { invitations: invited } };
     asked.push(url);
     return { data: pages[Math.min(asked.length - 1, pages.length - 1)] };
   });
@@ -344,8 +346,27 @@ function renameInTheDialog() {
   input.form!.requestSubmit();
 }
 
+/** What Manage organization's read of the invitations answers. */
+let invited: SentInvitation[] = [];
+
+/**
+ * The History's reads answer these in turn, the last for every read after it; Manage
+ * organization's own read of the invitations answers `invited`.
+ */
+function historyAnswers(...answers: Array<() => Promise<unknown>>) {
+  let at = 0;
+  api.get.mockImplementation((url: string) =>
+    url.endsWith('/invitations')
+      ? Promise.resolve({ data: { invitations: invited } })
+      : answers[Math.min(at++, answers.length - 1)]!(),
+  );
+}
+
 beforeEach(() => {
   api.get.mockReset();
+  api.post.mockReset();
+  api.delete.mockReset();
+  invited = [];
   document.body.innerHTML = '';
 });
 
@@ -394,10 +415,11 @@ describe('the History section of Manage organization', () => {
 
   it('says so at the end of the list when a page fails, and Try again brings it', async () => {
     const observer = installIntersectionObserver();
-    api.get
-      .mockResolvedValueOnce({ data: { entries: [renamed('e2', 2, 'Two')], next: 'cursor-2' } })
-      .mockRejectedValueOnce(new Error('offline'))
-      .mockResolvedValueOnce({ data: { entries: [renamed('e1', 1, 'One')], next: null } });
+    historyAnswers(
+      async () => ({ data: { entries: [renamed('e2', 2, 'Two')], next: 'cursor-2' } }),
+      async () => Promise.reject(new Error('offline')),
+      async () => ({ data: { entries: [renamed('e1', 1, 'One')], next: null } }),
+    );
     const wrapper = mountDialog();
     await flushPromises();
     byTestId('manage-org-history-toggle')!.click();
@@ -419,9 +441,10 @@ describe('the History section of Manage organization', () => {
   });
 
   it('says so when the first page fails, and Try again reads it again', async () => {
-    api.get
-      .mockRejectedValueOnce(new Error('offline'))
-      .mockResolvedValueOnce({ data: { entries: [renamed('e1', 1, 'One')], next: null } });
+    historyAnswers(
+      async () => Promise.reject(new Error('offline')),
+      async () => ({ data: { entries: [renamed('e1', 1, 'One')], next: null } }),
+    );
     const wrapper = mountDialog();
     await flushPromises();
     byTestId('manage-org-history-toggle')!.click();
@@ -435,7 +458,9 @@ describe('the History section of Manage organization', () => {
     byTestId('org-history-retry')!.click();
     await flushPromises();
 
-    expect(api.get).toHaveBeenCalledTimes(2);
+    expect(
+      api.get.mock.calls.filter(([url]) => url === '/organizations/org-1/history'),
+    ).toHaveLength(2);
     expect(byTestId('org-history-read-failed')).toBeNull();
     expect(sentences()).toHaveLength(1);
     wrapper.unmount();
@@ -444,10 +469,11 @@ describe('the History section of Manage organization', () => {
   it('drops a later page answered after a change read the first page again', async () => {
     const observer = installIntersectionObserver();
     let answerLate: (value: unknown) => void = () => {};
-    api.get
-      .mockResolvedValueOnce({ data: { entries: [renamed('e2', 2, 'Two')], next: 'cursor-2' } })
-      .mockReturnValueOnce(new Promise((resolve) => (answerLate = resolve)))
-      .mockResolvedValueOnce({ data: { entries: [renamed('e3', 3, 'Three')], next: null } });
+    historyAnswers(
+      async () => ({ data: { entries: [renamed('e2', 2, 'Two')], next: 'cursor-2' } }),
+      () => new Promise((resolve) => (answerLate = resolve)),
+      async () => ({ data: { entries: [renamed('e3', 3, 'Three')], next: null } }),
+    );
     api.put.mockResolvedValue({ data: {} });
     const wrapper = mountDialog();
     await flushPromises();
@@ -494,6 +520,47 @@ describe('the History section of Manage organization', () => {
     wrapper.unmount();
   });
 
+  it('reads its first page again after an invitation sent and one withdrawn', async () => {
+    const waiting: SentInvitation = {
+      id: 'inv-1',
+      email: 'newcomer@example.test',
+      role: 'member',
+      invitedBy: 'olive@ember.test',
+      sentAt: '2026-11-24T08:44:00Z',
+      endsAt: '2026-12-08T08:44:00Z',
+    };
+    const asked = serve({ entries: [], next: null });
+    api.post.mockImplementation(async () => {
+      invited = [waiting];
+      return { data: { invitation: waiting, emailed: true } };
+    });
+    api.delete.mockImplementation(async () => {
+      invited = [];
+      return { data: { message: 'Invitation withdrawn' } };
+    });
+    const wrapper = mountDialog();
+    await flushPromises();
+    byTestId('manage-org-history-toggle')!.click();
+    await flushPromises();
+
+    byTestId('manage-org-add-member-button')!.click();
+    await flushPromises();
+    const field = byTestId('manage-org-add-member-input') as HTMLInputElement;
+    field.value = waiting.email;
+    field.dispatchEvent(new Event('input'));
+    field.form!.requestSubmit();
+    await flushPromises();
+    expect(asked).toHaveLength(2);
+
+    byTestId('manage-org-invited-withdraw')!.click();
+    await flushPromises();
+    byTestId('manage-org-withdraw-window')!.querySelector('form')!.requestSubmit();
+    await flushPromises();
+
+    expect(asked).toEqual(Array(3).fill('/organizations/org-1/history'));
+    wrapper.unmount();
+  });
+
   it('says so when nothing has changed yet', async () => {
     serve({ entries: [], next: null });
     const wrapper = mountDialog();
@@ -514,6 +581,7 @@ describe('the History section of Manage organization', () => {
 
     expect(byTestId('manage-org-history')).not.toBeNull();
     expect(byTestId('manage-org-add-member-button')).toBeNull();
+    expect(byTestId('manage-org-invited')).toBeNull();
     expect(byTestId('manage-org-rename-input')).toBeNull();
     wrapper.unmount();
   });
@@ -525,7 +593,7 @@ describe('Manage organization holds together as Manage market does', () => {
     adminPeople: [{ userId: 'user-ada', email: 'ada@ember.test' }],
   };
 
-  it('puts focus in the field an add opens, and back on its button when the row closes', async () => {
+  it('puts focus in the field an invite row opens, and back on its button when the row closes', async () => {
     serve({ entries: [], next: null });
     const wrapper = mountDialog();
     await flushPromises();
@@ -566,7 +634,7 @@ describe('Manage organization holds together as Manage market does', () => {
     wrapper.unmount();
   });
 
-  it('adds someone in one row with its own Cancel, the opening button out of the way', async () => {
+  it('invites from one row with its own Cancel, the opening button out of the way', async () => {
     serve({ entries: [], next: null });
     const wrapper = mountDialog();
     await flushPromises();

@@ -35,11 +35,11 @@ describes:
   - back-end/api/markets.py#update_market_role
   - back-end/datatypes.py#organization_people_of
   - back-end/organization_people.py#of_person
+  - back-end/tests/test_a_persons_organizations_in_either_shape.py
+  - back-end/api/organizations.py#change_org_place
   - back-end/migrations/migrate_drop_organization_lists.py
   - back-end/tests/test_migrate_drop_organization_lists.py
   - back-end/tests/real_mongo/test_the_organization_lists_migration_on_the_server.py
-  - back-end/tests/test_a_persons_organizations_in_either_shape.py
-  - back-end/api/organizations.py#change_org_place
 verified: 2026-11-25
 sources:
   - E20/F04/S01
@@ -64,6 +64,7 @@ sources:
   - T315
   - T352
   - T583
+  - T617
 ---
 
 # The organization document, and roles
@@ -100,7 +101,7 @@ It serves each with what removing someone from it takes (E38/F15/S01): `marketCo
 **Who changes an organization**: only the owner renames it, invites or adds an admin, changes someone's place between admin and member, or transfers ownership; the owner or an admin invites or adds a member or changes its default table; the owner removes anyone but themselves, an admin only members.
 A person's place changes only through [the organization's people](../modules/organization-people.md), whose table says each of these and refuses the rest: "Add admin" of a member makes them an admin, the owner's `PUT /organizations/<org_id>/users/<user_id>` with `{"place": "admin" | "member"}` makes a member an admin or an admin a member (the place they hold already answers 200 and writes nothing, the owner's place is refused), "Add admin" of an admin and "Add member" of a member say they already are, 400, and adding the owner or an admin as a member is refused as before.
 **Inviting places nobody** (T538): an invitation to be an admin or a member waits in [`invitations`](../modules/invitations.md#inviting-to-an-organization), apart from this document, alike for an address with an account and one without, until someone signed in with the address accepts it, judged again then as the inviter's act through the same table; until then the document is unchanged.
-The direct adds stay beside it until every screen invites.
+Manage organization invites, and the direct add routes stay beside it, called by no screen, only until they are removed.
 Renaming is all an update does: it reads the body's `name`, a string that is not blank and is not [another of the owner's organizations' names](#an-organizations-name), and nothing else, so its people and its markets change only through the writes above.
 Transferring ownership makes one of its admins or members the organization's owner and the old owner an admin; transferring it to its own owner, or to someone outside it ("Transfer ownership only to one of the organization's admins or members."), is refused before anything is written.
 The owner cannot be removed ("They own this organization, so they can't be removed from it."), and an account that owns an organization cannot be deleted until it transfers the organization's ownership.
@@ -226,9 +227,8 @@ Its people see the market, its owner and admins run it, and deleting the organiz
 [`migrations/migrate_roles.py`](../../../back-end/migrations/migrate_roles.py) turned the old `owner`/`editors`/`viewers` lists into the `roles` map and the old flat `users` list into `owner`, `admins` and `members`.
 [`migrations/migrate_to_uuid.py`](../../../back-end/migrations/migrate_to_uuid.py) gave users, organizations and markets UUID ids and moved every reference (an organization's people and markets, a market's organization and its role keys) from names and emails to ids.
 [`migrations/migrate_drop_organization_lists.py`](../../../back-end/migrations/migrate_drop_organization_lists.py) removes `owner`, `admins` and `members` from every organization and drops their three indexes (T583, [ADR 0025](../../adr/0025-an-organizations-people-are-one-map.md)), the lists T283 kept beside the map for a rollback to the release before it, which this release rules out.
-It refuses, writing and dropping nothing, while any organization holds no people map, since its lists are then the only record of its people: it names each by id and says how to fold one with no `people` first with the fold migration T283 shipped, which this release deleted ([RELEASING.md](../../RELEASING.md#migrate_drop_organization_listspy)); that fold leaves alone one whose `people` is there but not a map, which is repaired by hand.
+It refuses, writing and dropping nothing, while any organization holds no people map, since its lists are then the only record of its people.
 Its one write unsets the three lists on every organization whose `people` is a map, so an organization with no map stored during the run is left with its lists for the next run's refusal.
 It drops an index only when its key is exactly one of `owner`, `admins` or `members`, ascending, with no other option, whatever its name, and counts one another run dropped first (`IndexNotFound`) as dropped.
-Its `--dry-run` writes and drops nothing and prints the same counts and index names; a second run says it has already run.
-It runs after the deploy, whenever, since nothing reads the lists, and again after any roll forward over a rollback to the release before, whose boot builds the three indexes again and whose writes put partial lists back.
+When to run it, its dry run, what its refusal asks and the fold of an organization with no `people` (by T283's `migrate_organization_people.py`, which T583 deleted) are written in full in [the migration's section of RELEASING.md](../../RELEASING.md#migrate_drop_organization_listspy).
 [`test_migrate_drop_organization_lists.py`](../../../back-end/tests/test_migrate_drop_organization_lists.py) pins each case on the shared fake, a run cut before its drops, an index another run dropped first and an organization with no map stored during the run among them; [`test_the_organization_lists_migration_on_the_server.py`](../../../back-end/tests/real_mongo/test_the_organization_lists_migration_on_the_server.py) runs a run, a refused run and what the release before puts back on a server, over the indexes the boot and the release before build.
