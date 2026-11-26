@@ -388,6 +388,7 @@ if (args.includes('--list')) {
     expect(shard.said).toContain(
       'e2e shard 1/1: 1 of the 1 named spec file (of 4 listed), 0 serial, ',
     );
+    expect(shard.said).toContain('e2e shard 1/1: the parallel pass, 1 file, took ');
   });
 
   it('deals every listed file without --specs, and records the whole suite', () => {
@@ -405,15 +406,16 @@ if (args.includes('--list')) {
   });
 
   it('words a whole suite of one spec file in the singular, and of two in the plural', () => {
-    for (const [suite, dealt] of [
-      [['a.spec.ts'], '1 of 1 spec file, '],
-      [['a.spec.ts', 'b.spec.ts'], '2 of 2 spec files, '],
+    for (const [suite, dealt, counted] of [
+      [['a.spec.ts'], '1 of 1 spec file, ', '1 file'],
+      [['a.spec.ts', 'b.spec.ts'], '2 of 2 spec files, ', '2 files'],
     ] as const) {
       const shard = run(({ timings }) => ['--shard=1/1', `--timings=${timings}`], undefined, [
         ...suite,
       ]);
       expect(shard.code, shard.said).toBe(0);
       expect(shard.said).toContain(`e2e shard 1/1: ${dealt}`);
+      expect(shard.said).toContain(`the parallel pass, ${counted}, took `);
     }
   });
 

@@ -246,7 +246,7 @@ def audit_line(name: str, found: Optional[dict]) -> str:
     """The build's line for a shard's audit: its count and its five endpoints with the most."""
     if found is None:
         return f"{name}: no back-end log"
-    line = f"{name}: {found['lines']} request lines no test recorded"
+    line = f"{name}: {counted(found['lines'], 'request line')} no test recorded"
     top = sorted(found["endpoints"].items(), key=lambda e: (-e[1], e[0]))[:5]
     if top:
         line += ": " + ", ".join(f"{endpoint} {n}" for endpoint, n in top)

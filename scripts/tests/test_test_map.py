@@ -505,7 +505,7 @@ class TestTheCommandLine:
             },
             "b.spec.ts": {"modules": [], "endpoints": ["POST /markets"]},
         }
-        assert "2 specs from 3 tests on 1 shards" in done.stdout
+        assert "2 specs from 3 tests on 1 shard," in done.stdout
 
     def test_build_writes_and_prints_each_shards_unclaimed_lines(self, tmp_path):
         shard = self.shard(tmp_path, 1)
@@ -541,6 +541,16 @@ class TestTheCommandLine:
             "GET /markets/new 2, GET /markets 1, GET /markets/<market_id>/history 1, "
             "POST /markets 1\n"
         ) in done.stdout
+
+    def test_an_audit_line_words_a_count_of_one_in_the_singular(self):
+        one = {"lines": 1, "endpoints": {"GET /markets": 1}}
+        assert test_map.audit_line("test-map-shard-1", one) == (
+            "test-map-shard-1: 1 request line no test recorded: GET /markets 1"
+        )
+        none = {"lines": 0, "endpoints": {}}
+        assert test_map.audit_line("test-map-shard-1", none) == (
+            "test-map-shard-1: 0 request lines no test recorded"
+        )
 
     def test_build_builds_a_shard_with_no_log_and_says_so(self, tmp_path):
         (self.shard(tmp_path, 1) / "backend.log").unlink()

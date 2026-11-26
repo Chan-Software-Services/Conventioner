@@ -1039,7 +1039,8 @@ function runShard(
     const seconds = Math.round((Date.now() - started) / 100) / 10;
     phases.push({ name: pass.name, files: pass.files.length, seconds, status: run.status });
     console.log(
-      `e2e shard ${current}/${total}: the ${pass.name} pass, ${pass.files.length} files, took ${seconds} s`,
+      `e2e shard ${current}/${total}: the ${pass.name} pass, ` +
+        `${counted(pass.files.length, 'file')}, took ${seconds} s`,
     );
     if (existsSync(json)) reports.push(JSON.parse(readFileSync(json, 'utf8')) as Report);
   }
