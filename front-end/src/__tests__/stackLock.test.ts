@@ -147,21 +147,22 @@ describe('withLock', () => {
   });
 
   it("takes over at once a lock whose holder's process is gone, as a timed-out hook leaves", async () => {
-    // A waiter that waited even once would sleep its minute's poll, past the test's second.
+    // A waiter that waited even once would sleep its minute's poll, past the test's timeout.
     const path = join(dir, 'lock');
     plant(path, GONE);
     await expect(withLock(path, async () => 'taken', { pollMs: 60_000, waitMs: 0 })).resolves.toBe(
       'taken',
     );
     expect(existsSync(path)).toBe(false);
-  }, 1_000);
+  });
 
   it('never takes over while another waiter holds the takeover, and fails naming the lock', async () => {
     const path = join(dir, 'lock');
     plant(path, GONE);
     mkdirSync(`${path}.reap`);
+    // The waiter's own failure, after its wait: a file error of the takeover names the lock too.
     await expect(withLock(path, async () => 'never', { pollMs: 5, waitMs: 50 })).rejects.toThrow(
-      path,
+      `waited 50 ms for the lock ${path}`,
     );
     expect(readFileSync(join(path, 'owner'), 'utf8')).toBe(GONE);
   });
