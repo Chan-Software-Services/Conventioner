@@ -176,7 +176,7 @@ A `csv` market enters `applications` only holding an application, so a spec that
 
 CI's shards run their hand in two passes ([CI and the gate](ci-and-the-gate.md#ci)): first the spec files of the serial list, [`e2e/serialSpecs.ts`](../../../front-end/e2e/serialSpecs.ts), at one worker, then the rest at the config's workers.
 A spec file joins the list when one of its tests needs state that every test shares to stay as it left it between two of its steps.
-That is when it counts the database's reads across collections (the profiler), asserts that a shared counter reaches its limit or needs the counters it cleared, ends or counts `TEST_USER`'s or `NO_ORG_USER`'s sessions, reads `TEST_USER`'s whole market or organization list, or empties or drops a collection other specs write.
+That is when it counts every caller's reads of a collection (the profiler), asserts that a shared counter reaches its limit or needs the counters it cleared, ends or counts `TEST_USER`'s or `NO_ORG_USER`'s sessions, reads `TEST_USER`'s whole market or organization list, or empties or drops a collection other specs write.
 A spec that only writes documents of its own (its own market, account, address or fake Discord server), or only clears a counter to make room, stays parallel.
 Two workers may seed the same shared state at once, so a seed step that reads state every spec file shares and then writes what it found missing is made safe for a second first caller, and its spec stays parallel.
 A fixed account is safe at its source: `ensureVerifiedUser()` runs `create_test_user.py` once more when the unique email index refuses a second insert, and passes on its "already exists".
