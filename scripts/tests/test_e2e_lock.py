@@ -18,6 +18,14 @@ REPO = Path(__file__).resolve().parents[2]
 LIBRARY = REPO / "scripts" / "e2e-lock.sh"
 BASH = shutil.which("bash")
 
+# Seconds the test waits for one step of a run before giving up on it. It guards against a run that
+# hangs and measures no speed, since a loaded CI runner can stall for many seconds: every wait ends
+# as soon as its step is done.
+PATIENCE = 60
+# Seconds a run may wait for the lock: more than the test's own waits while a run is waiting add up
+# to, so a stall the test sits out never ends that run's wait first.
+LOCK_WAIT = 5 * PATIENCE
+
 # A run that takes the lock, says so, and keeps it until its stdin closes.
 HOLD = f"""
 source {LIBRARY}
@@ -34,7 +42,7 @@ def env(request, tmp_path):
     if request.param == "flock" and not shutil.which("flock"):
         pytest.skip("flock is not installed")
     env = {k: v for k, v in os.environ.items() if not k.startswith(("XDG_", "E2E_", "TEAM_HEAVY_"))}
-    env.update(HOME=str(tmp_path / "home"), PYTHON=sys.executable, WAIT="10")
+    env.update(HOME=str(tmp_path / "home"), PYTHON=sys.executable, WAIT=str(LOCK_WAIT))
     if request.param == "python":
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
@@ -65,40 +73,43 @@ class Run:
             self.lines.put(line)
         self.lines.put(None)
 
-    def wait_for(self, text, timeout=10):
+    def wait_for(self, text):
         """The lines up to the first that contains `text`."""
         seen = []
-        deadline = time.monotonic() + timeout
-        while (left := deadline - time.monotonic()) > 0:
+        deadline = time.monotonic() + PATIENCE
+        while True:
             try:
-                line = self.lines.get(timeout=left)
+                # At or past the deadline, a line that has already come is still read.
+                line = self.lines.get(timeout=max(0, deadline - time.monotonic()))
             except queue.Empty:
-                break
+                pytest.fail(f"no line with {text!r} within {PATIENCE} s; got {seen!r}")
             if line is None:
-                break
+                status = self.process.wait(timeout=PATIENCE)
+                pytest.fail(
+                    f"output ended with no line with {text!r}, exit status {status}; got {seen!r}"
+                )
             seen.append(line)
             if text in line:
                 return seen
-        pytest.fail(f"no line with {text!r} within {timeout} s; got {seen!r}")
 
-    def rest(self, timeout=10):
+    def rest(self):
         """Every line until the process exits, and its exit status."""
-        status = self.process.wait(timeout=timeout)
+        status = self.process.wait(timeout=PATIENCE)
         seen = []
-        while (line := self.lines.get(timeout=timeout)) is not None:
+        while (line := self.lines.get(timeout=PATIENCE)) is not None:
             seen.append(line)
         return "".join(seen), status
 
     def release(self):
         self.process.stdin.close()
-        return self.process.wait(timeout=10)
+        return self.process.wait(timeout=PATIENCE)
 
     def kill(self):
         try:
             os.killpg(self.process.pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
-        self.process.wait(timeout=10)
+        self.process.wait(timeout=PATIENCE)
 
 
 @pytest.fixture
