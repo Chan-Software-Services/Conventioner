@@ -81,6 +81,7 @@ export class OrganizationsPage {
   /** What Manage organization says of a request that failed, under its title. */
   readonly manageError: Locator;
   readonly manageCloseButton: Locator;
+  readonly peopleLoading: Locator;
   readonly adminEmails: Locator;
   readonly memberEmails: Locator;
   readonly membersFind: Locator;
@@ -176,6 +177,7 @@ export class OrganizationsPage {
     this.deleteBlocked = page.getByTestId('delete-org-blocked');
     this.doomedMarkets = page.getByTestId('delete-org-doomed-market');
     this.blockingMarkets = page.getByTestId('delete-org-blocking-market');
+    this.peopleLoading = page.getByTestId(/^manage-org-(admin|member)-list-loading$/);
     this.adminEmails = this.manageWindow.getByTestId('manage-org-admin-email');
     this.memberEmails = this.manageWindow.getByTestId('manage-org-member-email');
     this.membersFind = page.getByTestId('manage-org-member-list-find');
@@ -256,6 +258,15 @@ export class OrganizationsPage {
 
   async waitForManageOverlay(): Promise<void> {
     await this.manageWindow.waitFor({ state: 'visible', timeout: 5000 });
+    await this.waitForPeopleRead();
+  }
+
+  /**
+   * Manage organization reads the organization as it opens, and until it answers Admins and Members
+   * say they are loading and list nobody.
+   */
+  async waitForPeopleRead(): Promise<void> {
+    await expect(this.peopleLoading).toHaveCount(0);
   }
 
   // ── Rename ──
