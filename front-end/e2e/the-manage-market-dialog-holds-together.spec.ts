@@ -18,7 +18,8 @@ import { uniqueMarketName } from './helpers/uniqueName';
  *
  * The invite row's email field was narrower than its role select at a desk, cutting off a typed
  * address, and the row kept an address and a role across openings: Escape left them to come back on
- * another market, and Cancel kept the role, which `manageMarketInvites.test.ts` proves (T642).
+ * another market, and Cancel kept the role (T642). `manageMarketInvites.test.ts` proves that Cancel
+ * now leaves the row empty at Editor.
  */
 test.use({ viewport: { width: 1440, height: 900 } });
 
