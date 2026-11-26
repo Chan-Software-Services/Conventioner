@@ -293,6 +293,14 @@ eachWindow('the dialog entry', (size) => {
     await expect(send).toBeDisabled();
     const [sendBox, cancelBox] = await Promise.all([send.boundingBox(), cancel.boundingBox()]);
     expect(cancelBox!.y, 'Cancel is beside Send invitation').toBeCloseTo(sendBox!.y, 0);
+    const [fieldBox, roleBox] = await Promise.all([field.boundingBox(), role.boundingBox()]);
+    if (size.phone) {
+      expect(roleBox!.y, 'the role takes a line under the field').toBeGreaterThanOrEqual(
+        fieldBox!.y + fieldBox!.height,
+      );
+    } else {
+      expect(roleBox!.y, 'the role is on the line of the field').toBeCloseTo(fieldBox!.y, 0);
+    }
     await expectNothingClipped(page.getByTestId('library-several-body'), 'the invite row');
 
     // Sending empties the field and keeps the row, for the next person.
@@ -313,6 +321,14 @@ eachWindow('the dialog entry', (size) => {
     await press(invite);
     await expect(field).toHaveValue('');
     await expect(window).toBeVisible();
+
+    // Each opening of the dialog starts with the row closed, whatever the last one left in it.
+    await field.fill('someone.else@example.com');
+    await page.keyboard.press('Escape');
+    await expect(window).toBeHidden();
+    await openDialog(page, size, 'Manage market', 'several');
+    await expect(invite).toBeVisible();
+    await expect(field).toHaveCount(0);
   });
 
   for (const scroll of ['The body scrolls', 'The window scrolls']) {
