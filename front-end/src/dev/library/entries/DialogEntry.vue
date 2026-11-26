@@ -10,11 +10,11 @@
  * line under each button reads out how it last closed, so a save is seen to land and a close is
  * seen to save nothing.
  */
-import { computed, reactive, ref } from 'vue';
+import { computed, nextTick, reactive, ref } from 'vue';
 import { MarketRole } from '@/assets/types/datatypes';
 import AppDialog from '@/components/AppDialog.vue';
 import { OFFLINE_MESSAGE } from '@/utils/api';
-import { getRoleDisplayName } from '@/utils/permissions';
+import { GIVEN_ROLES, getRoleDisplayName } from '@/utils/permissions';
 import { useDialogSubmit } from '@/utils/useDialogSubmit';
 import LibrarySection from '../parts/LibrarySection.vue';
 import LibraryPanel from '../parts/LibraryPanel.vue';
@@ -47,6 +47,7 @@ const outcome = reactive<Partial<Record<DialogId, string>>>({});
 
 function open(id: DialogId) {
   if (id === 'error') failure.value = '';
+  if (id === 'several') clearInvite();
   opened.value = id;
 }
 
@@ -147,16 +148,41 @@ const ROLES = Object.values(MarketRole);
 const roles = reactive<Record<string, MarketRole>>(
   Object.fromEntries(people.map((person) => [person.id, person.role])),
 );
-const added = ref('');
 function changeRole(id: string, role: MarketRole) {
   roles[id] = role;
   const person = people.find((candidate) => candidate.id === id)!;
   outcome.several = `Changed ${person.name} to ${getRoleDisplayName(role)}`;
 }
-function addUser() {
-  if (added.value.trim() === '') return;
-  outcome.several = `Added ${added.value.trim()}`;
-  added.value = '';
+
+// The invite row, opened and closed as Manage market's is: the focus goes to its field, and back to
+// the button that opened it; each opening of the dialog starts with the row closed.
+const inviting = ref(false);
+const invitee = ref('');
+const inviteeRole = ref(MarketRole.Editor);
+const inviteButton = ref<HTMLButtonElement | null>(null);
+const inviteField = ref<HTMLInputElement | null>(null);
+async function openInvite() {
+  inviting.value = true;
+  await nextTick();
+  inviteField.value?.focus();
+}
+function clearInvite() {
+  inviting.value = false;
+  invitee.value = '';
+  inviteeRole.value = MarketRole.Editor;
+}
+async function closeInvite() {
+  clearInvite();
+  await nextTick();
+  inviteButton.value?.focus();
+}
+/** Sending keeps the row open and empties it, for the next person. */
+function sendInvitation() {
+  const email = invitee.value.trim();
+  if (email === '') return;
+  outcome.several = `Invited ${email} as ${getRoleDisplayName(inviteeRole.value)}`;
+  invitee.value = '';
+  inviteeRole.value = MarketRole.Editor;
 }
 </script>
 
@@ -598,13 +624,6 @@ function addUser() {
     size="wide"
     @close="closed('several')"
   >
-    <form class="library-add" @submit.prevent="addUser">
-      <label class="library-field library-add__field">
-        <span class="field-label">Add a user by email address</span>
-        <input v-model="added" class="field" type="email" />
-      </label>
-      <button type="submit" class="btn btn--primary">Add user</button>
-    </form>
     <ul class="library-people" aria-label="People with access">
       <li v-for="person in people" :key="person.id" class="library-person">
         <span class="library-person__words">
@@ -623,6 +642,42 @@ function addUser() {
         </select>
       </li>
     </ul>
+    <div>
+      <button
+        v-if="!inviting"
+        ref="inviteButton"
+        type="button"
+        class="btn btn--secondary"
+        @click="openInvite"
+      >
+        Invite someone
+      </button>
+      <form v-else class="library-invite" @submit.prevent="sendInvitation">
+        <div class="library-invite__row">
+          <input
+            ref="inviteField"
+            v-model="invitee"
+            type="email"
+            autocomplete="off"
+            placeholder="Email address"
+            aria-label="Email of the person to invite"
+            class="field"
+          />
+          <select v-model="inviteeRole" aria-label="Their role" class="field field--select">
+            <option v-for="role in GIVEN_ROLES" :key="role" :value="role">
+              {{ getRoleDisplayName(role) }}
+            </option>
+          </select>
+          <button type="submit" class="btn btn--primary" :disabled="!invitee.trim()">
+            Send invitation
+          </button>
+          <button type="button" class="btn btn--secondary" @click="closeInvite">Cancel</button>
+        </div>
+        <p class="library-quiet">
+          They get an email, and join once they accept it signed in with this address.
+        </p>
+      </form>
+    </div>
   </AppDialog>
 </template>
 
@@ -725,6 +780,34 @@ function addUser() {
 
 .library-add__field {
   flex: 1 1 14rem;
+}
+
+.library-invite {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.library-invite__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* On a phone, as Manage market's row: the field and the role each take a line, the buttons beneath
+   them at the line's end. */
+@media (width <= 640px) {
+  .library-invite__row {
+    flex-wrap: wrap;
+  }
+
+  .library-invite__row .field {
+    flex-basis: 100%;
+  }
+
+  .library-invite__row .btn--primary {
+    margin-left: auto;
+  }
 }
 
 .library-people {
