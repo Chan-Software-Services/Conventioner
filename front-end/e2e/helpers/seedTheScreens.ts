@@ -740,14 +740,6 @@ export async function seedTheScreens(
 ): Promise<TheScreensSeed> {
   const organizer = { user_id: await loginViaApi(api, backend, email, password), email };
   const two = MARKET_DATES.slice(0, 2);
-  // The accounts every seed of the stack shares, made by the first seed that finds one missing:
-  // under the lock, so a second worker's seed waits, then finds them (`stackLock.ts`).
-  await withStackLock('the screens accounts', async () => {
-    ensureVerifiedUser(DEALT_REVIEWER, DEALT_REVIEWER_PASSWORD);
-    ensureVerifiedUser(ORGANIZATION_MEMBER, ORGANIZATION_MEMBER_PASSWORD);
-    ensureVerifiedUser(SCREENS_EDITOR.email, SCREENS_EDITOR.password);
-    ensureVerifiedUser(SCREENS_INVITEE.email, SCREENS_INVITEE.password);
-  });
 
   const draft = await createMarket(
     api,

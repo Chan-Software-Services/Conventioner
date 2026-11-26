@@ -6,11 +6,11 @@ import { stack } from './stack';
 
 /**
  * A lock the workers of one stack share, for a seed step whose state every spec file shares: a
- * step that reads the stack and then writes what it found missing (an account, the screens'
- * organization, a place in it, an invitation) is safe at two workers only when no other worker
- * does the same between its read and its write, since the second write is refused, or lands
- * twice. The step runs under the lock and reads again inside it, so a second caller waits, then
- * finds the state the first made and writes nothing.
+ * step that reads the stack and then writes what it found missing (the screens' organization, a
+ * place in it, an invitation) is safe at two workers only when no other worker does the same
+ * between its read and its write, since the second write is refused, or lands twice. The step
+ * runs under the lock and reads again inside it, so a second caller waits, then finds the state
+ * the first made and writes nothing.
  *
  * The lock is a directory under the OS temp dir, keyed by the stack's back end and the lock's
  * name: making a directory either makes it or fails, at once, for every process on the machine,
