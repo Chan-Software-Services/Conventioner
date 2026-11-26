@@ -103,6 +103,7 @@ Covered by:
    Cancel and Escape change nothing and give focus back to that Withdraw; "Withdraw" ends the invitation, the list re-reads in place with the dialog open, and focus goes to "Invited", or to Members when none is left.
    An invitation already accepted, declined, ended or withdrawn is read as withdrawn, closing the confirmation and re-reading the list and Admins and Members, so one accepted meanwhile is in its place.
    The confirmation withdraws the invitation as its row listed it when it opened, so one sent again since, to either place, is not withdrawn: the confirmation says "That invitation was sent again meanwhile. Read the invitations again, and withdraw it if you still mean to." and the list behind it is re-read.
+   Where that read leaves the row no Withdraw, as for an admin whose member invitation was sent again as an admin's, Cancel then gives focus to "Invited".
 
 Each invitation and withdrawal belongs to the dialog it was sent from (T411): while "Send invitation" and the invitations' re-read are out nothing closes Manage organization, and while a withdrawal and its re-read are out nothing closes its confirmation; a second press sends nothing.
 An answer that lands after Manage organization was closed, or opened on another organization, writes nothing into the one open, its re-read of the invitations included.

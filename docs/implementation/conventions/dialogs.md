@@ -69,6 +69,7 @@ sources:
   - T411
   - T422
   - T539
+  - T647
 ---
 
 # Dialogs
@@ -199,6 +200,7 @@ The opener is taken as the dialog opens, before focus moves in, and focused once
 It is left alone when it has left the page, a deleted row or a navigation, and when the parent has already put focus somewhere itself in the same tick.
 So a confirmation whose confirm takes its opener away puts focus somewhere itself: Manage organization's and Manage market's Remove asks first (E38/F15/S01), and confirming takes that Remove away with what it removed (the row, or the line of a market role that added nothing), so focus goes to the list it was in, a `tabindex="-1"` group named by its heading, once the confirmation has closed and the page behind is no longer inert; Cancel and Escape leave the row, and focus goes back to its Remove.
 Manage market's and Manage organization's Withdraw do the same for an invitation: focus goes to "Invited", or to "Users with access" or Members once none is left (T538).
+So does their Cancel, to "Invited", once the list read behind a refusal has taken the row's Withdraw away (T647).
 Manage market's role select asks first too (T211), and the shell gives focus back to the select, by Cancel, Escape, the backdrop, a refusal or a confirm, and the view focuses the select on opening, since Safari does not on a click; only when the re-read leaves no select, as it does for someone who changed their own role, does focus go to that same list.
 So an opener that goes away with the click hands focus on first: the phase rail's "More…" menu focuses its button as a choice closes it, as its Escape does, and a Publish or Archive confirm then gives focus back there ([`PhaseRail.vue`](../../../front-end/src/components/PhaseRail.vue)).
 `AppDialog` holds no focus trap, so a dialog that swaps one view for another moves focus itself: swapping unmounts the focused button.

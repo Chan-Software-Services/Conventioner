@@ -68,15 +68,31 @@ const withdrawal = useDialogSubmit({
 // Each opening, and each target the dialog is open on, starts with no confirmation asking.
 watch([() => props.open, key], () => (withdrawing.value = null));
 
+/** The Withdraw the confirmation was last opened by. */
+let askedBy: Element | null = null;
+
 /** Withdraw asks first: a mistyped address must not be able to join, nor a typed one lose it by a slip. */
-function ask(invitation: SentInvitation<Role>) {
+function ask(invitation: SentInvitation<Role>, press: Event) {
   const { id, sentAt, email } = invitation;
+  askedBy = press.currentTarget as Element;
   withdrawing.value = { id, sentAt, email };
 }
 
-/** Cancel, Escape and the backdrop change nothing; the shell gives focus back to the row's Withdraw. */
-function cancel() {
+/**
+ * Cancel, Escape and the backdrop change nothing; the shell gives focus back to the row's Withdraw.
+ * The list read behind a refusal may have taken that Withdraw away, the invitation sent again to a
+ * role the reader may not withdraw: focus then goes where it does after a withdrawal.
+ */
+async function cancel() {
+  const gone = !!askedBy && !askedBy.isConnected;
   withdrawing.value = null;
+  if (gone) await focusTheList();
+}
+
+/** To the list, or, once none is left, where the dialog says, when the page behind is no longer inert. */
+async function focusTheList() {
+  await nextTick();
+  (list.value ?? props.focusWhenNoneLeft)?.focus();
 }
 
 /**
@@ -94,8 +110,7 @@ async function withdraw() {
     done: async () => {
       withdrawing.value = null;
       emit('withdrawn');
-      await nextTick();
-      (list.value ?? props.focusWhenNoneLeft)?.focus();
+      await focusTheList();
     },
   });
 }
@@ -147,7 +162,7 @@ async function withdraw() {
               type="button"
               class="btn btn--secondary btn--destructive"
               :data-testid="`${testid}-invited-withdraw`"
-              @click="ask(invitation)"
+              @click="ask(invitation, $event)"
             >
               Withdraw<span class="visually-hidden"> {{ invitation.email }}</span>
             </button>
