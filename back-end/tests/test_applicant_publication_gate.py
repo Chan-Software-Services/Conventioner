@@ -1,14 +1,15 @@
 """Tests for the results-publication gate and applicant-visible status.
 
-The captain ruled (2026-07-13):
-    - ``reviewer_approved`` / ``reviewer_rejected`` outcomes must stay HIDDEN from the
-      applicant until the organizer explicitly PUBLISHES results.
-    - Until publication, the applicant sees a neutral ``under_review`` state.
-    - After publication, the applicant sees the actual verdict.
-    - The organizer always sees the true state.
+The rule (``docs/business/rules/an-applicant-never-reads-a-verdict-early.md``):
+    - An applicant's status reads ``open``, "Submitted", whatever is stored, both before and
+      after results are published.
+    - After publication the response also carries an outcome, a table or none, and still no
+      verdict.
+    - The organizer always sees the stored status.
 
-All three invariants are tested here at the API boundary: the applicant-visible-status function
-and the application serialization that wraps it.
+All three are tested here, on the applicant-visible-status function and on the applicant's and
+the organizer's serializations of an application. Of the two outcomes only "none" is tested
+here; ``test_two_outcomes.py`` tests a table.
 """
 import pytest
 
