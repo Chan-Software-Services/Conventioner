@@ -3,8 +3,8 @@
 Giving a market role, by accepting an invitation, and changing and taking one each read the market,
 judge the right of whoever gives, changes or takes it (an accept judges its inviter's) and the
 person's role, and then write. Each test lands a second role change between that read and the write
-(``interleave``), an accept through its own route or a change through its own module function by
-another organizer, and asserts what a person and a later reader see: each answer, the roles as
+(``interleave``), the invitee's accept through ``Invitees.accept`` or another organizer's change
+through its own module function, and asserts what a person and a later reader see: each answer, the roles as
 stored, and a history whose role entries, replayed over the roles the market started with, give the
 roles stored. An accept landing after its inviter's own role changed is
 ``test_answering_an_invitation_on_the_server.py``'s.

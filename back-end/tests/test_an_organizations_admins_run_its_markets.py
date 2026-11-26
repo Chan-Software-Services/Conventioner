@@ -253,9 +253,9 @@ def invited_and_accepted(role, who, person="newcomer"):
 def test_inviting_someone_already_on_the_market_changes_nothing(
     roles_on_the_market, market_records, mail, who, target,
 ):
-    """An invitation to an address already on the market would end in a second role for it, the
-    Owner's too. Changing a role is the role change's, where the Owner and the market's Admins are
-    guarded."""
+    """An invitation to an address already on the market, the Owner's too, is refused when it is
+    sent, and writes no invitation. Changing a role is the role change's, where the Owner and the
+    market's Admins are guarded."""
     before = roles_on_the_market()
 
     with pytest.raises(BadRequestError, match="already has a role on this market"):
