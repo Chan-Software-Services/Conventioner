@@ -103,7 +103,7 @@ export function applicationSection(
 }
 
 /**
- * The status a signed-in vendor reads at the top: "Submitted" until results are published, then
+ * The status a signed-in vendor reads at the top: "Submitted" until the results are out, then
  * their outcome; null when they have no application to have a status.
  */
 export function statusHeadline(application: ApplicantApplication | null): string | null {

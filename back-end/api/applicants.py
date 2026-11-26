@@ -86,7 +86,7 @@ logger = logging.getLogger(__name__)
 # ── Publication gate ───────────────────────────────────────────────────────
 
 def applicant_visible_status(
-    status: ApplicationStatus, results_published: bool,
+    status: ApplicationStatus, results_out: bool,
 ) -> ApplicationStatus:
     """The status of an application as its applicant is allowed to know it.
 
@@ -110,7 +110,7 @@ def applicant_visible_status(
 
 
 def _application_response(
-    app: Application, results_published: bool,
+    app: Application, results_out: bool,
     placements: Iterable[VendorAssignmentResult] = (),
     checked_in: Optional[Dict[str, Optional[str]]] = None,
     checked_out: Optional[Dict[str, str]] = None,
@@ -118,10 +118,11 @@ def _application_response(
 ) -> Dict[str, Any]:
     """Serialize an application for the applicant-facing API with the publication gate applied.
 
-    After publication it carries the applicant's outcome and their own seats (E36/F05/S02), read
-    off the stored placements on every read, so a seat changed by hand shows at once. Each seat
-    says when they checked in to it, from ``checked_in`` (``{date: checked_in_at}``), or null, and
-    when they checked out, from ``checked_out`` (``{date: checked_out_at}``), or null.
+    Once the results are out (``results_out``: published, or the market days reached unpublished)
+    it carries the applicant's outcome and their own seats (E36/F05/S02), read off the stored
+    placements on every read, so a seat changed by hand shows at once. Each seat says when they
+    checked in to it, from ``checked_in`` (``{date: checked_in_at}``), or null, and when they
+    checked out, from ``checked_out`` (``{date: checked_out_at}``), or null.
 
     ``with_answers`` is false on a market that imports its vendors (ADR 0022): its page shows no
     application, and the answers are the organizer's import of their own Google Form, so the read
@@ -130,9 +131,9 @@ def _application_response(
     placed = list(placements)
     outcome = (
         ResultOutcome.outcome_of(app.applicant_email, ResultOutcome.seated_from(placed))
-        if results_published else None
+        if results_out else None
     )
-    seats = ResultOutcome.seats_of(app.applicant_email, placed) if results_published else []
+    seats = ResultOutcome.seats_of(app.applicant_email, placed) if results_out else []
     came, left = checked_in or {}, checked_out or {}
     response = {
         "outcome": outcome,
@@ -147,7 +148,7 @@ def _application_response(
         "marketId": app.market_id,
         "applicantEmail": app.applicant_email,
         "formData": app.form_data,
-        "status": applicant_visible_status(app.status, results_published).value,
+        "status": applicant_visible_status(app.status, results_out).value,
         "applicationType": app.application_type.value,
         "mainApplicationId": app.main_application_id,
         "submittedAt": app.submitted_at,
@@ -465,9 +466,9 @@ def get_applicant_application(
         return {"application": None}, 200
 
     app = Application(**app_doc)
-    results_published = results_are_out(market_doc)
+    results_out = results_are_out(market_doc)
     return {"application": _application_response(
-        app, results_published, _stored_placements(market_doc),
+        app, results_out, _stored_placements(market_doc),
         AttendanceApi.check_ins_of(market_id, app.applicant_email),
         AttendanceApi.check_outs_of(market_id, app.applicant_email),
         with_answers=market_serves_applicants(market_doc))}, 200
