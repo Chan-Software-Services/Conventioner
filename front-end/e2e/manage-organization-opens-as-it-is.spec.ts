@@ -5,8 +5,13 @@
  * its own. Closing it reads the list again, so one reopened before that read answered listed the
  * admins as they were before, and kept them for that opening.
  *
+ * Its invite rows kept what was typed in them, too: only Cancel emptied one, and the list mounts one
+ * Manage organization for every organization, so an address left by Escape or by Close came back on
+ * the next opening, of another organization as much as the same one.
+ *
  * Why E2E: the stack together, an invitation accepted on the server while the page holds its list's
- * copy, with the page's reads of it held in the browser.
+ * copy, with the page's reads of it held in the browser; and a real Escape and Close from the page,
+ * once, over the one dialog the list keeps for every organization.
  */
 import type { Page } from '@playwright/test';
 import { test, expect, TEST_USER, BACKEND_URL, APP_API, OrganizationsPage } from './fixtures';
@@ -64,4 +69,48 @@ test('reopened before the read closing started has answered, it lists the admin 
   release();
   await expect(orgs.adminEmails).toHaveText([INVITED.email]);
   await expect(orgs.addAdminButton).toBeFocused();
+});
+
+test('an address left in an invite row by Escape or Close is gone at the next opening', async ({
+  authenticatedPage: page,
+  request,
+}) => {
+  await loginViaApi(request, BACKEND_URL, TEST_USER.email, TEST_USER.password);
+  const prefix = uniqueMarketName('Invite Rows Org');
+  const [one, another] = [`${prefix} A`, `${prefix} B`];
+  for (const name of [one, another]) {
+    const made = await request.post(`${BACKEND_URL}/organizations`, { data: { name } });
+    expect(made.ok(), await made.text()).toBe(true);
+  }
+
+  const orgs = new OrganizationsPage(page);
+  await orgs.goto();
+  /** Opens Manage organization from the list's card, with no reload between two openings. */
+  const manage = async (name: string) => {
+    await (await orgs.findCard(name)).getByTestId('organizations-manage-button').click();
+    await orgs.waitForManageOverlay();
+    await expect(orgs.manageWindow).toContainText(name);
+  };
+  /** Opens both invite rows, each of which must come up empty, and types an address in each. */
+  const openEmptyRowsAndType = async () => {
+    await orgs.addAdminButton.click();
+    await expect(orgs.addAdminInput).toHaveValue('');
+    await orgs.addAdminInput.fill('new.admin@example.com');
+    await orgs.addMemberButton.click();
+    await expect(orgs.addMemberInput).toHaveValue('');
+    await orgs.addMemberInput.fill('new.member@example.com');
+  };
+
+  await manage(one);
+  await openEmptyRowsAndType();
+  await orgs.addMemberInput.press('Escape');
+  await expect(orgs.manageWindow).toHaveCount(0);
+
+  await manage(another);
+  await openEmptyRowsAndType();
+  await orgs.manageCloseButton.click();
+  await expect(orgs.manageWindow).toHaveCount(0);
+
+  await manage(another);
+  await openEmptyRowsAndType();
 });

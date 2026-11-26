@@ -26,6 +26,7 @@ sources:
   - T538
   - T583
   - T637
+  - T646
 ---
 
 # The organization's people
@@ -117,6 +118,9 @@ It opened on the organizations list's copy and read the organization again only 
 - A rename and a change to the default table are shown as soon as they are saved, and a read asked before either is dropped and asked again, so it never puts the old value back.
 - The rename field takes each name that differs from the one shown, so a read that brings the same name leaves one being typed alone.
 
+The list mounts one Manage organization for every organization, so each opening puts back what the last one left: both invite rows closed, their fields empty and nothing said under them, no confirmation asking, and the finds empty.
+Each row's Cancel and the opening clear it through the one function (`clearAddAdmin`, `clearAddMember`), since only Cancel emptied the field, and an address left by Escape or the close button came back on the next opening, of another organization too (T646).
+
 ## Make member and Make admin
 
 **Manage organization gives its owner "Make member" on each admin's row and "Make admin" on each member's**, secondary buttons before Remove, each naming the person in a visually hidden span, as Remove does.
@@ -143,9 +147,9 @@ A 404, someone removed meanwhile, is read as done, with focus on the list their 
 [`aChangeThatMetAnotherInAnOrganization.test.ts`](../../../front-end/src/__tests__/aChangeThatMetAnotherInAnOrganization.test.ts): the 409's sentence in the Remove and the place change's confirmation, with the re-read behind it, and no re-read for an invitation's refusal.
 [`changingAPlaceAsksFirst.test.ts`](../../../front-end/src/__tests__/changingAPlaceAsksFirst.test.ts): the two buttons for the owner alone, the confirmations' words, Cancel and Escape, the request, the re-read and where focus goes, the 404 read as done, the 409 and any other refusal in the confirmation, and one request however often the confirm is pressed, the confirmation held by the shell while it writes, and a refusal not in the next change.
 [`manageOrganizationPeople.test.ts`](../../../front-end/src/__tests__/manageOrganizationPeople.test.ts): Rename held and sent once, and an invitation's refusal, a rename's answers and a stale re-read after a removal kept out of Manage organization opened on another organization.
-[`manageOrganizationInvites.test.ts`](../../../front-end/src/__tests__/manageOrganizationInvites.test.ts): Invite admin and Invite member, "Invited" and Withdraw, each held, sent once and kept to its opening.
+[`manageOrganizationInvites.test.ts`](../../../front-end/src/__tests__/manageOrganizationInvites.test.ts): Invite admin and Invite member, "Invited" and Withdraw, each held, sent once and kept to its opening; each invite row empty at the next opening, on this organization or another, and after Cancel.
 [`manageOrganizationReadsOnOpen.test.ts`](../../../front-end/src/__tests__/manageOrganizationReadsOnOpen.test.ts): the read as it opens and at each opening, nobody of the copy listed while it is out, the name it brings, a failed first read, an organization no longer listed, focus kept inside the dialog, nothing asked as it closes, a read for a closed opening dropped, a rename kept over a read asked before it, and what a failed re-read after a removal or a change of place says.
-[`manage-organization-opens-as-it-is.spec.ts`](../../../front-end/e2e/manage-organization-opens-as-it-is.spec.ts): reopened on the stack with every read of the list held, after the person invited has accepted, it lists nobody until the read answers and then lists them.
+[`manage-organization-opens-as-it-is.spec.ts`](../../../front-end/e2e/manage-organization-opens-as-it-is.spec.ts): reopened on the stack with every read of the list held, after the person invited has accepted, it lists nobody until the read answers and then lists them; an address typed in each invite row is gone at the next opening, after Escape on another organization and after the close button on the same one.
 [`an-organizations-people-change-place.spec.ts`](../../../front-end/e2e/an-organizations-people-change-place.spec.ts): the owner makes an admin a member and back on the stack, each asked first, with the buttons' names, the rows, the focus, the History and a reload, at a desk and on a phone.
 
 ## Why
