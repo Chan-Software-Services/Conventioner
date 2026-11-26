@@ -16,9 +16,6 @@ export class OrganizationsPage {
 
   // ── Organizations list view ──
   readonly createButton: Locator;
-  /** The list's failed read, and its Try again. */
-  readonly readFailed: Locator;
-  readonly retryButton: Locator;
   readonly orgCards: Locator;
   readonly manageButtons: Locator;
   /** "Find an organization", drawn past 12 (T223). */
@@ -121,8 +118,6 @@ export class OrganizationsPage {
 
     // OrganizationsView
     this.createButton = page.getByTestId('organizations-create-button');
-    this.readFailed = page.getByTestId('organizations-read-failed');
-    this.retryButton = page.getByTestId('organizations-retry');
     this.orgCards = page.getByTestId('organization-card');
     this.manageButtons = page.getByTestId('organizations-manage-button');
     this.findInput = page.getByTestId('organizations-list-find');
