@@ -238,10 +238,21 @@ def test_a_run_that_waits_too_long_fails_saying_so(runs):
     assert first.release() == 0
 
 
-def test_the_wait_is_named_in_minutes_when_it_is_whole_minutes(runs):
-    out, _ = runs(f"source {LIBRARY}; e2e_lock_span 2700", "").rest()
+@pytest.mark.parametrize(
+    "seconds, worded",
+    [
+        (1, "1 second"),
+        (2, "2 seconds"),
+        (60, "1 minute"),
+        (120, "2 minutes"),
+        (2700, "45 minutes"),
+    ],
+)
+def test_a_wait_reads_in_whole_minutes_or_seconds_singular_for_one(runs, seconds, worded):
+    out, status = runs(f"source {LIBRARY}; e2e_lock_span {seconds}", "").rest()
 
-    assert out == "45 minutes\n"
+    assert status == 0, out
+    assert out == f"{worded}\n"
 
 
 # A child that outlives the run in a process group of its own, as the teardown guard does,
