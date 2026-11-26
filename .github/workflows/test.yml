@@ -38,6 +38,9 @@ env:
   ZIZMOR_SHA256: d185f726bdaf92df78273217dfdd24ebcd6b0ef48cf3ce776ff5762b6e138c99
   ACTIONLINT_VERSION: 1.7.12
   ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+  # The E2E shards a whole run takes. The shard matrix's fallback list, which cannot read `env`,
+  # lists 1 to it; `e2e-select` asks for no more, and `test-map` expects this many.
+  E2E_SHARDS: "10"
 
 # Each job's `name:` is its check's name, which the rules of dev and main require a check by:
 # renaming a required job drops its check from the required list.
@@ -47,10 +50,10 @@ jobs:
   # only warms the caches the pull requests read (`warm`); every other commit, or any doubt, runs
   # the whole suite (`full`). A nightly or hand-started run makes the test map (`map`: the shards,
   # recording, and `test-map`), or no test job when the commit has one (`none`); python-advisories
-  # reads no word, so it runs on each of them. Every other run skips this job and starts every job
-  # at once. The step's shell makes anything but one of the script's words `full`, and the jobs read
-  # an empty output, this job skipped or failed, as `full` too, so nothing here can skip a test it
-  # should not.
+  # reads no word, so it runs on each of them. Every other run skips this job, so none of its jobs
+  # waits for a word. The step's shell makes anything but one of the script's words `full`, and the
+  # jobs read an empty output, this job skipped or failed, as `full` too, so nothing here can skip
+  # a test it should not.
   suite:
     name: suite
     if: github.event_name == 'push' && github.ref == 'refs/heads/dev' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -392,20 +395,71 @@ jobs:
           persist-credentials: false
       - run: docker compose build
 
-  # Split by spec file across ten runners, each with its own Docker stack, so a PR waits for a
-  # tenth of the suite rather than all of it (89 runner-minutes of tests on 2026-11-11, 1 to 3
-  # more per runner to set up, by what the caches hold). The tests share one database WITHIN a runner (`workers: 1`),
-  # never across runners. `front-end/scripts/e2e-shards.ts` deals the spec files to the shards by
-  # their measured seconds, not Playwright's `--shard`, which cuts the alphabetical list by test
-  # count and once left one shard at 24 minutes and another at 6. The seconds are the newest
+  # What a pull request's E2E run runs (`scripts/affected-specs.py ci`): the specs the test map
+  # names for its change, with the shards their minutes need and none when it names no spec, or the
+  # whole suite. Only a pull request into dev asks. The step's shell passes a named list on only
+  # from a script that exited 0 having printed one well-formed named decision, and the shards and
+  # `e2e` read an empty output, this job skipped or failed, as the whole suite, so every doubt runs
+  # every spec. No check requires it.
+  e2e-select:
+    name: e2e-select
+    if: github.event_name == 'pull_request' && github.base_ref == 'dev'
+    runs-on: ubuntu-latest
+    # The script reads dev's newest `test-map` artifact and the shard reports of the run that made it.
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      scope: ${{ steps.decide.outputs.scope }}
+      shards: ${{ steps.decide.outputs.shards }}
+      specs: ${{ steps.decide.outputs.specs }}
+    steps:
+      # Two commits: the merge commit and its first parent, whose difference is the change.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      # The script needs only the standard library, so the runner's own Python runs it.
+      - id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          decision="$(python3 scripts/affected-specs.py ci --github --base HEAD^1 --head HEAD --max-shards "$E2E_SHARDS")" || decision=""
+          if printf '%s' "$decision" | jq -se --argjson max "$E2E_SHARDS" '
+            length == 1 and (.[0] | .scope == "named"
+              and (.specs | type == "array" and all(type == "string"))
+              and (.shards | type == "number" and . == floor and . >= 0 and . <= $max)
+              and ((.shards == 0) == (.specs | length == 0)))' >/dev/null 2>&1; then
+            {
+              echo "scope=named"
+              echo "shards=$(printf '%s' "$decision" | jq -c '[range(1; .shards + 1)]')"
+              echo "specs=$(printf '%s' "$decision" | jq -c '.specs')"
+            } >>"$GITHUB_OUTPUT"
+          elif printf '%s' "$decision" | jq -se 'length == 1 and .[0].scope == "whole"' >/dev/null 2>&1; then
+            echo "The selection chose the whole suite."
+            echo "scope=whole" >>"$GITHUB_OUTPUT"
+          else
+            echo "The selection could not decide, so the whole suite runs."
+            echo "scope=whole" >>"$GITHUB_OUTPUT"
+          fi
+
+  # Split by spec file across runners, each with its own Docker stack: ten for a whole run
+  # (`E2E_SHARDS`), so it waits for a tenth of the suite rather than all of it (89 runner-minutes
+  # of tests on 2026-11-11, 1 to 3 more per runner to set up, by what the caches hold). When
+  # `e2e-select` named a list, which it does only for a pull request into dev, the run deals only
+  # those specs, across the shards it asked for, and runs no shard when the list is empty. The
+  # tests share one database WITHIN a runner (`workers: 1`), never across runners.
+  # `front-end/scripts/e2e-shards.ts` deals the spec files to the shards by their measured
+  # seconds, not Playwright's `--shard`, which cuts the alphabetical list by test count and once
+  # left one shard at 24 minutes and another at 6. The seconds are the newest
   # `e2e-shard-timings` artifact a push to dev or a merge queue trial commit published, made at
   # least ten minutes before this run was created, so every shard and every re-run picks the same
   # one; with none, or one it cannot read, the committed `e2e-shard-timings.json`.
-  # `total` is the length of `shard`'s list: the two move together.
   e2e-shard:
-    name: e2e shard ${{ matrix.shard }}/${{ matrix.total }}
-    needs: suite
-    if: ${{ !cancelled() && (needs.suite.outputs.run == '' || needs.suite.outputs.run == 'full' || needs.suite.outputs.run == 'map') }}
+    name: e2e shard ${{ matrix.shard }}/${{ strategy.job-total }}
+    needs: [suite, e2e-select]
+    if: ${{ !cancelled() && (needs.suite.outputs.run == '' || needs.suite.outputs.run == 'full' || needs.suite.outputs.run == 'map') && needs.e2e-select.outputs.shards != '[]' }}
     runs-on: ubuntu-latest
     # The timings step lists the artifacts and reads its own run's creation time.
     permissions:
@@ -414,8 +468,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-        total: [10]
+        # The whole run's shards, 1 to E2E_SHARDS, unless e2e-select named fewer.
+        shard: ${{ fromJSON(needs.e2e-select.outputs.shards || '[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]') }}
     env:
       DISABLE_CAPTCHA: "true"
       DISABLE_EMAIL: "true"
@@ -428,7 +482,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # Shard 1 alone saves what it built, so ten shards never race to write one key. A merge
+      # Shard 1 alone saves what it built, so the shards never race to write one key. A merge
       # queue's trial commit saves nothing: a cache written on its queue branch no other run reads.
       - uses: ./.github/actions/front-end-deps # zizmor: ignore[self-repository] actionlint 1.7.12, the latest, refuses the $/ form
         with:
@@ -450,16 +504,24 @@ jobs:
         working-directory: front-end
         env:
           SHARD: ${{ matrix.shard }}
-          TOTAL: ${{ matrix.total }}
+          TOTAL: ${{ strategy.job-total }}
+          # The specs a pull request's run deals, as a JSON list; empty deals every spec.
+          E2E_SPECS: ${{ needs.e2e-select.outputs.specs }}
           # Empty, so off, unless this run records the test map.
           TEST_MAP_OUT: ${{ env.RECORD_TEST_MAP == 'true' && format('{0}/test-map/records.jsonl', github.workspace) || '' }}
-        run: node scripts/e2e-shards.ts "--shard=$SHARD/$TOTAL" "--timings=$RUNNER_TEMP/e2e-shard-timings.json"
+        run: |
+          set -- "--shard=$SHARD/$TOTAL" "--timings=$RUNNER_TEMP/e2e-shard-timings.json"
+          if [ -n "$E2E_SPECS" ]; then
+            printf '%s' "$E2E_SPECS" >"$RUNNER_TEMP/e2e-specs.json"
+            set -- "$@" "--specs=$RUNNER_TEMP/e2e-specs.json"
+          fi
+          node scripts/e2e-shards.ts "$@"
       - name: Report flaky tests
         if: always()
         working-directory: front-end
         env:
           SHARD: ${{ matrix.shard }}
-          TOTAL: ${{ matrix.total }}
+          TOTAL: ${{ strategy.job-total }}
         run: |
           if [ -f test-results/results.json ]; then
             FLAKY=$(jq -r '.stats.flaky // 0' test-results/results.json)
@@ -501,7 +563,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 90
       # The report and the deal record, which the `e2e` job checks and blends into the next
-      # timings; the selection audit reads the report too.
+      # timings; the selection's audits read the report too.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
@@ -561,8 +623,8 @@ jobs:
   # reached: the back end's suite once under coverage, for what each endpoint runs, then the build
   # of both into the `test-map` artifact. No check requires it, and a push or a pull request never
   # runs it. A shard that failed still recorded; a shard that recorded nothing makes the build
-  # refuse, so the map is whole or not made. `--shards-expected` is the
-  # matrix's `total`: the two move together.
+  # refuse, so the map is whole or not made. `--shards-expected` is `E2E_SHARDS`: a run that
+  # makes the map is a whole run.
   test-map:
     name: test-map
     needs: [suite, e2e-shard]
@@ -591,7 +653,7 @@ jobs:
         run: >-
           python scripts/test_map.py build --commit "$COMMIT"
           --endpoints "$RUNNER_TEMP/endpoints.json"
-          --shards "$RUNNER_TEMP/test-map-shards" --shards-expected 10
+          --shards "$RUNNER_TEMP/test-map-shards" --shards-expected "$E2E_SHARDS"
           --out "$RUNNER_TEMP/test-map.json"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -627,18 +689,21 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: python3 scripts/e2e_retries.py --runs 20
 
-  # The one check to require: it passes only when every shard did and the shards ran every spec
-  # file exactly once, so the rules name a single job whatever the shard count becomes. It runs
-  # whatever the shards' result, so a failed shard fails it, but not on a run that was cancelled,
-  # which would post a red check on the head a later push made moot, nor on a warm push, whose
-  # skipped shards would post a red one on a commit the queue's run passed, nor on a nightly or
-  # hand-started run, which posts it on dev's tip only as skipped, read as passing, never a red one.
+  # The one check to require, so the rules name a single job whatever the shard count becomes: it
+  # passes only when every shard did and the shards ran every spec file exactly once. On a pull
+  # request's run whose `e2e-select` named a list, they ran exactly that list instead, and with a
+  # list of no spec no shard runs and it passes. The queue's run, a push's and a whole pull
+  # request's demand every spec file, whatever `e2e-select` printed. It runs whatever the shards'
+  # result, so a failed shard fails it, but not on a run that was cancelled, which would post a red
+  # check on the head a later push made moot, nor on a warm push, whose skipped shards would post a
+  # red one on a commit the queue's run passed, nor on a nightly or hand-started run, which posts
+  # it on dev's tip only as skipped, read as passing, never a red one.
   e2e:
     name: e2e
-    needs: [suite, e2e-shard]
+    needs: [suite, e2e-select, e2e-shard]
     if: ${{ !cancelled() && (needs.suite.outputs.run == '' || needs.suite.outputs.run == 'full') }}
     runs-on: ubuntu-latest
-    # The audit reads dev's newest `test-map` artifact, which a nightly run made.
+    # Each audit of the selection reads dev's newest `test-map` artifact, which a nightly run made.
     permissions:
       contents: read
       actions: read
@@ -646,9 +711,15 @@ jobs:
       # A push to dev and a merge queue trial commit publish the next timings; no other run does,
       # and a run whose shards did not all pass publishes nothing.
       PUBLISHES_TIMINGS: ${{ github.event_name == 'merge_group' || (github.event_name == 'push' && github.ref == 'refs/heads/dev') }}
+      # What this run's shards owe: the selection's list on a pull request whose scope is named,
+      # every spec file otherwise.
+      EVENT: ${{ github.event_name }}
+      SCOPE: ${{ needs.e2e-select.outputs.scope }}
+      E2E_SPECS: ${{ needs.e2e-select.outputs.specs }}
     steps:
-      # The checkout and the shards' artifacts serve the deal's check below and, on a pull request,
-      # the selection audit. The checkout takes two commits for the audit's diff.
+      # The checkout and the shards' artifacts serve the deal's check below and the selection's
+      # audits, a pull request's and the queue's. The checkout takes two commits for each audit's
+      # diff.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -663,8 +734,35 @@ jobs:
         with:
           pattern: e2e-results-shard-*
           path: ${{ runner.temp }}/e2e-results
+      # The check below and the audits read a folder per shard of this run. The download makes one
+      # for each artifact, except that it unpacks a lone one, a one-shard run's, straight into its
+      # path. It also takes what an earlier attempt of this run left, so a re-run that asked for
+      # fewer shards drops the folders numbered above its own count: the length of the list
+      # `e2e-select` set, or `E2E_SHARDS` when it set none, a whole run.
+      - name: A folder of results for each of this run's shards
+        env:
+          SELECTED_SHARDS: ${{ needs.e2e-select.outputs.shards }}
+        run: |
+          results="$RUNNER_TEMP/e2e-results"
+          for file in results.json e2e-deal.json; do
+            if [ -f "$results/$file" ]; then
+              mkdir -p "$results/e2e-results-shard-1"
+              mv "$results/$file" "$results/e2e-results-shard-1/"
+            fi
+          done
+          count="$E2E_SHARDS"
+          if [ -n "$SELECTED_SHARDS" ]; then
+            count="$(printf '%s' "$SELECTED_SHARDS" | jq length)"
+          fi
+          shopt -s nullglob
+          for folder in "$results"/e2e-results-shard-*; do
+            if [ "${folder##*-}" -gt "$count" ]; then
+              rm -r -- "$folder"
+            fi
+          done
       # Once every shard passed: every shard dealt by the same timings and their reports hold every
-      # spec file exactly once, or this fails the job, since a file no shard ran was never tested.
+      # spec file exactly once, or with `--named` each file of the selection's list exactly once, or
+      # this fails the job, since a file no shard ran was never tested.
       # The job summary names the timings' source, each shard's seconds and the spread. When this run
       # publishes the timings (PUBLISHES_TIMINGS) it also writes the next timings, the ones the run dealt
       # by blended with what it measured, for the step after it to publish.
@@ -672,11 +770,14 @@ jobs:
         if: needs.e2e-shard.result == 'success'
         working-directory: front-end
         run: |
-          if [ "$PUBLISHES_TIMINGS" = true ]; then
-            node scripts/e2e-shards.ts check "$RUNNER_TEMP/e2e-results" "--publish=$RUNNER_TEMP/e2e-shard-timings.json"
-          else
-            node scripts/e2e-shards.ts check "$RUNNER_TEMP/e2e-results"
+          set -- "$RUNNER_TEMP/e2e-results"
+          if [ "$EVENT" = pull_request ] && [ "$SCOPE" = named ]; then
+            printf '%s' "$E2E_SPECS" >"$RUNNER_TEMP/e2e-named.json"
+            set -- "$@" "--named=$RUNNER_TEMP/e2e-named.json"
+          elif [ "$PUBLISHES_TIMINGS" = true ]; then
+            set -- "$@" "--publish=$RUNNER_TEMP/e2e-shard-timings.json"
           fi
+          node scripts/e2e-shards.ts check "$@"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: needs.e2e-shard.result == 'success' && env.PUBLISHES_TIMINGS == 'true'
         with:
@@ -701,7 +802,33 @@ jobs:
           shopt -s nullglob
           python3 scripts/affected-specs.py audit --github --base HEAD^1 --head HEAD \
             "$RUNNER_TEMP"/e2e-results/*/results.json
-      - name: Every shard passed
+      # On a merge queue trial commit, each failed spec as the pull request's own E2E run would
+      # treat it for this change, from the trial commit's first parent: it ran it by name, it ran
+      # the whole suite, or it left it out, each spec left out a warning annotation. The audit
+      # decides that again as it runs, from this commit and the newest map, so it is no record of
+      # what that run did. It continues on error, so it never decides the job.
+      - name: Audit the pull request's selection
+        if: github.event_name == 'merge_group'
+        continue-on-error: true
+        timeout-minutes: 10
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          shopt -s nullglob
+          python3 scripts/affected-specs.py audit --queue --github --base HEAD^1 --head HEAD \
+            "$RUNNER_TEMP"/e2e-results/*/results.json
+      # The job's verdict. Skipped shards pass it only where the selection named no spec.
+      - name: Every shard passed, or the selection named no spec
         env:
           SHARDS_RESULT: ${{ needs.e2e-shard.result }}
-        run: test "$SHARDS_RESULT" = "success"
+        run: |
+          if [ "$SHARDS_RESULT" = success ]; then
+            exit 0
+          fi
+          if [ "$EVENT" = pull_request ] && [ "$SCOPE" = named ] && [ "$E2E_SPECS" = "[]" ] && [ "$SHARDS_RESULT" = skipped ]; then
+            echo "No E2E spec ran: the test map names none for this change." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "::error::The e2e shards ended $SHARDS_RESULT"
+          exit 1
