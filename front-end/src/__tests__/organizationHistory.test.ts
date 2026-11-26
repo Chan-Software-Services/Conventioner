@@ -306,7 +306,9 @@ function renamed(id: string, minutes: number, name: string): MarketHistoryEntry 
 function serve(...pages: Array<{ entries: MarketHistoryEntry[]; next: string | null }>) {
   const asked: string[] = [];
   api.get.mockImplementation(async (url: string) => {
-    // The owner's and the admins' read of the invitations waiting, which is not the History's.
+    // Manage organization's own read of the organization, and the owner's and the admins' of the
+    // invitations waiting, neither of which is the History's.
+    if (url === '/organizations') return listed();
     if (url.endsWith('/invitations')) return { data: { invitations: invited } };
     asked.push(url);
     return { data: pages[Math.min(asked.length - 1, pages.length - 1)] };
@@ -325,7 +327,12 @@ const ORG: Organization = {
   userRole: 'owner',
 };
 
+/** The organization the dialog was last mounted on, as its read of the organizations list answers. */
+let mountedOn = ORG;
+const listed = () => ({ data: { organizations: [mountedOn] } });
+
 function mountDialog(org: Organization = ORG) {
+  mountedOn = org;
   return mount(ManageOrgOverlay, {
     props: { manageOpen: true, org },
     attachTo: document.body,
@@ -351,15 +358,16 @@ let invited: SentInvitation[] = [];
 
 /**
  * The History's reads answer these in turn, the last for every read after it; Manage
- * organization's own read of the invitations answers `invited`.
+ * organization's own reads answer the organization and `invited`.
  */
 function historyAnswers(...answers: Array<() => Promise<unknown>>) {
   let at = 0;
-  api.get.mockImplementation((url: string) =>
-    url.endsWith('/invitations')
+  api.get.mockImplementation((url: string) => {
+    if (url === '/organizations') return Promise.resolve(listed());
+    return url.endsWith('/invitations')
       ? Promise.resolve({ data: { invitations: invited } })
-      : answers[Math.min(at++, answers.length - 1)]!(),
-  );
+      : answers[Math.min(at++, answers.length - 1)]!();
+  });
 }
 
 beforeEach(() => {

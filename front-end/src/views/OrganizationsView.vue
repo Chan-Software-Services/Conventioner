@@ -148,8 +148,9 @@ function dropManageKey() {
  * The dialog saved something. Close is no longer how this list finds out (E20/F01/S02): it used
  * to be the ONLY way, which is exactly why every membership change closed the dialog.
  *
- * `manageOrg` is deliberately not re-pointed at the refreshed organization - the dialog re-reads
- * its own, and replacing the prop underneath it would reset the open add form mid-typing.
+ * `manageOrg` is deliberately not re-pointed at the refreshed organization - the dialog reads its
+ * own, as it opens and after a change to its people, and replacing the prop underneath it would
+ * reset the open add form mid-typing.
  */
 function handleManageChanged() {
   loadOrganizations();

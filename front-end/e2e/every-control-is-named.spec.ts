@@ -1,5 +1,13 @@
 import type { Page } from '@playwright/test';
-import { test, expect, TEST_USER, BACKEND_URL, LoginPage, VendorPage } from './fixtures';
+import {
+  test,
+  expect,
+  TEST_USER,
+  BACKEND_URL,
+  LoginPage,
+  OrganizationsPage,
+  VendorPage,
+} from './fixtures';
 import { calendarToday, forgetSignInAttempts, signInOnThePage } from './helpers/vendorSignIn';
 import {
   marketPagePath,
@@ -295,7 +303,7 @@ test('every field on every other organizer screen and dialog has a name', async 
 
   await page.goto('/organizations');
   await page.getByTestId('organizations-manage-button').first().click();
-  await expect(page.getByTestId('manage-org-window')).toBeVisible();
+  await new OrganizationsPage(page).waitForManageOverlay();
   // Its History section, an entry opened to its before and after (E40/F02/S01).
   await page.getByTestId('manage-org-history-toggle').click();
   await page.getByTestId('org-history-toggle').first().click();

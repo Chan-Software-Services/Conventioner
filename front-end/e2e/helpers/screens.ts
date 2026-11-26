@@ -116,6 +116,18 @@ function formAt(...args: Parameters<typeof at>) {
   };
 }
 
+/**
+ * `at` on Manage organization, once its own read of the organization has answered: until then its
+ * Admins and Members say they are loading.
+ */
+function manageOrgAt(...args: Parameters<typeof at>) {
+  const open = at(...args);
+  return async (page: Page, seed: TheScreensSeed) => {
+    await open(page, seed);
+    await new OrganizationsPage(page).waitForPeopleRead();
+  };
+}
+
 /** Markets, in a browser that remembers `id` as the market it opened last (E21/F02/S05). */
 async function openRemembering(page: Page, id: string, ready: string) {
   await page.goto('/markets');
@@ -223,6 +235,8 @@ const invitedToTheOrganization = async (page: Page, seed: TheScreensSeed) => {
     .getByTestId('organizations-manage-button')
     .click();
   await expect(orgs.invitedRows.nth(1)).toBeVisible({ timeout: 15000 });
+  // The people above it are a read of their own, and move it as they arrive.
+  await orgs.waitForPeopleRead();
   await orgs.invited.scrollIntoViewIfNeeded();
 };
 
@@ -754,7 +768,7 @@ export const SCREEN_GROUPS = {
       name: 'the manage-organization dialog',
       who: 'organizer',
       sizes: FITS_A_PHONE,
-      open: at(
+      open: manageOrgAt(
         fixed('/organizations'),
         'organization-card',
         ['organizations-manage-button', 'manage-org-window'],
@@ -767,7 +781,7 @@ export const SCREEN_GROUPS = {
       name: "the manage-organization dialog's history, an entry open",
       who: 'organizer',
       sizes: FITS_A_PHONE,
-      open: at(
+      open: manageOrgAt(
         fixed('/organizations'),
         'organization-card',
         ['organizations-manage-button', 'manage-org-history-toggle'],
@@ -790,7 +804,7 @@ export const SCREEN_GROUPS = {
       name: 'the delete-organization dialog, refused while markets are under way',
       who: 'organizer',
       sizes: FITS_A_PHONE,
-      open: at(
+      open: manageOrgAt(
         fixed('/organizations'),
         'organization-card',
         ['organizations-manage-button', 'manage-org-window'],

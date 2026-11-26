@@ -394,13 +394,15 @@ describe("a member's dialog", () => {
 
 describe('Manage organization', () => {
   it("holds the section, and a change in its dialog re-reads the organization's History", async () => {
-    api.get.mockImplementation(async (url: string) =>
-      url.endsWith('/history')
+    const shown = org(BUILT_IN, 'admin');
+    api.get.mockImplementation(async (url: string) => {
+      if (url === '/organizations') return { data: { organizations: [shown] } };
+      return url.endsWith('/history')
         ? { data: { entries: [], next: null, rowLabels: {} } }
-        : { data: { entries: [] } },
-    );
+        : { data: { entries: [] } };
+    });
     const mounted = mount(ManageOrgOverlay, {
-      props: { manageOpen: true, org: org(BUILT_IN, 'admin') },
+      props: { manageOpen: true, org: shown },
       attachTo: document.body,
     });
     wrapper = mounted;
