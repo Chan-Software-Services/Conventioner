@@ -4,7 +4,8 @@ back-end functions each endpoint runs.
 The build reads what CI's shards recorded (one JSON line per test, front-end/e2e/helpers/testMap.ts)
 beside each shard's back-end log, and the coverage data of the pytest pass that
 back-end/tests/test_map_plugin.py splits by endpoint. These tests give it fixture records, logs and
-a real coverage data file, and read the map it writes.
+a real coverage data file, and read the map it writes and what it says; the endpoint pass runs over
+a back end of its own.
 """
 import json
 import subprocess
@@ -360,9 +361,9 @@ class TestTheCommandLine:
         assert "2 specs" in done.stdout
         assert "2 endpoints" in done.stdout
 
-    def build(self, tmp_path, *extra):
+    def build(self, tmp_path, *extra, bridge=None):
         endpoints = tmp_path / "endpoints.json"
-        endpoints.write_text(json.dumps({"rules": RULES, "endpoints": {}}))
+        endpoints.write_text(json.dumps({"rules": RULES, "endpoints": bridge or {}}))
         return subprocess.run(
             [
                 sys.executable,
@@ -407,6 +408,72 @@ class TestTheCommandLine:
         assert "2 of 3" in done.stderr
         assert not (tmp_path / "out.json").exists()
         assert self.build(tmp_path, "--shards-expected", "2").returncode == 0
+
+    @pytest.mark.parametrize("expected, said", [(1, "0 of 1 shard under"), (2, "0 of 2 shards under")])
+    def test_build_words_the_shards_it_expected_by_their_count(self, tmp_path, expected, said):
+        done = self.build(tmp_path, "--shards-expected", str(expected))
+        assert done.returncode == 1
+        assert said in done.stderr
+
+    @pytest.mark.parametrize(
+        "count, said",
+        [
+            (1, "1 spec from 1 test on 1 shard, 1 endpoint, at 291c5732"),
+            (2, "2 specs from 2 tests on 2 shards, 2 endpoints, at 291c5732"),
+        ],
+    )
+    def test_build_words_what_it_wrote_by_its_counts(self, tmp_path, count, said):
+        for n in range(1, count + 1):
+            self.shard(tmp_path, n)
+        done = self.build(tmp_path, bridge={f"GET /{n}": {} for n in range(count)})
+        assert done.returncode == 0, done.stderr
+        assert f"test_map: {said}" in done.stdout
+
+    @pytest.mark.parametrize(
+        "count, said", [(1, "1 endpoint, 1 rule, to "), (2, "2 endpoints, 2 rules, to ")]
+    )
+    def test_the_endpoint_pass_words_what_it_wrote_by_its_counts(self, tmp_path, count, said):
+        # A back end of its own, with a stand-in for its plugin that names `count` rules, and one
+        # test that calls `count` functions, each in an endpoint's context.
+        back_end = tmp_path / "back-end"
+        (back_end / "tests").mkdir(parents=True)
+        (back_end / "routes.py").write_text("def a():\n    return 1\n\n\ndef b():\n    return 2\n")
+        (back_end / "tests" / "test_map_plugin.py").write_text(
+            textwrap.dedent(
+                f"""\
+                import json
+                import os
+
+
+                def pytest_sessionfinish(session):
+                    with open(os.environ["TEST_MAP_RULES"], "w") as out:
+                        json.dump({RULES[:count]!r}, out)
+                """
+            )
+        )
+        (back_end / "tests" / "test_routes.py").write_text(
+            textwrap.dedent(
+                f"""\
+                import coverage
+
+                import routes
+
+
+                def test_calls():
+                    for name in ["a", "b"][:{count}]:
+                        coverage.Coverage.current().switch_context(f"t|GET /{{name}}")
+                        getattr(routes, name)()
+                """
+            )
+        )
+        done = subprocess.run(
+            [sys.executable, str(SCRIPT), "endpoints", "--out", str(tmp_path / "endpoints.json"),
+             "--back-end", str(back_end)],
+            capture_output=True,
+            text=True,
+        )  # fmt: skip
+        assert done.returncode == 0, done.stdout + done.stderr
+        assert f"test_map: {said}" in done.stdout
 
 
 def test_the_coverage_installed_is_one_the_bridge_reads():

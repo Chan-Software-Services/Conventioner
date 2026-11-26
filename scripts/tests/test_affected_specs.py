@@ -156,17 +156,22 @@ def seconds_file(tmp_path, seconds):
     return results
 
 
-def choose(repo, *args, env=None, fixture_map=True):
-    """The selector's --list --json, from the repository, with the fixture map unless told not to,
-    when it finds the map itself."""
-    command = [sys.executable, str(SCRIPT), "--list", "--json", *args]
+def listing(repo, *args, env=None, fixture_map=True):
+    """What the selector's --list prints, run from the repository, with the fixture map unless told
+    not to, when it finds the map itself."""
+    command = [sys.executable, str(SCRIPT), "--list", *args]
     if fixture_map:
         command += ["--map", str(repo.parent / "test-map.json")]
     done = subprocess.run(
         command, cwd=repo, capture_output=True, text=True, env={**os.environ, **(env or {})}
     )
     assert done.returncode == 0, done.stdout + done.stderr
-    return json.loads(done.stdout)
+    return done.stdout
+
+
+def choose(repo, *args, **options):
+    """The selector's --list --json, as `listing` runs it."""
+    return json.loads(listing(repo, "--json", *args, **options))
 
 
 def chosen(result):
@@ -760,6 +765,13 @@ class TestTheOrderAndTheCap:
         assert result["run"] == []
         assert [row["spec"] for row in result["left"]] == ["a.spec.ts", "b.spec.ts", "c.spec.ts"]
 
+    @pytest.mark.parametrize("cap, worded", [("1", "1 CI minute"), ("2", "2 CI minutes")])
+    def test_a_first_spec_past_the_cap_is_said_with_the_cap_in_words(self, repo, tmp_path, cap, worded):
+        write(repo, {"front-end/src/views/Door.vue": "<p />\n"})
+        results = seconds_file(tmp_path, {"a.spec.ts": 300})
+        said = listing(repo, "--results", str(results), "--minutes", cap)
+        assert f"the first spec is past the cap of {worded}: nothing to run" in said
+
     def test_the_minutes_fall_back_to_the_committed_timings_then_their_median(self, repo):
         write(
             repo,
@@ -995,6 +1007,11 @@ class TestTheAudit:
         assert "3 failed specs" in out
         assert "loads front-end/src/views/Door.vue" in out
         assert "back-end/api/door.py:check_in" in out
+
+    @pytest.mark.parametrize("cap, worded", [("1", "1 CI minute"), ("2", "2 CI minutes")])
+    def test_a_spec_left_to_ci_is_said_with_the_cap_in_words(self, repo, tmp_path, cap, worded):
+        out = self.audit(repo, *self.three_failures(repo, tmp_path), "--minutes", cap)
+        assert f"left to CI: a.spec.ts: rank 1, past the cap of {worded}: " in out
 
     def test_a_passing_or_skipped_spec_is_not_audited(self, repo, tmp_path):
         write(repo, {"front-end/src/views/Door.vue": "<p />\n"})
