@@ -9,7 +9,7 @@ describes:
   - back-end/app.py#publish_market_results
   - back-end/guards.py#AssignmentNotBeforeReviewGuard
   - back-end/guards.py#AssignmentComputedGuard
-verified: 2026-11-18
+verified: 2026-11-26
 sources:
   - wayfinding/readable-journey/01
   - wayfinding/rejection-visibility/02
@@ -69,7 +69,7 @@ An ADMIN or the owner, as with every action that tells people outside the market
 - The market read serves who may, the table's Publish results answer in `actionRefusals`, and this rule apart, as `publishWaitsReason`, and the counts as `publishOutcomes` only while neither refuses.
   The Applications page ([`PublishResults.vue`](../../../front-end/src/components/application/PublishResults.vue)) draws the button on both paths, from `assignment` on only, for whoever may publish, and disables it with the rule's words while it refuses, so it is offered exactly when the endpoint would take it.
 - [`back-end/result_outcome.py`](../../../back-end/result_outcome.py) is the one reading of who has a table, for the confirmation and for the applicant's page.
-- `AssignmentComputedGuard` refuses going live on tables assigned by hand alone in the same terms, and keeps the market from its market days with nothing allocated; it, `ResultsPublishedGuard` and `AssignmentNotBeforeReviewGuard` in [`back-end/guards.py`](../../../back-end/guards.py), kept by [the guards](../../implementation/modules/guards.md); whether the run is current is [what it was made from](../../implementation/modules/made-from.md).
+- `AssignmentComputedGuard` refuses going live on tables assigned by hand alone in the same terms, and keeps the market from its market days with nothing allocated; it, `ResultsPublishedGuard` and `AssignmentNotBeforeReviewGuard` in [`back-end/guards.py`](../../../back-end/guards.py) are kept by [the guards](../../implementation/modules/guards.md); whether the run is current is [what it was made from](../../implementation/modules/made-from.md).
 - `back-end/tests/test_publishing_settles_the_assignment.py`, `back-end/tests/test_results_wait_for_the_allocation.py`, `back-end/tests/test_publish_needs_a_run.py`, `back-end/tests/test_the_allocation_table.py`, `front-end/e2e/results-wait-for-the-allocation.spec.ts` and, for a CSV market, `front-end/e2e/a-google-form-markets-vendor-page.spec.ts` pin it, and `back-end/tests/test_back_to_review.py` and `front-end/e2e/a-reopened-review-waits-for-a-new-run.spec.ts` the wait after Back to review; a seed that publishes a market publishes its results first ([the E2E seeds](../../implementation/testing/e2e-seeds.md#reaching-a-stored-assignment)).
 - Publishing is recorded in [the market's history](../../implementation/data/history.md) (`publish-results`), with who published.
 

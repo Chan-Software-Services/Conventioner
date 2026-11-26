@@ -3,7 +3,7 @@
  * Where a signed-in vendor stands (ADR 0022): "Submitted" until results are published, whatever
  * the review decided, then "You have a table" with each day's table, or "You did not get assigned".
  *
- * The server serves no verdict before publishing, so there is none here to word; the seats are
+ * The server never serves an applicant a verdict, so there is none here to word; the seats are
  * read off the stored assignment on every read, so a vendor moved by hand reads their new table.
  *
  * On a Google Form market a signed-in address with no vendor there is told which address to use:

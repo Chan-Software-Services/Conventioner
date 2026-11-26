@@ -10,7 +10,7 @@ describes:
   - front-end/src/components/application/ChoiceConditions.vue
   - back-end/api/markets.py#may_overturn
   - back-end/application_status.py#is_judgeable
-verified: 2026-11-17
+verified: 2026-11-26
 sources:
   - wayfinding/november-2026-dry-run/map
   - wayfinding/rejection-visibility/map

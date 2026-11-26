@@ -137,10 +137,11 @@ class TestWhatEachPublicSurfaceServes:
         MarketPhase.ARCHIVED,
     ])
     def test_the_applicant_surface_stays_up_once_applications_close(self, phase):
-        """A vendor may always read their own application, and its verdict (bug 20, E26/F07/S02).
+        """A vendor may always read their own application, and its outcome once results are
+        published (bug 20, E26/F07/S02).
 
         This asserted the opposite, which closed the whole surface before most organizers publish
-        a verdict. Applying is still open-only: the save refuses it, in words
+        results. Applying is still open-only: the save refuses it, in words
         (`test_essential_fields.py`)."""
         assert applicant_intake_market_by_slug(self._collection(phase), SLUG)
 

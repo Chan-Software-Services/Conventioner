@@ -211,12 +211,13 @@ def judge(
 
     An undecided application a rule meets is stored rejected, the rule its giver and the answer its
     reason. One a rule rejected that no rule meets any longer returns to undecided - unless the
-    results are published, when its applicant has seen the rejection and it stands, or unless
-    ``overturns`` is false: returning it overturns an automatic rejection, which a person's write
-    does only when the table's change row is theirs (E38/F06/S01). Every write is
-    conditioned on the application being as it was read, so a person's verdict that lands in
-    between is never overwritten. One returned to open is marked for the deal by ``arrival``, the
-    write whose rules judged it, which deals it once it ends.
+    results are published, when its applicant's outcome (a table or none, with seats, never the
+    rejection) is already readable and the rejection stands, or unless ``overturns`` is false:
+    returning it overturns an automatic rejection, which a person's write does only when the
+    table's change row is theirs (E38/F06/S01). Every write is conditioned on the application being
+    as it was read, so a person's verdict that lands in between is never overwritten. One returned
+    to open is marked for the deal by ``arrival``, the write whose rules judged it, which deals it
+    once it ends.
     """
     rejected = returned = 0
     for doc in ApplicationsApi.judgeable_applications(market_id, application_id):
