@@ -17,9 +17,11 @@ import re
 import subprocess
 import sys
 import threading
+from functools import cache
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from itertools import pairwise, product
 from pathlib import Path
+from typing import NamedTuple
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
@@ -689,7 +691,6 @@ JOBS = [
     "e2e",
 ]
 SIX = ["backend", "knowledge-graph", "real-data-and-workflows", "frontend-unit", "frontend-lint-and-types", "docker-build"]
-FULL = "${{ !cancelled() && (needs.suite.outputs.run == '' || needs.suite.outputs.run == 'full') }}"
 DECIDE = (
     'run="$(python3 scripts/ci_suite.py --event "$EVENT" --commit "$COMMIT")" || run=full\n'
     "case \"$run\" in warm | map | none) ;; *) run=full ;; esac\n"
@@ -775,6 +776,93 @@ def workflow_env():
     return mapping(block(lines, lines.index("env:"), 0), 2)
 
 
+# The run cases a job's condition decides.
+
+# The runs the workflow starts on, as (github.event_name, github.ref, github.base_ref). Only a pull
+# request's run has a base_ref; on any other it reads as empty.
+TRIGGERS = [
+    ("push", "refs/heads/dev", ""),
+    ("push", "refs/heads/feature", ""),
+    ("pull_request", "refs/pull/7/merge", "dev"),
+    ("pull_request", "refs/pull/7/merge", "main"),
+    ("merge_group", f"refs/heads/{QUEUE_BRANCH}", ""),
+    ("schedule", "refs/heads/dev", ""),
+    ("workflow_dispatch", "refs/heads/dev", ""),
+    ("workflow_dispatch", "refs/heads/feature", ""),
+]
+NAMED_SPECS = '["a.spec.ts","market/b+c.spec.ts"]'
+
+
+class End(NamedTuple):
+    """How a needed job ended, as a job that needs it reads it."""
+
+    result: str
+    outputs: dict
+
+
+# Each end a needed job can reach. `suite` and `e2e-select` set their outputs in their last step, so
+# one that did not succeed set none, and each reads as empty. A `suite` that succeeded printed a
+# word, and a whole decision of `e2e-select` wrote its scope alone.
+NOT_SUCCEEDED = ["failure", "cancelled", "skipped"]
+ENDS = {
+    "suite": [
+        *(End("success", {"run": word}) for word in ("warm", "full", "map", "none")),
+        *(End(result, {"run": ""}) for result in NOT_SUCCEEDED),
+    ],
+    "e2e-select": [
+        End("success", {"scope": "named", "shards": "[]", "specs": "[]"}),
+        End("success", {"scope": "named", "shards": "[2, 5]", "specs": NAMED_SPECS}),
+        End("success", {"scope": "whole", "shards": "", "specs": ""}),
+        *(End(result, {"scope": "", "shards": "", "specs": ""}) for result in NOT_SUCCEEDED),
+    ],
+    "e2e-shard": [End(result, {}) for result in ("success", *NOT_SUCCEEDED)],
+    "real-data-and-workflows": [End(result, {}) for result in ("success", *NOT_SUCCEEDED)],
+}
+
+
+@cache
+def needed_outputs(name):
+    """Each job that job `name` needs, with the names of the outputs it declares."""
+    jobs_found = workflow_jobs()
+    needs = jobs_found[name].get("needs", "").strip("[]")
+    names = [part.strip() for part in needs.split(",") if part.strip()]
+    return {needed: list(jobs_found[needed]["outputs"]) for needed in names}
+
+
+def job_cases(name):
+    """Every run job `name`'s condition can decide: each trigger, the run cancelled or not, and each
+    end of each job it needs."""
+    needed = needed_outputs(name)
+    return [
+        {"event": event, "ref": ref, "base_ref": base_ref, "cancelled": cancelled, "needs": dict(zip(needed, ends))}
+        for (event, ref, base_ref), cancelled, *ends in product(TRIGGERS, [False, True], *(ENDS[n] for n in needed))
+    ]
+
+
+def job_context(name, case):
+    """What job `name`'s condition reads in one case: of the other jobs, only the results and declared
+    outputs of those it needs."""
+    context = {
+        "github.event_name": case["event"],
+        "github.ref": case["ref"],
+        "github.base_ref": case["base_ref"],
+        "cancelled()": case["cancelled"],
+        "success()": not case["cancelled"] and all(end.result == "success" for end in case["needs"].values()),
+    }
+    for needed, outputs in needed_outputs(name).items():
+        end = case["needs"][needed]
+        context[f"needs.{needed}.result"] = end.result
+        context.update({f"needs.{needed}.outputs.{output}": end.outputs[output] for output in outputs})
+    return context
+
+
+def assert_the_job_runs_exactly(name, expected):
+    """Job `name`'s `if:` runs it in each of its cases that `expected` says, and in no other."""
+    condition = workflow_jobs()[name]["if"]
+    for case in job_cases(name):
+        assert evaluate(condition, job_context(name, case)) == expected(case), case
+
+
 def test_the_workflow_has_exactly_these_jobs_suite_first():
     jobs_found = workflow_jobs()
 
@@ -806,9 +894,10 @@ def test_suite_runs_only_on_a_push_to_dev_a_nightly_run_or_one_by_hand_reading_a
     suite = workflow_jobs()["suite"]
 
     assert suite["name"] == "suite"
-    assert suite["if"] == (
-        "github.event_name == 'push' && github.ref == 'refs/heads/dev'"
-        " || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'"
+    assert_the_job_runs_exactly(
+        "suite",
+        lambda case: not case["cancelled"]
+        and (case["event"] == "push" and case["ref"] == "refs/heads/dev" or case["event"] in MAPPERS),
     )
     assert suite["permissions"] == {"contents": "read", "actions": "read"}
     assert suite["outputs"] == {"run": "${{ steps.decide.outputs.run }}"}
@@ -829,20 +918,29 @@ def test_suite_checks_out_with_no_credentials_and_decides_with_the_runner_s_pyth
     assert step["run"] == DECIDE
 
 
+def on_the_whole_suite(case):
+    """When each short job and `e2e` run: a run not cancelled whose `suite` printed `full` or left no
+    word."""
+    return not case["cancelled"] and case["needs"]["suite"].outputs["run"] in ("", "full")
+
+
 @pytest.mark.parametrize("name", SIX)
 def test_each_short_job_runs_only_on_the_whole_suite(name):
     job_found = workflow_jobs()[name]
 
     assert job_found["name"] == name
     assert job_found["needs"] == "suite"
-    assert job_found["if"] == FULL
+    assert_the_job_runs_exactly(name, on_the_whole_suite)
 
 
 def test_e2e_select_decides_only_for_a_pull_request_into_dev_reading_and_nothing_more():
     select = workflow_jobs()["e2e-select"]
 
     assert select["name"] == "e2e-select"
-    assert select["if"] == "github.event_name == 'pull_request' && github.base_ref == 'dev'"
+    assert_the_job_runs_exactly(
+        "e2e-select",
+        lambda case: not case["cancelled"] and case["event"] == "pull_request" and case["base_ref"] == "dev",
+    )
     assert select["permissions"] == {"contents": "read", "actions": "read"}
     assert select["outputs"] == {
         "scope": "${{ steps.decide.outputs.scope }}",
@@ -867,9 +965,11 @@ def test_the_shards_run_on_the_whole_suite_or_the_map_unless_the_selection_named
     assert shard["needs"] == "[suite, e2e-select]"
     # An empty list of shards skips the job before its matrix expands: an empty matrix is an error.
     # A skipped or failed `e2e-select` left no list, so the job runs.
-    assert shard["if"] == (
-        "${{ !cancelled() && (needs.suite.outputs.run == '' || needs.suite.outputs.run == 'full'"
-        " || needs.suite.outputs.run == 'map') && needs.e2e-select.outputs.shards != '[]' }}"
+    assert_the_job_runs_exactly(
+        "e2e-shard",
+        lambda case: not case["cancelled"]
+        and case["needs"]["suite"].outputs["run"] in ("", "full", "map")
+        and case["needs"]["e2e-select"].outputs["shards"] != "[]",
     )
 
 
@@ -944,7 +1044,7 @@ def test_e2e_runs_only_on_the_whole_suite():
 
     assert e2e["name"] == "e2e"
     assert e2e["needs"] == "[suite, e2e-select, e2e-shard]"
-    assert e2e["if"] == FULL
+    assert_the_job_runs_exactly("e2e", on_the_whole_suite)
 
 
 def test_e2e_reads_the_event_and_what_the_selection_decided():
@@ -955,7 +1055,6 @@ def test_e2e_reads_the_event_and_what_the_selection_decided():
     assert env["E2E_SPECS"] == "${{ needs.e2e-select.outputs.specs }}"
 
 
-NAMED_SPECS = '["a.spec.ts","market/b+c.spec.ts"]'
 RESULTS_STEP = "A folder of results for each of this run's shards"
 
 
@@ -1290,9 +1389,11 @@ def test_the_test_map_is_built_only_on_a_nightly_or_hand_started_run_whose_shard
     test_map = workflow_jobs()["test-map"]
 
     assert test_map["needs"] == "[suite, e2e-shard]"
-    assert test_map["if"] == (
-        "${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')"
-        " && needs.e2e-shard.result != 'skipped' }}"
+    assert_the_job_runs_exactly(
+        "test-map",
+        lambda case: not case["cancelled"]
+        and case["event"] in MAPPERS
+        and case["needs"]["e2e-shard"].result != "skipped",
     )
     assert test_map["continue-on-error"] == "true"
 
@@ -1308,7 +1409,7 @@ def test_the_retry_report_runs_only_nightly_or_by_hand_reading_actions_and_never
 
     # It reads GitHub's API alone, so it waits on no job and reads no `suite` word.
     assert retries["name"] == "e2e-retries"
-    assert retries["if"] == "github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'"
+    assert_the_job_runs_exactly("e2e-retries", lambda case: not case["cancelled"] and case["event"] in MAPPERS)
     assert "needs" not in retries
     assert retries["continue-on-error"] == "true"
     assert retries["permissions"] == {"contents": "read", "actions": "read"}
@@ -1331,7 +1432,12 @@ def test_warm_caches_runs_only_on_warm_and_never_fails_the_run():
 
     assert warm["name"] == "warm-caches"
     assert warm["needs"] == "suite"
-    assert warm["if"] == "needs.suite.outputs.run == 'warm'"
+    assert_the_job_runs_exactly(
+        "warm-caches",
+        lambda case: not case["cancelled"]
+        and case["needs"]["suite"].result == "success"
+        and case["needs"]["suite"].outputs["run"] == "warm",
+    )
     assert warm["continue-on-error"] == "true"
 
 
@@ -1342,8 +1448,11 @@ def test_the_advisory_scan_reads_no_word_so_a_warm_push_and_every_nightly_run_sc
     # and every push; only a trial commit skips it. gitleaks, in real-data-and-workflows, stays
     # skipped on a warm push, as each of the six above is.
     assert advisories["needs"] == "real-data-and-workflows"
-    assert advisories["if"] == "${{ !cancelled() && github.event_name != 'merge_group' }}"
-    assert "suite" not in advisories["needs"] + advisories["if"]
+    # A case holds only what the job needs, so a condition reading `suite`'s word would raise.
+    assert_the_job_runs_exactly(
+        "python-advisories",
+        lambda case: not case["cancelled"] and case["event"] != "merge_group",
+    )
 
 
 def test_warm_caches_fills_npm_s_cache_node_modules_and_the_stack_s_caches_and_runs_nothing_else():
