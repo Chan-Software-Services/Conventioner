@@ -923,7 +923,7 @@ Each check is a step of the screen's test, `<check> at <width>x<height>`, whose 
 The list is cut into the groups of `SCREEN_GROUPS`, one spec file each, [`screen-sweeps-markets-to-assignments.spec.ts`](../front-end/e2e/screen-sweeps-markets-to-assignments.spec.ts) and [`screen-sweeps-vendors-to-signed-out.spec.ts`](../front-end/e2e/screen-sweeps-vendors-to-signed-out.spec.ts), since one file of the whole walk would outlast every other CI shard, which are dealt whole files ([the e2e shards](implementation/testing/ci-and-the-gate.md#the-e2e-shards)).
 Each group's file runs the market bar's and the phone's pinned-area tests over its own screens and `BAR_ANCHOR`, a screen of the first group that the second group's file adds, so the groups' bars are held to one screen's.
 A state on the form tab opens once the form's own read has answered (`formAt`), since until then the tab draws the copy the market holds under its loading line, a moment nobody stays on, and a sweep in it measures a page that is gone the next instant.
-A state in Manage organization likewise waits for the dialog's own read (`manageOrgAt`, or `OrganizationsPage.waitForPeopleRead`), until which its Admins and Members say they are loading.
+A state in Manage organization likewise waits for the dialog's own read (`manageOrgAt`, `OrganizationsPage.waitForPeopleRead`, or a wait for a member's row), until which its Admins and Members say they are loading.
 The list holds these states, one a line, each beside the state it is most like, so a new state is one line there, not at the list's end ([two features never share a line](implementation/conventions/two-features-never-share-a-line.md#the-design-language)):
 
 - the router's routes

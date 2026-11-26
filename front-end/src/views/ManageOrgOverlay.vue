@@ -275,7 +275,8 @@ const invitations = useInvitationsWaiting({
   withdraw: withdrawOrganizationInvitation,
   ended: rereadAfterAWrite,
 });
-// Each opening starts clean: the read itself moves with the organization it is open on.
+// Each opening starts with its invite rows closed, nothing asking to be confirmed and its finds
+// empty: the read itself moves with the organization it is open on.
 watch(
   () => [props.manageOpen, props.org] as const,
   ([open, org]) => {

@@ -2,8 +2,8 @@
  * Manage organization reads the organization as it opens: the organizations list's copy it is opened
  * with can be older than what is true, as it is reopened before the list's read again has answered.
  * Until that first read answers, Admins and Members say they are loading and list nobody of the
- * copy; a read that fails leaves the copy, with the failure said; a reader the list no longer holds
- * it for is told so; and a change made in the dialog while the read is out is not undone by it.
+ * copy; a first read that fails leaves the copy, with the failure said; a reader the list no longer
+ * holds it for is told so; and a change made in the dialog while the read is out is not undone by it.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils';
@@ -357,7 +357,8 @@ describe('Manage organization reads the organization as it opens', () => {
     await rename('Autumn Makers');
 
     expect(reads).toHaveLength(2);
-    // A read still out from before the rename answers last, with the old name: it is dropped.
+    // Where the read from before the rename is still out, it answers last, with the old name, and
+    // is dropped.
     answers(1, { ...TRUE_NOW, name: 'Autumn Makers' });
     await flushPromises();
     reads[0]!.resolve({ data: { organizations: [COPY] } });
