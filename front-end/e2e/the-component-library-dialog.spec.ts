@@ -265,6 +265,72 @@ eachWindow('the dialog entry', (size) => {
     );
   });
 
+  test("Manage market's sample invites in the dialog's words: a row with its own Cancel", async ({
+    page,
+  }) => {
+    await openEntry(page, 'dialog');
+    const window = await openDialog(page, size, 'Manage market', 'several');
+    const press = inTheWindow(size).press;
+    const invite = window.getByRole('button', { name: 'Invite someone', exact: true });
+    const field = window.getByRole('textbox', { name: 'Email of the person to invite' });
+    const send = window.getByRole('button', { name: 'Send invitation', exact: true });
+    const cancel = window.getByRole('button', { name: 'Cancel', exact: true });
+    await expect(field).toHaveCount(0);
+
+    // The button opens the row it adds, which takes its place and the field takes the focus.
+    await press(invite);
+    await expect(invite).toHaveCount(0);
+    await expect(field).toBeFocused();
+    await expect(field).toHaveAttribute('placeholder', 'Email address');
+    const role = window.getByRole('combobox', { name: 'Their role' });
+    await expect(role.getByRole('option')).toHaveText(['Admin', 'Editor', 'Viewer']);
+    await expect(role).toHaveValue('editor');
+    await expect(
+      window.getByText(
+        'They get an email, and join once they accept it signed in with this address.',
+      ),
+    ).toBeVisible();
+    await expect(send).toBeDisabled();
+    const [sendBox, cancelBox] = await Promise.all([send.boundingBox(), cancel.boundingBox()]);
+    expect(cancelBox!.y, 'Cancel is beside Send invitation').toBeCloseTo(sendBox!.y, 0);
+    const [fieldBox, roleBox] = await Promise.all([field.boundingBox(), role.boundingBox()]);
+    if (size.phone) {
+      expect(roleBox!.y, 'the role takes a line under the field').toBeGreaterThanOrEqual(
+        fieldBox!.y + fieldBox!.height,
+      );
+    } else {
+      expect(roleBox!.y, 'the role is on the line of the field').toBeCloseTo(fieldBox!.y, 0);
+    }
+    await expectNothingClipped(page.getByTestId('library-several-body'), 'the invite row');
+
+    // Sending empties the field and keeps the row, for the next person.
+    await field.fill('someone.new@example.com');
+    await role.selectOption('viewer');
+    await press(send);
+    await expect(field).toHaveValue('');
+    await expect(role).toHaveValue('editor');
+    await expect(readOut(page, 'Several actions, no footer')).toHaveText(
+      'Last: Invited someone.new@example.com as Viewer',
+    );
+
+    // Cancel closes the row, drops what was typed, and gives focus back to the button.
+    await field.fill('someone.else@example.com');
+    await press(cancel);
+    await expect(field).toHaveCount(0);
+    await expect(invite).toBeFocused();
+    await press(invite);
+    await expect(field).toHaveValue('');
+    await expect(window).toBeVisible();
+
+    // Each opening of the dialog starts with the row closed, whatever the last one left in it.
+    await field.fill('someone.else@example.com');
+    await page.keyboard.press('Escape');
+    await expect(window).toBeHidden();
+    await openDialog(page, size, 'Manage market', 'several');
+    await expect(invite).toBeVisible();
+    await expect(field).toHaveCount(0);
+  });
+
   for (const scroll of ['The body scrolls', 'The window scrolls']) {
     test(`every behaviour is kept when ${scroll.toLowerCase()}`, async ({ page }) => {
       await openEntry(page, 'dialog');
