@@ -4,6 +4,8 @@ import { ManageMarketPage } from './pages/ManageMarketPage';
 import { seedApplicantMarket } from './helpers/seedApplicantMarket';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
 import { grantMarketRole } from './helpers/grantMarketRole';
+import { seedDraftMarket } from './helpers/seedDraftMarket';
+import { uniqueMarketName } from './helpers/uniqueName';
 
 /**
  * Manage market holds together (bug 15, and items 14 and 15 of bug 43; E26/F10/S01).
@@ -13,6 +15,11 @@ import { grantMarketRole } from './helpers/grantMarketRole';
  * offered a role select the server refused every use of, and the refusal appeared at the foot of
  * the dialog: it is said under the person's row now, as `changing-a-role-asks-first.spec.ts`
  * proves. Delete asked "Are you sure?" inline, Confirm before Cancel, with focus left on the page.
+ *
+ * The invite row's email field was narrower than its role select at a desk, cutting off a typed
+ * address, and the row kept an address and a role across openings: Escape left them to come back on
+ * another market, and Cancel kept the role (T642). `manageMarketInvites.test.ts` proves that Cancel
+ * now leaves the row empty at Editor.
  */
 test.use({ viewport: { width: 1440, height: 900 } });
 
@@ -30,6 +37,56 @@ async function openManage(page: Page, marketName: string): Promise<ManageMarketP
 
 const height = (locator: Locator) =>
   locator.evaluate((el) => Math.round(el.getBoundingClientRect().height));
+
+const box = async (locator: Locator) => {
+  const b = await locator.boundingBox();
+  if (!b) throw new Error('not rendered');
+  return b;
+};
+
+/** How far the longest of a select's names runs past the room it leaves beside its arrow. */
+const overrun = (select: Locator) =>
+  select.evaluate((el) => {
+    const field = el as HTMLSelectElement;
+    const style = getComputedStyle(field);
+    const context = document.createElement('canvas').getContext('2d')!;
+    context.font = style.font;
+    const widest = Math.max(
+      ...[...field.options].map((option) => context.measureText(option.text).width),
+    );
+    const room = field.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    return widest - room;
+  });
+
+/** An address of an ordinary length, a fixture's. */
+const TYPED = 'someone.new@example.com';
+
+/** Types the address into the open row: all of it shows, and every role reads whole. */
+async function expectTypedInFull(manage: ManageMarketPage) {
+  await manage.fillAddUserEmail(TYPED);
+  const hidden = await manage.addUserInput.evaluate((el) => el.scrollWidth - el.clientWidth);
+  expect(hidden, 'none of the address is scrolled out of the field').toBeLessThanOrEqual(0);
+  expect(await overrun(manage.addUserSelect), 'every role reads whole').toBeLessThanOrEqual(0);
+}
+
+/** One line: the field takes what the role and the buttons leave, and the role only its own. */
+async function expectOneLine(page: Page, manage: ManageMarketPage) {
+  const [form, field, role, send, cancel] = await Promise.all(
+    [
+      page.locator('form').filter({ has: manage.addUserInput }),
+      manage.addUserInput,
+      manage.addUserSelect,
+      manage.addUserSubmit,
+      manage.addUserCancel,
+    ].map(box),
+  );
+  for (const control of [role, send, cancel]) {
+    expect(control.y, 'on the field’s line').toBeCloseTo(field.y, 0);
+  }
+  expect(field.width, 'the field is wider than the role').toBeGreaterThan(role.width);
+  expect(field.x, 'from the row’s start').toBeCloseTo(form.x, 0);
+  expect(cancel.x + cancel.width, 'to the row’s end').toBeCloseTo(form.x + form.width, 0);
+}
 
 test('its controls are the product size, and inviting someone is one row with its own Cancel', async ({
   authenticatedPage: page,
@@ -55,14 +112,12 @@ test('its controls are the product size, and inviting someone is one row with it
 
   await manage.clickAddUser();
   await expect(manage.addUserButton).toHaveCount(0);
-  const cancel = page.getByTestId('manage-market-add-user-cancel');
-  // Cancel sits in the row it cancels, beside Send invitation, at the same height.
-  const add = await manage.addUserSubmit.boundingBox();
-  const cancelBox = await cancel.boundingBox();
-  expect(Math.abs((add?.y ?? 0) - (cancelBox?.y ?? -100))).toBeLessThan(2);
-  expect(await height(cancel)).toBe(36);
+  await expectTypedInFull(manage);
+  // Cancel sits in the row it cancels, on its one line, at the same height.
+  await expectOneLine(page, manage);
+  expect(await height(manage.addUserCancel)).toBe(36);
 
-  await cancel.click();
+  await manage.addUserCancel.click();
   await expect(manage.addUserInput).toHaveCount(0);
   await expect(manage.addUserButton).toBeVisible();
 });
@@ -84,11 +139,6 @@ test('on a phone, the email field and the role each take the invite row, with it
   const manage = await openManage(page, marketName);
   await manage.clickAddUser();
 
-  const box = async (locator: Locator) => {
-    const b = await locator.boundingBox();
-    if (!b) throw new Error('not rendered');
-    return b;
-  };
   const form = await box(page.locator('form').filter({ has: manage.addUserInput }));
   const field = await box(manage.addUserInput);
   expect(field.width, 'the field takes the row').toBeGreaterThanOrEqual(form.width - 1);
@@ -112,18 +162,75 @@ test('on a phone, the email field and the role each take the invite row, with it
     'at the row’s end',
   ).toBeLessThan(1);
 
-  // The role reads whole: its name fits inside the select, beside its arrow.
-  const fits = await role.evaluate((el) => {
-    const select = el as HTMLSelectElement;
-    const style = getComputedStyle(select);
-    const context = document.createElement('canvas').getContext('2d')!;
-    context.font = style.font;
-    const text = context.measureText(select.selectedOptions[0]?.text ?? '').width;
-    const room =
-      select.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
-    return { text, room };
+  await expectTypedInFull(manage);
+});
+
+// The widths the two tests above do not reach.
+for (const window of [
+  {
+    width: 641,
+    height: 900,
+    oneLine: true,
+    measures: 'the narrowest one-line invite row shows a typed address and every role whole',
+  },
+  {
+    width: 320,
+    height: 568,
+    oneLine: false,
+    measures: 'the stacked invite row shows a typed address and every role whole',
+  },
+]) {
+  test(`at ${window.width}, ${window.measures}`, async ({ authenticatedPage: page, request }) => {
+    await page.setViewportSize({ width: window.width, height: window.height });
+    const { marketName } = await seedDraftMarket(
+      request,
+      BACKEND_URL,
+      TEST_USER.email,
+      TEST_USER.password,
+    );
+    const manage = await openManage(page, marketName);
+    await manage.clickAddUser();
+
+    await expectTypedInFull(manage);
+    if (window.oneLine) await expectOneLine(page, manage);
   });
-  expect(fits.text, 'the role is not cut').toBeLessThanOrEqual(fits.room);
+}
+
+test('an invite row left by Escape comes back empty at Editor on another market', async ({
+  authenticatedPage: page,
+  request,
+}) => {
+  const prefix = uniqueMarketName('E2E Invite Row');
+  for (const letter of ['A', 'B']) {
+    await seedDraftMarket(request, BACKEND_URL, TEST_USER.email, TEST_USER.password, {
+      name: `${prefix} ${letter}`,
+    });
+  }
+  // Both markets listed at once: Manage market is mounted once for the list, so no reload may come
+  // between the two openings.
+  await page.goto(`/markets?q=${encodeURIComponent(prefix)}`);
+  const manage = new ManageMarketPage(page);
+  const manageMarket = async (letter: string) => {
+    await page
+      .getByTestId('market-card')
+      .filter({ hasText: `${prefix} ${letter}` })
+      .getByTestId('market-card-manage-button')
+      .click();
+    await manage.waitForOverlay();
+  };
+
+  await manageMarket('A');
+  await manage.clickAddUser();
+  await manage.fillAddUserEmail(TYPED);
+  await manage.selectAddUserRole('viewer');
+  await manage.addUserInput.press('Escape');
+  await expect(manage.window).toHaveCount(0);
+
+  await manageMarket('B');
+  await expect(manage.window).toContainText(`${prefix} B`);
+  await manage.clickAddUser();
+  await expect(manage.addUserInput).toHaveValue('');
+  await expect(manage.addUserSelect).toHaveValue('editor');
 });
 
 test('deleting is a destructive dialog that opens on Cancel and says what goes', async ({

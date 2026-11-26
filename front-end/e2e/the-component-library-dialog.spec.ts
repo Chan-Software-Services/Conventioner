@@ -305,6 +305,10 @@ eachWindow('the dialog entry', (size) => {
 
     // Sending empties the field and keeps the row, for the next person.
     await field.fill('someone.new@example.com');
+    expect(
+      await field.evaluate((el) => el.scrollWidth - el.clientWidth),
+      'none of the address is scrolled out of the field',
+    ).toBeLessThanOrEqual(0);
     await role.selectOption('viewer');
     await press(send);
     await expect(field).toHaveValue('');
