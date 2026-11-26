@@ -32,30 +32,30 @@ A placeholder goes the moment someone types, which is how the plan's name fields
 
 **A new screen or dialog joins the walk.**
 [`every-control-is-named.spec.ts`](../../../front-end/e2e/every-control-is-named.spec.ts) walks the screens and dialogs with `namelessControls()` ([`e2e/helpers/accessibleNames.ts`](../../../front-end/e2e/helpers/accessibleNames.ts)), which lists every drawn, non-inert form control whose `aria-labelledby` text, `aria-label`, `<label>` or `title` is empty.
-The market page holds no form control, so its walk also reads the name of each visible link and button from the accessibility tree (`namelessLinksAndButtons`, the spec's own) and asserts Apply, Sign in and Vendor sign-in by name, on the application call and on the notice once applications stop (T469).
+On its application call and its notice the market page holds no form control, so its walk also reads the name of each visible link and button from the accessibility tree (`namelessLinksAndButtons`, the spec's own) and asserts Apply, Sign in and Vendor sign-in by name, on the application call and on the notice once applications stop (T469).
 **The walk only sees the rows it seeds**: the rules page walked with no rule on it saw the card's "Add a rule" and missed every control inside one (bug 50), so a spec seeds one row of each kind before it walks.
 
 **A control is named by the words it shows, and an `aria-label` that replaces them is a defect** (WCAG 2.5.3): a voice user says what they see.
 Words a screen reader needs beyond those go beside them in a `.visually-hidden` span, as a vendor's name says ": their details", a statistics row says what its count is a share of, and Permissions' "Show", which opens a dialog and holds no state of its own to announce, says "Show permissions".
 **A control holds no control**: a market row was a `role="button"` around its own Manage button, so the row is now a click target for the pointer only, and its name is the real button the keyboard and a screen reader reach it by ([`SummaryCard.vue`](../../../front-end/src/components/SummaryCard.vue)).
 That name is a heading one level under the one its list stands under, so a screen reader's outline skips no level: an `h2` under the Markets and Organizations titles; [`a-list-keeps-its-headings-in-order.spec.ts`](../../../front-end/e2e/a-list-keeps-its-headings-in-order.spec.ts) holds axe's `heading-order` on both lists, and with `page-has-heading-one` on Markets and the app bar's open sheet, which the WCAG-tagged sweep leaves out.
-A vendor's notes are labelled by `h3`s (`VendorNotes.vue`), so an `h2` names the vendor just above them: the drawer's title, and on One by one the card's name line, else its address (`ApplicationMonitor.vue`, T181); the same spec holds both, with the notes open, in the open review and on an archived market, which has no Reviewers panel and so no other `h2` above the card.
+A vendor's notes are labelled by `h3`s (`VendorNotes.vue`), so in the drawer and on One by one an `h2` names the vendor just above them: the drawer's title, and on One by one the card's name line, else its address (`ApplicationMonitor.vue`, T181); the same spec holds both, with the notes open, in the open review and on an archived market, which has no Reviewers panel and so no other `h2` above the card.
 **A button or a link holds no heading**: the old start screen's buttons and navigation drawer's links each held an `h3` or `h4`, so a screen reader's outline was the controls; a control's words are a `span`.
-The same spec lists every heading inside a link or a button on those pages and expects none.
-Both are caught by the accessibility sweep ([the design language](../../design-system.md#what-keeps-this-true)), which this walk does not replace: it names what axe cannot judge, a control whose name is empty by intent.
+The same spec lists every heading inside a link or a button on Markets, the Assignments page and the app bar's open sheet, and expects none.
+A replacing `aria-label` and a control inside a control are caught by the accessibility sweep ([the design language](../../design-system.md#what-keeps-this-true)), which this walk does not replace: it names what axe cannot judge, a control whose name is empty by intent.
 
 **A field draws no focus ring, and neither does its container**: a text field's caret is its focus indicator, by Daniel's decision (E38/F01/S01, [the design language](../../design-system.md#the-primitive-layer)), so the plan cards' name fields lost the `:focus-within` ring bug 44 gave them.
 
 **Native checks and radios take `accent-color` from `body`**, which sets it once to the product's green in [`front-end/src/assets/base.css`](../../../front-end/src/assets/base.css); a component never sets it for its own inputs.
 **No link pads itself**: the global `a` rule carries no padding, so a link sits on the text beside it (bug 52).
 
-**An applicant's answer is rendered through [`AnswerValue.vue`](../../../front-end/src/components/AnswerValue.vue)**, which makes each `http:` or `https:` address in it a link and nothing else ([`answerLinks.ts`](../../../front-end/src/utils/answerLinks.ts)).
+**An application's answers, on the review card, the import's rows, the vendor drawer, its Discord offer included, and the vendor's own application, are rendered through [`AnswerValue.vue`](../../../front-end/src/components/AnswerValue.vue)**, which makes each `http:` or `https:` address in it a link and nothing else ([`answerLinks.ts`](../../../front-end/src/utils/answerLinks.ts)).
 The answer is the applicant's own text, so that line is what keeps a `javascript:` address planted in a form from becoming a link.
 
 ## How it is enforced
 
 The walk is part of the Playwright suite; the visual side of the same idea (the focus border and halo, the one disabled state) is owned by the primitives in [the design language](../../design-system.md#the-primitive-layer).
-The front end's lint refuses `v-html` anywhere (`vue/no-v-html` as an error in [`eslint.config.ts`](../../../front-end/eslint.config.ts)), so no template can render an answer, or any other text, as raw HTML.
+The front end's lint refuses `v-html` anywhere (`vue/no-v-html` as an error in [`eslint.config.ts`](../../../front-end/eslint.config.ts)), so no template can use `v-html` to render an answer, or any other text, as raw HTML.
 
 ## What breaks it
 
