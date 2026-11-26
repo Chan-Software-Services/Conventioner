@@ -18,8 +18,7 @@ describes:
   - back-end/app.py#update_organization
   - back-end/app.py#organization_deletion_preview
   - back-end/app.py#delete_organization
-  - back-end/app.py#add_org_admin
-  - back-end/app.py#add_org_member
+  - back-end/app.py#invite_to_organization
   - back-end/app.py#remove_org_user
   - back-end/app.py#transfer_org_ownership
   - back-end/app.py#_named_market_role
