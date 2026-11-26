@@ -567,7 +567,8 @@ An icon is added when a screen uses it, and [`everyIconIsUsed.test.ts`](../front
 
 Tokens alone cannot fix what is actually wrong. A `--radius-control` does not stop a file writing `height: 45px`, and the concentrated damage is exactly there: five control heights on the login screen, ten on Market Setup, four disabled treatments, sixty button-ish class names, two designs for the same `Manage` button.
 
-`.btn` and `.field` own height, padding, radius, type and the disabled state, `.chip` its padding, radius and type, and `primitives.css` holds the one focus border a button draws, a layout map's table drawing its own, and the one focus halo every other control but a field wears. They live in `front-end/src/assets/primitives.css`, and `src/__tests__/primitives.test.ts` is the reference a migration checks against.
+`.btn` and `.field` own height, padding, radius, type and the disabled state, `.chip` its padding, radius and type, and `primitives.css` holds the shared focus rules, a border for a button and a halo for a link, a `summary` and any other keyboard stop but a field, which a component's own rule may redraw, as set out below.
+They live in `front-end/src/assets/primitives.css`, and `src/__tests__/primitives.test.ts` is the reference a migration checks against.
 
 **Every rule of the global sheets is in one cascade layer, `global`**: `main.css` imports `base.css` and `primitives.css` into it and holds its own rules in it, so a component's own rule, which is in no layer, outranks each of theirs whatever its specificity or the order the sheets arrive in.
 The order is not the same everywhere: the dev server injects `main.css` before each component's style, while a production build links a shared chunk's CSS before the entry's.
