@@ -895,32 +895,6 @@ def delete_organization(org_id: str) -> Response:
         return jsonify({"error": "Organization not found"}), 404
     return jsonify({"message": "Organization deleted successfully"}), 200
 
-@app.route('/organizations/<org_id>/admins', methods=['POST'])
-@login_required
-def add_org_admin(org_id: str) -> Response:
-    """Add an admin to an organization. Only owner can add admins."""
-    data = json_object(required=True)
-
-    user_email = string_field(data, 'user_email')
-    if not user_email:
-        return jsonify({"error": "user_email required"}), 400
-
-    OrgsApi.add_org_admin(org_id, user_email, authenticated_email())
-    return jsonify({"message": "Admin added successfully"}), 200
-
-@app.route('/organizations/<org_id>/members', methods=['POST'])
-@login_required
-def add_org_member(org_id: str) -> Response:
-    """Add a member to an organization. Owner or admin can add members."""
-    data = json_object(required=True)
-
-    user_email = string_field(data, 'user_email')
-    if not user_email:
-        return jsonify({"error": "user_email required"}), 400
-
-    OrgsApi.add_org_member(org_id, user_email, authenticated_email())
-    return jsonify({"message": "Member added successfully"}), 200
-
 @app.route('/organizations/<org_id>/users/<user_id>', methods=['DELETE'])
 @login_required
 def remove_org_user(org_id: str, user_id: str) -> Response:
@@ -956,24 +930,6 @@ def transfer_org_ownership(org_id: str) -> Response:
 def _named_market_role(name: str) -> Optional[MarketRole]:
     """The market role a request names, in any case, or None when it names none."""
     return next((role for role in MarketRole if role.value == name.lower()), None)
-
-@app.route('/markets/<market_id>/roles', methods=['POST'])
-@login_required
-def add_market_role(market_id: str) -> Response:
-    """Add a user role to a market."""
-    data = json_object(required=True)
-
-    user_email = string_field(data, 'user_email')
-    role_str = string_field(data, 'role')
-    if not user_email or not role_str:
-        return jsonify({"error": "user_email and role required"}), 400
-
-    role = _named_market_role(role_str)
-    if role is None:
-        return jsonify({"error": f"Invalid role: {role_str}"}), 400
-
-    MarketsApi.add_market_role(market_id, user_email, role, authenticated_email())
-    return jsonify({"message": "Role added successfully"}), 200
 
 #: Said of an invitation that names no address or no role, or names either as anything but text.
 EMAIL_AND_ROLE_REQUIRED = "email and role required"

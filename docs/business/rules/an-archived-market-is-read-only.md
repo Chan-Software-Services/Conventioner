@@ -6,7 +6,7 @@ describes:
   - back-end/api/markets.py#MarketArchivedError
   - back-end/tests/test_an_archive_is_read_only.py
   - back-end/api/markets.py#_market_change
-verified: 2026-11-24
+verified: 2026-11-26
 sources:
   - E26/F06/S01
   - bug/30

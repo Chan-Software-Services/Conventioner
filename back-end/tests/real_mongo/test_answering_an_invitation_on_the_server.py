@@ -78,15 +78,17 @@ def test_an_accept_landing_after_the_inviters_role_changed_has_ended_it(
 
 def test_an_accept_landing_after_the_invitee_was_given_a_role_writes_nothing(
         invited, interleave, real_db, market_records):
-    market, owner, _admin, invitee, invitation = invited
-    interleave(READ, lambda: MarketsApi.add_market_role(
-        market["id"], INVITED, MarketRole.VIEWER, owner.email))
+    """The role lands in the stored market between the accept's read and its write, as the
+    hermetic suite's ``changed_after_its_read`` lands it: no route but the accept gives one."""
+    market, _owner, _admin, invitee, invitation = invited
+    interleave(READ, lambda: real_db["markets"].update_one(
+        {"id": market["id"]}, {"$set": {f"roles.{invitee.account_id}": "viewer"}}))
 
     response = invitee.post(f"/invitations/{invitation}/accept")
 
     assert response.status_code == 400, response.get_json()
     assert _stored(real_db, market)["roles"][invitee.account_id] == "viewer"
-    assert len(_given(market_records, market)) == 1
+    assert _given(market_records, market) == []
     assert list(market_records.invitations.find({"id": invitation})) == []
 
 

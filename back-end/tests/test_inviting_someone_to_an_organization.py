@@ -160,6 +160,34 @@ class TestOneAnswerForEveryAddress:
         assert mail.messages[0].text == mail.messages[1].text
         assert mail.messages[0].html == mail.messages[1].html
 
+    @pytest.mark.parametrize("place", ["admins", "members"])
+    @pytest.mark.parametrize("person", [ACCOUNT.email, NO_ACCOUNT])
+    def test_no_route_adds_someone_to_an_organization_directly(
+        self, organization, invitations, history, mail, place, person,
+    ):
+        response = signed_in_as(OWNER).post(
+            f"/organizations/{ORG_ID}/{place}", json={"user_email": person})
+
+        assert response.status_code == 404
+        assert organization.doc == an_organization()
+        assert invitations.documents == []
+        assert entries(history) == []
+        assert mail.messages == []
+
+    def test_a_transfer_outside_the_organization_says_one_sentence(
+        self, organization, invitations, history, mail,
+    ):
+        answers = [
+            signed_in_as(OWNER).post(
+                f"/organizations/{ORG_ID}/transfer", json={"new_owner_email": address})
+            for address in (ACCOUNT.email, NO_ACCOUNT)]
+
+        assert [(response.status_code, response.get_json()) for response in answers] == [
+            (400, {"error": "Transfer ownership only to one of the organization's admins or "
+                            "members."})] * 2
+        assert organization.doc == an_organization()
+        assert entries(history) == []
+
     def test_nobody_is_placed_by_being_invited(self, organization, invitations):
         for address, place in ((ACCOUNT.email, "admin"), (NO_ACCOUNT, "member")):
             assert invite(OWNER, address, place=place).status_code == 200

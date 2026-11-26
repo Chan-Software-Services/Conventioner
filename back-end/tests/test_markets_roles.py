@@ -83,7 +83,8 @@ class TestTheOwnerRefusalsNameTransferringOwnership:
     """A market has one Owner, and it changes only when ownership is transferred (T283, T315).
 
     The refusals that meet the Owner role name that action as Manage market names it, "transfer
-    ownership", so the product names one action one way.
+    ownership", so the product names one action one way. An invitation never offers the Owner role
+    (``test_inviting_someone_to_a_market.py``).
     """
 
     @pytest.fixture
@@ -97,16 +98,6 @@ class TestTheOwnerRefusalsNameTransferringOwnership:
         monkeypatch.setattr(MarketsApi, "markets_collection", fake)
         monkeypatch.setattr(PermissionsApi, "user_has_permission", lambda *_a, **_kw: True)
         return MarketsApi
-
-    def test_adding_an_owner_to_a_market_that_has_one(self, market):
-        from client_errors import BadRequestError
-
-        with pytest.raises(BadRequestError) as refused:
-            market.add_market_role(
-                "market-123", "new@example.com", MarketRole.OWNER, "owner@example.com")
-        assert str(refused.value) == (
-            "This market already has an Owner. To make someone else its Owner, "
-            "transfer ownership to them.")
 
     def test_changing_someone_to_owner_while_the_market_has_one(self, market):
         from client_errors import BadRequestError

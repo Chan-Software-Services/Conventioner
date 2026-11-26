@@ -10,8 +10,6 @@ describes:
   - back-end/api/organizations.py#get_organizations_for_user
   - back-end/api/organizations.py#update_organization
   - back-end/api/organizations.py#_refuse_a_name_you_already_hold
-  - back-end/api/organizations.py#add_org_admin
-  - back-end/api/organizations.py#add_org_member
   - back-end/api/organizations.py#remove_org_user
   - back-end/api/organizations.py#transfer_org_ownership
   - back-end/api/organizations.py#get_history
@@ -30,7 +28,7 @@ describes:
   - back-end/tests/test_removing_someone_already_gone.py
   - back-end/api/markets.py#create_owned_market
   - back-end/api/markets.py#organization_refusal
-  - back-end/api/markets.py#add_market_role
+  - back-end/api/markets.py#give_role_by_invitation
   - back-end/api/markets.py#remove_market_role
   - back-end/api/markets.py#update_market_role
   - back-end/datatypes.py#organization_people_of
@@ -98,12 +96,12 @@ Manage organization draws its rows from the pairs, each section a [list frame](.
 [`test_the_organizations_read_names_everyone_at_once.py`](../../../back-end/tests/test_the_organizations_read_names_everyone_at_once.py) pins the one read and the pairs, a deleted admin among them, and an organization whose stored lists disagree with its map served with the map's people.
 It serves each with what removing someone from it takes (E38/F15/S01): `marketCount`, its markets counted from the markets themselves by their indexed `organizationId`, since `markets` is kept in step only at best effort, and `marketsWithOwnRole`, each admin's and member's count of those markets whose own `roles` name them, since removing them from the organization leaves those roles; Manage organization's Remove says both ([remove a person](../../business/flows/organizations.md#b3-remove-a-person)), and the organization's card says `marketCount`; the front end reads no organization's `markets` list.
 
-**Who changes an organization**: only the owner renames it, invites or adds an admin, changes someone's place between admin and member, or transfers ownership; the owner or an admin invites or adds a member or changes its default table; the owner removes anyone but themselves, an admin only members.
-A person's place changes only through [the organization's people](../modules/organization-people.md), whose table says each of these and refuses the rest: "Add admin" of a member makes them an admin, the owner's `PUT /organizations/<org_id>/users/<user_id>` with `{"place": "admin" | "member"}` makes a member an admin or an admin a member (the place they hold already answers 200 and writes nothing, the owner's place is refused), "Add admin" of an admin and "Add member" of a member say they already are, 400, and adding the owner or an admin as a member is refused as before.
+**Who changes an organization**: only the owner renames it, invites an admin, changes someone's place between admin and member, or transfers ownership; the owner or an admin invites a member or changes its default table; the owner removes anyone but themselves, an admin only members.
+A person's place changes only through [the organization's people](../modules/organization-people.md), whose table says each of these and refuses the rest: the owner's `PUT /organizations/<org_id>/users/<user_id>` with `{"place": "admin" | "member"}` makes a member an admin or an admin a member (the place they hold already answers 200 and writes nothing, the owner's place is refused), and an invitation accepted places someone.
 **Inviting places nobody** (T538): an invitation to be an admin or a member waits in [`invitations`](../modules/invitations.md#inviting-to-an-organization), apart from this document, alike for an address with an account and one without, until someone signed in with the address accepts it, judged again then as the inviter's act through the same table; until then the document is unchanged.
-Manage organization invites, and the direct add routes stay beside it, called by no screen, only until they are removed.
+**An invitation accepted is the only way into an organization**: no route adds someone directly, and a POST to the removed `/organizations/<org_id>/admins` or `/members` answers 404 ([ADR 0047](../../adr/0047-a-person-joins-only-by-accepting-an-invitation.md)).
 Renaming is all an update does: it reads the body's `name`, a string that is not blank and is not [another of the owner's organizations' names](#an-organizations-name), and nothing else, so its people and its markets change only through the writes above.
-Transferring ownership makes one of its admins or members the organization's owner and the old owner an admin; transferring it to its own owner, or to someone outside it ("Transfer ownership only to one of the organization's admins or members."), is refused before anything is written.
+Transferring ownership makes one of its admins or members the organization's owner and the old owner an admin; transferring it to its own owner, or to anyone outside it, whether or not the address has an account ("Transfer ownership only to one of the organization's admins or members."), is refused before anything is written.
 The owner cannot be removed ("They own this organization, so they can't be removed from it."), and an account that owns an organization cannot be deleted until it transfers the organization's ownership.
 Removing someone who is neither an admin nor a member, another organizer having removed them first, answers 404 "They are no longer in this organization." before any write, as does a removal whose write finds them gone under it; nothing is recorded, and Manage organization reads that 404 as done ([remove a person](../../business/flows/organizations.md#b3-remove-a-person)); a market role taken twice answers alike ([roles on a market](#roles-on-a-market)).
 Deleting an organization is the owner's, deletes the drafts and archived markets it holds, and is refused while it holds a market mid-lifecycle ([when an organization may be deleted](../../business/rules/when-an-organization-may-be-deleted.md), through [market deletion](../modules/market-deletion.md)).
@@ -178,7 +176,7 @@ Those changes alone are also read in the default table's dialog, through `get_de
 **A market's `roles` is a map from user id to one role**: `owner`, `admin`, `editor` or `viewer`, with exactly one `owner` (`validate_single_owner` on `Market`).
 A map, not one list per role, so nobody can hold two roles on one market.
 Whoever creates a market owns it, and only they do (`create_owned_market`): the create body's roles were once taken on trust, so a client could make a market owned by someone else or by nobody (bug 46).
-Anyone else is added afterwards by email, through `add_market_role`, which stores their user id; they must already have an account.
+Anyone else is invited afterwards by email (`invite_to_market`), and gains a role only by accepting the invitation signed in with that address (`give_role_by_invitation`), which stores their user id ([invitations](../modules/invitations.md)).
 The owner's entry cannot be changed, removed or added beside through a role write; the owner transfers the market's ownership instead (`hand_on_market`, the fixed row `hand-on-market`, T283), to anyone the market read finds with access, in one write that sets `roles.<owner>` to `admin` and `roles.<new>` to `owner`, holding both keys as read, so the market has exactly one owner before it and after it, and a second transfer on the same read answers the market write's 409 ([the market's actions](../modules/market-actions.md#transfer-ownership-hand-on-market)).
 An account that owns a market is not deleted: `delete_user` reads `{"roles.<user id>": "owner"}` and refuses while it finds one, until the owner transfers the market's ownership or deletes it ([deleting an account](users-and-email.md#deleting-an-account)).
 An owner manages every other role; an admin manages editors and viewers: the table's two rows for roles, Give and take Admin roles (Owner, fixed) and Give and take Editor and Viewer roles (Admin), which `roles_row` picks by the role given or taken ([the market's actions](../modules/market-actions.md)).

@@ -42,7 +42,7 @@ sources:
 **Serves:** [A request can only do what its session may](../intents/a-request-can-only-do-what-its-session-may.md).
 
 A market must belong to an organization, and its organization never changes after creation.
-An organization's people are its Owner, its Admins and its Members; only the owner renames it or adds an admin, the owner or an admin adds a member or changes its default permissions for new markets, and the owner removes anyone but themselves while an admin removes only members ([the organization document, and roles](../../implementation/data/organization-document.md#the-organization)).
+An organization's people are its Owner, its Admins and its Members; only the owner renames it or invites an admin, the owner or an admin invites a member or changes its default permissions for new markets, and the owner removes anyone but themselves while an admin removes only members ([the organization document, and roles](../../implementation/data/organization-document.md#the-organization)).
 Its owner and admins run every market it holds as the market's Admin does, and a member reads them; a role a market gives someone counts beside that, and the higher one is held ([what each role may do](../rules/what-each-role-may-do.md)).
 
 The list and its dialogs (New organization, Manage organization and Delete organization) fit a phone, as the Markets list beside it does: nothing scrolls sideways or zooms out, and on Manage organization each person's address takes a line of its own ([the design language](../../design-system.md#layout)).
@@ -101,7 +101,7 @@ Covered by:
 
 Each invitation and withdrawal belongs to the dialog it was sent from (T411): while "Send invitation" and the invitations' re-read are out nothing closes Manage organization, and while a withdrawal and its re-read are out nothing closes its confirmation; a second press sends nothing.
 An answer that lands after Manage organization was closed, or opened on another organization, writes nothing into the one open, its re-read of the invitations included.
-The routes that placed a person at once, `POST /organizations/<id>/admins` and `/members`, remain on the server until they are removed; no screen calls them.
+No route places a person at once: an invitation accepted is the only way into an organization ([a person accepts before they join](../rules/a-person-accepts-before-they-join.md)).
 
 Branches: an address already in the organization, a member invited as an admin, an admin's Withdraw on an admin's invitation (not drawn, and refused by the server), an Admin trying Owner-only actions.
 Covered by:
@@ -202,7 +202,7 @@ Refused, naming each blocking market and its phase: "Archive or delete them firs
 
 **Status:** No screen (`POST /organizations/<id>/transfer` exists; no screen offers it).
 
-The owner transfers the organization's ownership only to one of its admins or members, who becomes its owner while the old owner stays on as an admin, all at once; transferring it to someone outside it is refused, "Transfer ownership only to one of the organization's admins or members.", and so is transferring it to its own owner, "They already own this organization" ([the organization's people](../../implementation/modules/organization-people.md)).
+The owner transfers the organization's ownership only to one of its admins or members, who becomes its owner while the old owner stays on as an admin, all at once; transferring it to anyone outside it is refused in one sentence whether or not the address has an account, "Transfer ownership only to one of the organization's admins or members.", and so is transferring it to its own owner, "They already own this organization" ([the organization's people](../../implementation/modules/organization-people.md)).
 
 Its gaps worth a spec are in [walking the flows](../../implementation/testing/walking-the-flows.md#coverage-map).
 

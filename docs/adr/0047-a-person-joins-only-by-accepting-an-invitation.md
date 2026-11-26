@@ -21,8 +21,7 @@ The add's answer also depended on the address typed, where the sign-up, the sign
 ## Decision
 
 **Every role and place a person gains, after the market's or the organization's creation, is an invitation they accept.**
-The invitations came first, beside the direct adds (`POST /markets/<id>/roles`, `POST /organizations/<id>/admins` and `/members`), which place a person at once.
-Manage market and Manage organization now invite instead, and every E2E seed and spec gives a role or a place by an invitation it accepts; the direct add routes remain, called by no screen, only until they are removed.
+Manage market and Manage organization invite, every E2E seed and spec gives a role or a place by an invitation it accepts, and no direct add remains: the routes that placed a person at once (`POST /markets/<id>/roles`, `POST /organizations/<id>/admins` and `/members`) are removed, so a POST to any of them answers 404.
 The organizer types an address and a role; every address not already on the market or in the organization gets the same answer, the same email and the same history entry, whether or not it has an account, and an invitation is written in `invitations` ([`back-end/invitations.py`](../../back-end/invitations.py)), keyed by its target and address.
 Only someone signed in with that address accepts it, on the Invitations page.
 
@@ -33,6 +32,7 @@ Only someone signed in with that address accepts it, on the Invitations page.
   It names who invited them, to what, as what and until when, and points at the Invitations page.
   A link that accepted by itself would let whoever holds the email join, a forwarded copy included; signing in with the address is what proves it is theirs.
 - **An invitation waits 14 days**, and inviting the address again replaces it, so inviting again is how an organizer resends.
+- **Transferring an organization's ownership answers alike too**: to an address outside it, it answers "Transfer ownership only to one of the organization's admins or members.", whether or not the address has an account.
 - **Nothing migrates**: every role and place held before this stands.
 
 ## Alternatives considered
