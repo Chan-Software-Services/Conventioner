@@ -1,9 +1,11 @@
-"""What an applicant is told when results are published: a table, or none (E36/F05/S02).
+"""What an applicant is told once the results are out: a table, or none (E36/F05/S02).
 
-Read off the STORED seats, never the verdict: a rejected applicant seated by hand has a table, and an
-approved one the run could not place has none. Two outcomes and no reason, so rejected and
-approved-without-a-seat read the same (decision 13 of the rejection-visibility map). The publish
-confirmation counts them (E36/F04/S01) by the same rule the applicant's page reads.
+The results are out once published, or once the market reached its market days unpublished
+(``results_are_out``). The outcome is read off the STORED seats, never the verdict: a rejected
+applicant seated by hand has a table, and an approved one the run could not place has none. Two
+outcomes and no reason, so rejected and approved-without-a-seat read the same (decision 13 of the
+rejection-visibility map). The publish confirmation counts them (E36/F04/S01) by the same rule the
+applicant's page reads.
 """
 from typing import Dict, Iterable, List, Set
 
