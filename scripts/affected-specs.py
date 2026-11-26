@@ -722,8 +722,9 @@ def select(
 
 
 def report_seconds(directory: Path) -> Dict[str, float]:
-    """Each spec file's seconds over the Playwright JSON reports under `directory`, every attempt
-    counted, as `front-end/scripts/e2e-shards.ts refresh` sums them."""
+    """Each spec file's seconds over the Playwright JSON reports (`results.json`) under `directory`,
+    every attempt counted, as `front-end/scripts/e2e-shards.ts refresh` sums them; a shard's other
+    records beside its report, `e2e-deal.json` and `e2e-phases.json`, are no report."""
 
     def milliseconds(suite: dict) -> float:
         total = 0.0
@@ -734,7 +735,7 @@ def report_seconds(directory: Path) -> Dict[str, float]:
         return total + sum(milliseconds(inner) for inner in suite.get("suites", []))
 
     sums: Dict[str, float] = defaultdict(float)
-    for report in sorted(directory.rglob("*.json")) if directory.is_dir() else []:
+    for report in sorted(directory.rglob("*results.json")) if directory.is_dir() else []:
         try:
             data = json.loads(report.read_text())
         except (OSError, ValueError):
@@ -972,7 +973,9 @@ def selection_options(parser: argparse.ArgumentParser, capped: bool = True) -> N
     parser.add_argument("--base", help="the base of the diff (the merge-base with origin/dev)")
     parser.add_argument("--head", help="the head of the diff, a commit (the worktree)")
     parser.add_argument("--map", type=Path, help="a test-map.json in place of the newest dev's")
-    parser.add_argument("--results", type=Path, help="Playwright JSON reports for the minutes")
+    parser.add_argument(
+        "--results", type=Path, help="a folder of Playwright JSON reports (`results.json`) for the minutes"
+    )
     if capped:
         parser.add_argument(
             "--minutes", type=float, default=CAP_MINUTES, help="the cap, in CI minutes"

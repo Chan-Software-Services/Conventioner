@@ -836,6 +836,11 @@ class TestWhereTheMapComesFrom:
                     open(os.path.join(shard, "results.json"), "w").write(json.dumps({{"suites": [
                         {{"file": "a.spec.ts", "specs": [{{"tests": [{{"results": [
                             {{"duration": 120000}}]}}]}}]}}]}}))
+                    # The shard's other records beside its report, which are no report.
+                    open(os.path.join(shard, "e2e-deal.json"), "w").write(json.dumps(
+                        {{"shard": 1, "total": 1, "files": 1, "hand": ["a.spec.ts"]}}))
+                    open(os.path.join(shard, "e2e-phases.json"), "w").write(json.dumps(
+                        [{{"name": "parallel", "files": 1, "seconds": 120, "status": 0}}]))
             """,
         )
         older = repo / ".stack-logs" / "test-map" / "55"
