@@ -778,10 +778,12 @@ def workflow_env():
 
 # The run cases a job's condition decides.
 
-# The runs the workflow starts on, as (github.event_name, github.ref, github.base_ref). Only a pull
+# The runs the workflow starts on, as (github.event_name, github.ref, github.base_ref), and a push
+# to another branch, which `on` starts none for and `suite` refuses all the same. Only a pull
 # request's run has a base_ref; on any other it reads as empty.
 TRIGGERS = [
     ("push", "refs/heads/dev", ""),
+    ("push", "refs/heads/main", ""),
     ("push", "refs/heads/feature", ""),
     ("pull_request", "refs/pull/7/merge", "dev"),
     ("pull_request", "refs/pull/7/merge", "main"),
