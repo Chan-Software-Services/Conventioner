@@ -802,10 +802,10 @@ class End(NamedTuple):
     outputs: dict
 
 
-# The ends a needed job can reach, one list of shards and its specs standing for any the selection
-# names. `suite` and `e2e-select` set their outputs in their last step, so one that did not succeed
-# set none, and each reads as empty. A `suite` that succeeded printed a word, and a whole decision
-# of `e2e-select` wrote its scope alone.
+# The ends a needed job can reach on some trigger, one list of shards and its specs standing for any
+# the selection names. `suite` and `e2e-select` set their outputs in their last step, so one that did
+# not succeed set none, and each reads as empty. A `suite` that succeeded printed a word, and a whole
+# decision of `e2e-select` wrote its scope alone.
 NOT_SUCCEEDED = ["failure", "cancelled", "skipped"]
 ENDS = {
     "suite": [
@@ -832,13 +832,41 @@ def needed_jobs(name):
     return {needed: list(jobs_found[needed]["outputs"]) for needed in names}
 
 
+def suite_words(event, ref):
+    """The words `suite` can print in a run of one trigger (`scripts/ci_suite.py`), none where its
+    `if:` skips it."""
+    if event == "push" and ref == "refs/heads/dev":
+        return ["warm", "full"]
+    return ["map", "none", "full"] if event in MAPPERS else []
+
+
+def can_end(needed, end, event, ref, base_ref):
+    """Whether job `needed` can reach `end` in a run of one trigger that is not cancelled, as far as
+    the trigger decides it: `suite` and `e2e-select` run on their own triggers and are skipped on
+    every other."""
+    if needed == "suite":
+        words = suite_words(event, ref)
+        if end.result == "success":
+            return end.outputs["run"] in words
+        return (end.result != "skipped") == bool(words)
+    if needed == "e2e-select":
+        return (end.result != "skipped") == (event == "pull_request" and base_ref == "dev")
+    return True
+
+
 def job_cases(name):
-    """Every run job `name`'s condition can decide: each trigger, the run cancelled or not, and each
-    end of each job it needs."""
+    """The runs job `name`'s condition is judged over: each trigger, the run cancelled or not, and
+    each end of each job it needs, in a run not cancelled only those `can_end` allows on the trigger.
+    Some of these cannot happen: a cancelled run takes every end on every trigger, and `e2e-shard`
+    and `real-data-and-workflows` take each of their ends on every trigger and beside every end of
+    another needed job, though their own `if:` decides when they are skipped."""
     needed = needed_jobs(name)
     return [
         {"event": event, "ref": ref, "base_ref": base_ref, "cancelled": cancelled, "needs": dict(zip(needed, ends))}
-        for (event, ref, base_ref), cancelled, *ends in product(TRIGGERS, [False, True], *(ENDS[n] for n in needed))
+        for (event, ref, base_ref), cancelled in product(TRIGGERS, [False, True])
+        for ends in product(
+            *([end for end in ENDS[n] if cancelled or can_end(n, end, event, ref, base_ref)] for n in needed)
+        )
     ]
 
 
@@ -862,17 +890,24 @@ def job_context(name, case):
     return context
 
 
-def assert_the_job_runs_exactly(name, expected):
-    """Job `name`'s `if:` runs it in each of its cases that `expected` says, and in no other."""
-    condition = workflow_jobs()[name]["if"]
+def assert_the_job_runs_exactly(name, expected, condition=None):
+    """Job `name`'s `if:`, or `condition` in its place, runs it in each of its cases that `expected`
+    says, and in no other."""
+    condition = condition or workflow_jobs()[name]["if"]
     for case in job_cases(name):
         # As a string, which pytest prints whole: it cuts a dict short.
         assert evaluate(condition, job_context(name, case)) == expected(case), str(case)
 
 
-def step_cases(job_name):
-    """Each of job `job_name`'s cases, with a step's earlier steps all passed and not."""
-    return [{**case, "earlier_passed": passed} for case in job_cases(job_name) for passed in (True, False)]
+def step_cases(job_name, job_runs):
+    """The runs a step's condition in job `job_name` is judged over: each job case in which `job_runs`
+    says the job starts, then the run cancelled since or not, and the step's earlier steps all passed
+    or not."""
+    started = [case for case in job_cases(job_name) if job_runs(case)]
+    return [
+        {**case, "cancelled": cancelled, "earlier_passed": passed}
+        for case, cancelled, passed in product(started, [False, True], [True, False])
+    ]
 
 
 def step_context(job_name, case, earlier_passed):
@@ -881,10 +916,10 @@ def step_context(job_name, case, earlier_passed):
     return {**job_context(job_name, case), "success()": not case["cancelled"] and earlier_passed}
 
 
-def assert_the_step_runs_exactly(job_name, step, expected):
+def assert_the_step_runs_exactly(job_name, job_runs, step, expected):
     """The `if:` of this step of job `job_name` runs it in each step case that `expected` says, and in
     no other."""
-    for case in step_cases(job_name):
+    for case in step_cases(job_name, job_runs):
         context = step_context(job_name, case, case["earlier_passed"])
         assert evaluate(step["if"], context) == expected(case), str(case)
 
@@ -1092,6 +1127,7 @@ def test_the_deal_is_checked_once_every_shard_passed():
 
     assert_the_step_runs_exactly(
         "e2e",
+        on_the_whole_suite,
         step,
         lambda case: not case["cancelled"]
         and case["earlier_passed"]
@@ -1318,6 +1354,7 @@ def test_a_trial_commit_s_run_audits_the_pull_request_s_selection_beside_the_pul
     assert queue["name"] == QUEUE_AUDIT_STEP
     assert_the_step_runs_exactly(
         "e2e",
+        on_the_whole_suite,
         queue,
         lambda case: not case["cancelled"] and case["earlier_passed"] and case["event"] == "merge_group",
     )
@@ -1336,6 +1373,7 @@ def test_a_trial_commit_s_run_audits_the_pull_request_s_selection_beside_the_pul
     assert calls(tmp_path) == [["scripts/affected-specs.py", *QUEUE_AUDIT_ARGS, *reports]]
     assert_the_step_runs_exactly(
         "e2e",
+        on_the_whole_suite,
         own,
         lambda case: not case["cancelled"] and case["earlier_passed"] and case["event"] == "pull_request",
     )
@@ -1477,11 +1515,15 @@ def test_warm_caches_runs_only_on_warm_and_never_fails_the_run():
 
     assert warm["name"] == "warm-caches"
     assert warm["needs"] == "suite"
+
+    def on_a_warm_word(case):
+        suite = case["needs"]["suite"]
+        return not case["cancelled"] and suite.result == "success" and suite.outputs["run"] == "warm"
+
+    assert_the_job_runs_exactly("warm-caches", on_a_warm_word)
+    # Only a push's `suite` prints `warm`, so a condition that asks for a push too means the same.
     assert_the_job_runs_exactly(
-        "warm-caches",
-        lambda case: not case["cancelled"]
-        and case["needs"]["suite"].result == "success"
-        and case["needs"]["suite"].outputs["run"] == "warm",
+        "warm-caches", on_a_warm_word, "github.event_name == 'push' && needs.suite.outputs.run == 'warm'"
     )
     assert warm["continue-on-error"] == "true"
 
@@ -1779,9 +1821,12 @@ def tokens_of(expression):
 
 def result_of(expression, context):
     """The result of an expression of references, 'string literals', brackets, calls of fromJSON and
-    the status functions, and the operators !, == and !=, && and ||, each binding before the next. A
-    reference the context lacks, success(), failure() or cancelled() where it lacks that one, or any
-    other form, raises."""
+    the status functions, and the operators !, == and !=, && and ||. A reference the context lacks,
+    success(), failure() or cancelled() where it lacks that one, or any other form, raises.
+
+    Two rules GitHub's docs leave unsaid are assumed here: that the order of their table of operators
+    is the precedence, so `!` binds before `==` and `!=`, those before `&&`, and `&&` before `||`;
+    and that `&&` and `||` result in one of their operands."""
     tokens = tokens_of(expression)
 
     def taken(token):
@@ -1790,7 +1835,9 @@ def result_of(expression, context):
         del tokens[0]
         return True
 
-    # && and || result in one of their operands.
+    # && and || result in one of their operands. Both are always read, with no short circuit, so a
+    # misspelt reference raises on whichever side it is, and so does a guarded fromJSON:
+    # `e && fromJSON(e)` raises with `e` ''.
     def either():
         result = both()
         while taken("||"):
