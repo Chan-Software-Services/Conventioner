@@ -4,9 +4,9 @@ Giving a market role, by accepting an invitation, and changing and taking one ea
 judge the right of whoever gives, changes or takes it (an accept judges its inviter's) and the
 person's role, and then write. Each test lands a second role change between that read and the write
 (``interleave``), the invitee's accept through ``Invitees.accept`` or another organizer's change
-through its own module function, and asserts what a person and a later reader see: each answer, the roles as
-stored, and a history whose role entries, replayed over the roles the market started with, give the
-roles stored. An accept landing after its inviter's own role changed is
+through its own module function, and asserts what a person and a later reader see: each answer, the
+roles as stored, and a history whose role entries, replayed over the roles the market started with,
+give the roles stored. An accept landing after its inviter's own role changed is
 ``test_answering_an_invitation_on_the_server.py``'s.
 """
 import pytest
@@ -72,10 +72,6 @@ def _accepts(person, invitation):
 
 def _takes(by, market, person):
     return lambda: MarketsApi.remove_market_role(market["id"], person.account_id, by.email)
-
-
-def _changes(by, market, person, role):
-    return lambda: MarketsApi.update_market_role(market["id"], person.account_id, role, by.email)
 
 
 def _replayed(market, market_records):

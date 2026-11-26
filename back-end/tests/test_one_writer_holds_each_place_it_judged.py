@@ -1,11 +1,11 @@
 """One writer changes a person's place in an organization, holding the places it judged (T283).
 
 An invitation accepted (``place_by_invitation``), "Remove" and the owner's place change ("Make
-member", "Make admin") change an organization's people only through ``organization_people``: its table (``next_people``) says what each change does to the target's
-place as read and who may ask for it, and each change is one conditional write that lands only
-while the requester's and the target's places still stand as read, by their keys in the people
-map. Every write changes the map alone, never the old ``owner``, ``admins`` and ``members``
-lists (T583).
+member", "Make admin") change an organization's people only through ``organization_people``: its
+table (``next_people``) says what each change does to the target's place as read and who may ask for
+it, and each change is one conditional write that lands only while the requester's and the target's
+places still stand as read, by their keys in the people map. Every write changes the map alone,
+never the old ``owner``, ``admins`` and ``members`` lists (T583).
 
 A write that met another change answers 404 when the organization, or the person being removed, is
 gone, and otherwise ``OrganizationChanged``, a 409 in the spec's words; an accept that meets one

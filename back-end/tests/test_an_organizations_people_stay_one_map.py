@@ -8,11 +8,12 @@ it with two owners or none: on ``dev`` at ``279afc56`` it was four
 unconditional writes, and the planner's probes cut between them left an organization that did not
 parse, or a new owner with no place in it at all.
 
-The property test drives random sequences of every change, by random requesters on random targets,
-a place given as an invitation from the requester that the target accepts, a third of them with a second change landing between the first's read and its write, through the
-module over the shared organizations fake, which filters and writes as the server does; after each
-change the map holds exactly one owner and one place per person, no old list stands beside it, it
-parses, and a change nothing met leaves the map ``next_people`` answers.
+The property test drives random sequences of every change, by random requesters on random targets, a
+place given as an invitation from the requester that the target accepts, a third of them with a
+second change landing between the first's read and its write, through the module over the shared
+organizations fake, which filters and writes as the server does; after each change the map holds
+exactly one owner and one place per person, no old list stands beside it, it parses, and a change
+nothing met leaves the map ``next_people`` answers.
 """
 import copy
 import random
