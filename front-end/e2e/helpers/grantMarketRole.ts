@@ -10,9 +10,8 @@ import {
 /**
  * A role on a market and a place in an organization, given as the app gives them (ADR 0047): an
  * invitation sent through the session `request` holds (the seed's owner, or whoever may give it),
- * then accepted by the person on a request context of their own. No screen places a person without
- * their acceptance, and the direct add routes stay only until they are removed, so a spec gives
- * every role and place through these.
+ * then accepted by the person on a request context of their own. No route places a person without
+ * their acceptance, so a spec gives every role and place through these.
  *
  * The person must already have an account they sign in to with `password`: `ensureVerifiedUser`
  * makes one. A person who already has a role on the market, or a place in the organization, is the
