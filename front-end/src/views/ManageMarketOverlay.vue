@@ -215,14 +215,26 @@ const deletion = useDialogSubmit({
   opening: over(() => (deleteConfirming.value ? props.market?.id : null)),
   failure: 'The market was not deleted.',
 });
+/** The invite row's address and role as it is first offered: nothing typed, at Editor. */
+function emptyInviteFields() {
+  newUserEmail.value = '';
+  newUserRole.value = MarketRole.Editor;
+}
+
+/** Closes the invite row and forgets what was typed, chosen and sent in it. */
+function clearInviteRow() {
+  showAddUserForm.value = false;
+  inviteSent.value = null;
+  emptyInviteFields();
+}
+
 // Each opening starts clean: the read itself moves with the market it is open on.
 watch(
   () => [props.manageOpen, props.market] as const,
   ([open, market]) => {
     if (open && market) {
       renameValue.value = market.name;
-      showAddUserForm.value = false;
-      inviteSent.value = null;
+      clearInviteRow();
       deleteConfirming.value = false;
       removing.value = null;
       peopleWords.value = '';
@@ -363,8 +375,7 @@ async function handleAddUser() {
       done: (sent) => {
         // The form stays open with an empty field: inviting two people in a row is the case
         // E20/F01/S02 is named after, and this dialog is the same shape.
-        newUserEmail.value = '';
-        newUserRole.value = MarketRole.Editor;
+        emptyInviteFields();
         inviteSent.value = sent;
         // A later change ends a refusal's words, as choosing a role or removing someone does.
         userError.value = null;
@@ -665,11 +676,9 @@ async function openAddUser() {
   addUserInput.value?.focus();
 }
 
-/** Cancelling clears what was typed and any error, so reopening does not hand back a rejected value. */
+/** Cancelling clears the row and any error, so reopening does not hand back a rejected value. */
 async function closeAddUser() {
-  showAddUserForm.value = false;
-  newUserEmail.value = '';
-  inviteSent.value = null;
+  clearInviteRow();
   addUser.edit();
   await nextTick();
   addUserButton.value?.focus();

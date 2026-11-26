@@ -319,6 +319,37 @@ describe('Invite someone', () => {
     expect(invitedRows()).toHaveLength(1);
     expect(byTestId('manage-market-close-button')!.hasAttribute('disabled')).toBe(false);
   });
+
+  it.each([
+    ['another market', OTHER],
+    ['the same market', market()],
+  ])('starts the row empty at Editor when Manage market is opened on %s', async (_, next) => {
+    const wrapper = await open();
+    await openTheRow();
+    await type('someone.new@example.com', MarketRole.Viewer);
+
+    await wrapper.setProps({ manageOpen: false, market: null });
+    await wrapper.setProps({ manageOpen: true, market: next });
+    await flushPromises();
+    expect(byTestId('manage-market-add-user-input')).toBeNull();
+    await openTheRow();
+
+    expect(field().value).toBe('');
+    expect(roleSelect().value).toBe(MarketRole.Editor);
+  });
+
+  it('starts the row empty at Editor after Cancel', async () => {
+    await open();
+    await openTheRow();
+    await type('someone.new@example.com', MarketRole.Viewer);
+
+    byTestId('manage-market-add-user-cancel')!.click();
+    await flushPromises();
+    await openTheRow();
+
+    expect(field().value).toBe('');
+    expect(roleSelect().value).toBe(MarketRole.Editor);
+  });
 });
 
 describe('Invited', () => {

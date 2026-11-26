@@ -5,6 +5,7 @@ import { seedApplicantMarket } from './helpers/seedApplicantMarket';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
 import { grantMarketRole } from './helpers/grantMarketRole';
 import { seedDraftMarket } from './helpers/seedDraftMarket';
+import { uniqueMarketName } from './helpers/uniqueName';
 
 /**
  * Manage market holds together (bug 15, and items 14 and 15 of bug 43; E26/F10/S01).
@@ -16,7 +17,8 @@ import { seedDraftMarket } from './helpers/seedDraftMarket';
  * proves. Delete asked "Are you sure?" inline, Confirm before Cancel, with focus left on the page.
  *
  * The invite row's email field was narrower than its role select at a desk, cutting off a typed
- * address (T642).
+ * address, and the row kept an address and a role across openings: Escape left them to come back on
+ * another market, and Cancel kept the role (T642).
  */
 test.use({ viewport: { width: 1440, height: 900 } });
 
@@ -185,6 +187,71 @@ for (const window of [
     expect(cancel.x + cancel.width, 'to the row\u2019s end').toBeCloseTo(form.x + form.width, 0);
   });
 }
+
+/** The row's address and a role other than the default, left in it by whoever was typing. */
+async function typeAndChooseViewer(manage: ManageMarketPage) {
+  await manage.fillAddUserEmail(TYPED);
+  await manage.selectAddUserRole('viewer');
+}
+
+async function expectAFreshRow(manage: ManageMarketPage) {
+  await manage.clickAddUser();
+  await expect(manage.addUserInput).toHaveValue('');
+  await expect(manage.addUserSelect).toHaveValue('editor');
+}
+
+test('an invite row left by Escape comes back empty at Editor on another market', async ({
+  authenticatedPage: page,
+  request,
+}) => {
+  const prefix = uniqueMarketName('E2E Invite Row');
+  for (const letter of ['A', 'B']) {
+    await seedDraftMarket(request, BACKEND_URL, TEST_USER.email, TEST_USER.password, {
+      name: `${prefix} ${letter}`,
+    });
+  }
+  // Both markets listed at once: Manage market is mounted once for the list, so no reload may come
+  // between the two openings.
+  await page.goto(`/markets?q=${encodeURIComponent(prefix)}`);
+  const manage = new ManageMarketPage(page);
+  const manageMarket = async (letter: string) => {
+    await page
+      .getByTestId('market-card')
+      .filter({ hasText: `${prefix} ${letter}` })
+      .getByTestId('market-card-manage-button')
+      .click();
+    await manage.waitForOverlay();
+  };
+
+  await manageMarket('A');
+  await manage.clickAddUser();
+  await typeAndChooseViewer(manage);
+  await manage.addUserInput.press('Escape');
+  await expect(manage.window).toHaveCount(0);
+
+  await manageMarket('B');
+  await expect(manage.window).toContainText(`${prefix} B`);
+  await expectAFreshRow(manage);
+});
+
+test('an invite row left by Cancel comes back empty at Editor', async ({
+  authenticatedPage: page,
+  request,
+}) => {
+  const { marketName } = await seedDraftMarket(
+    request,
+    BACKEND_URL,
+    TEST_USER.email,
+    TEST_USER.password,
+  );
+  const manage = await openManage(page, marketName);
+  await manage.clickAddUser();
+  await typeAndChooseViewer(manage);
+
+  await manage.addUserCancel.click();
+
+  await expectAFreshRow(manage);
+});
 
 test('deleting is a destructive dialog that opens on Cancel and says what goes', async ({
   authenticatedPage: page,
