@@ -40,8 +40,6 @@ import organization_people as OrganizationPeople
 from client_errors import BadRequestError, ForbiddenError, NotFoundError
 from datatypes import organization_people_of
 from organization_people import (
-    ALREADY_A_MEMBER,
-    ALREADY_AN_ADMIN,
     ALREADY_IN_IT,
     ALREADY_OWNS_IT,
     HAND_IT_ONLY_TO_ITS_PEOPLE,
@@ -162,13 +160,13 @@ TARGET_IN = {None: NEW.id, "member": MEMBER.id, "admin": ADMIN.id, "owner": OWNE
 CELLS = [
     (Event.ADD_ADMIN, OWNER, None, "admin"),
     (Event.ADD_ADMIN, OWNER, "member", "admin"),
-    (Event.ADD_ADMIN, OWNER, "admin", (BadRequestError, ALREADY_AN_ADMIN)),
-    (Event.ADD_ADMIN, OWNER, "owner", (BadRequestError, "Owner cannot be added as admin")),
+    (Event.ADD_ADMIN, OWNER, "admin", (BadRequestError, ALREADY_IN_IT)),
+    (Event.ADD_ADMIN, OWNER, "owner", (BadRequestError, ALREADY_IN_IT)),
     (Event.ADD_MEMBER, OWNER, None, "member"),
     (Event.ADD_MEMBER, ADMIN, None, "member"),
-    (Event.ADD_MEMBER, OWNER, "member", (BadRequestError, ALREADY_A_MEMBER)),
-    (Event.ADD_MEMBER, OWNER, "admin", (BadRequestError, "Admin cannot be added as member")),
-    (Event.ADD_MEMBER, ADMIN, "owner", (BadRequestError, "Owner cannot be added as member")),
+    (Event.ADD_MEMBER, OWNER, "member", (BadRequestError, ALREADY_IN_IT)),
+    (Event.ADD_MEMBER, OWNER, "admin", (BadRequestError, ALREADY_IN_IT)),
+    (Event.ADD_MEMBER, ADMIN, "owner", (BadRequestError, ALREADY_IN_IT)),
     (Event.REMOVE, OWNER, None, (NotFoundError, NO_LONGER_IN_THE_ORGANIZATION)),
     (Event.REMOVE, OWNER, "member", None),
     (Event.REMOVE, ADMIN, "member", None),

@@ -47,16 +47,14 @@ ORGANIZATION_CHANGED = (
     "This organization changed while you were working on it, so your change was not saved. "
     "Check its people as they are now, then make your change again."
 )
-ALREADY_AN_ADMIN = "They are already an admin of this organization."
-ALREADY_A_MEMBER = "They are already a member of this organization."
 THE_OWNERS_PLACE = (
     "The owner's place changes only when ownership of the organization is transferred.")
 NOT_A_PLACE = "A place is admin or member."
 ALREADY_OWNS_IT = "They already own this organization"
 HAND_IT_ONLY_TO_ITS_PEOPLE = (
     "Transfer ownership only to one of the organization's admins or members.")
-#: Said to an invitee accepting an invitation to an organization they already hold a place in:
-#: accepting never changes a place, so the invitation ends.
+#: Said to an invitee accepting an invitation to a place the table will not add them to, since
+#: they already hold a place in the organization: the invitation ends.
 ALREADY_IN_IT = "You are already in this organization, so this invitation has ended."
 
 #: Said of removing the organization's owner. No screen transfers an organization's ownership yet
@@ -157,6 +155,11 @@ def already_placed(address: str, place: str, held: str) -> str:
 #: An account deletion never reaches an owner: ``delete_user`` refuses one before it forgets them.
 NEVER_REACHED = "never reached"
 
+#: The table's refusal of every add it does not allow, each of someone who already holds a place.
+#: Only an accept judges the target of an add (an invite asks only ``may`` of it, and refuses a
+#: placed address in ``already_placed``'s words), so the words are the invitee's.
+_REFUSES_THE_INVITEE = Refusal(BadRequestError, ALREADY_IN_IT)
+
 #: A place change is the owner's alone, whichever place it gives.
 _THE_OWNERS_ALONE = (frozenset({OWNER}), Refusal(
     ForbiddenError, "Only the organization's owner can change someone's place in it."))
@@ -181,13 +184,13 @@ AUTHORITY: Dict[Event, Tuple[FrozenSet[str], Refusal]] = {
 TABLE: Dict[Tuple[Event, Optional[str]], Union[Move, Refusal, str]] = {
     (Event.ADD_ADMIN, None): Move(ADMIN),
     (Event.ADD_ADMIN, MEMBER): Move(ADMIN),
-    (Event.ADD_ADMIN, ADMIN): Refusal(BadRequestError, ALREADY_AN_ADMIN),
-    (Event.ADD_ADMIN, OWNER): Refusal(BadRequestError, "Owner cannot be added as admin"),
+    (Event.ADD_ADMIN, ADMIN): _REFUSES_THE_INVITEE,
+    (Event.ADD_ADMIN, OWNER): _REFUSES_THE_INVITEE,
 
     (Event.ADD_MEMBER, None): Move(MEMBER),
-    (Event.ADD_MEMBER, MEMBER): Refusal(BadRequestError, ALREADY_A_MEMBER),
-    (Event.ADD_MEMBER, ADMIN): Refusal(BadRequestError, "Admin cannot be added as member"),
-    (Event.ADD_MEMBER, OWNER): Refusal(BadRequestError, "Owner cannot be added as member"),
+    (Event.ADD_MEMBER, MEMBER): _REFUSES_THE_INVITEE,
+    (Event.ADD_MEMBER, ADMIN): _REFUSES_THE_INVITEE,
+    (Event.ADD_MEMBER, OWNER): _REFUSES_THE_INVITEE,
 
     (Event.REMOVE, None): Refusal(NotFoundError, NO_LONGER_IN_THE_ORGANIZATION),
     (Event.REMOVE, MEMBER): Move(None),
@@ -407,7 +410,7 @@ def _judged_for_placing(invitation: Dict[str, Any], invitee: Any) -> Tuple[Dict[
         next_people(people, event, inviter.id, invitee.id)
     except BadRequestError:
         Invitations.end(invitation)
-        raise BadRequestError(ALREADY_IN_IT) from None
+        raise
     return org, inviter
 
 
