@@ -340,13 +340,7 @@ test.describe('Manage organization stays open', () => {
 
     // Opened again with an admin listed, it starts on "Invite admin", never on their Remove.
     await acceptInvitation(SECOND, await idOf(request, orgName));
-    // The dialog opens on the list's copy of the organization, which closing reads again: opened
-    // before that read answers, it shows the admins as they were before the accept.
-    const reread = page.waitForRequest(
-      (asked) => asked.method() === 'GET' && /\/organizations$/.test(new URL(asked.url()).pathname),
-    );
     await orgs.manageCloseButton.click();
-    await (await (await reread).response())?.finished();
     await card.getByTestId('organizations-manage-button').click();
     await orgs.waitForManageOverlay();
     await expect(orgs.adminEmails).toHaveText([SECOND.email]);

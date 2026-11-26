@@ -54,7 +54,7 @@ test('reopened before the read closing started has answered, it lists the admin 
   const release = await holdTheListsReads(page);
   await orgs.manageCloseButton.click();
   await manage.click();
-  await orgs.waitForManageOverlay();
+  await expect(orgs.manageWindow).toBeVisible();
 
   // Nothing of the copy it was opened on is listed as the admins while the read is out.
   await expect(page.getByTestId('manage-org-admin-list-loading')).toHaveText('Loading admins…');

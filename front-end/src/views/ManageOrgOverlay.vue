@@ -11,10 +11,15 @@
  * change through `changed`, an event of its own. `handleRename` in this same file already worked
  * this way and was the model.
  *
- * It refreshes through the user's own organization LIST rather than `GET /organizations/<id>`:
- * the list endpoint is scoped to what the caller belongs to and returns the enriched shape this
- * dialog renders (each admin and member with their id and address, and the caller's role), which
- * the single-organization read does not.
+ * It reads the organization as it opens, and again after a change to its people: the copy the list
+ * opens it with can be older than what is true, as when it is reopened before the read of the list
+ * that closing asks has answered. So Admins and Members list nobody of that copy while the first
+ * read is out; the copy names the organization meanwhile, and stands in for a first read that fails,
+ * which the dialog says. It reads through the user's own organization LIST rather than
+ * `GET /organizations/<id>`: the list endpoint is scoped to what the caller belongs to and returns
+ * the enriched shape this dialog renders (each admin and member with their id and address, and the
+ * caller's role), which the single-organization read does not. An organization the list no longer
+ * holds is shown no further, and the dialog says why.
  *
  * Three closes are correct and stay: deleting the organization, the explicit close control, and
  * dismissal by Escape or the backdrop - the last two now owned by `AppDialog`.
@@ -40,7 +45,7 @@
  * another organization, leaves the dialog the person is in alone, and so does a re-read of the
  * organization it had been open on; the list behind is still told of a change that landed.
  */
-import { nextTick, ref, watch, type Ref } from 'vue';
+import { computed, nextTick, ref, shallowRef, watch, type Ref } from 'vue';
 import {
   type Organization,
   type OrganizationPerson,
@@ -48,7 +53,7 @@ import {
   type PermissionTableRow,
   type SentInvitation,
 } from '@/assets/types/datatypes';
-import { api, getApiErrorMessage, getApiErrorStatus, isOrganizationChanged } from '@/utils/api';
+import { api, getApiErrorStatus, isOrganizationChanged } from '@/utils/api';
 import {
   fetchOrganizations,
   organizationPlaceChange,
@@ -64,6 +69,7 @@ import {
 } from '@/utils/invitations';
 import { useInvitationsWaiting } from '@/utils/useInvitationsWaiting';
 import { useDialogSubmit } from '@/utils/useDialogSubmit';
+import { useServerRead } from '@/utils/useServerRead';
 import type { LateAnswer } from '@/utils/useSubmit';
 import AppDialog from '@/components/AppDialog.vue';
 import DeleteOrgDialog from '@/components/DeleteOrgDialog.vue';
@@ -86,8 +92,6 @@ const emit = defineEmits<{
   changed: [];
 }>();
 
-const orgData = ref<Organization | null>(null);
-const errorMessage = ref('');
 const renameValue = ref('');
 const showAddAdminForm = ref(false);
 const showAddMemberForm = ref(false);
@@ -138,6 +142,56 @@ const keyOfPerson = (person: OrganizationPerson) => person.userId;
 
 /** The organization Manage organization is open on, or nothing while it is closed. */
 const openOn = () => (props.manageOpen ? (props.org?.id ?? null) : null);
+
+/** The organizations list answered without the organization asked for. */
+class NotListed extends Error {}
+
+/** The organization as the person's list of organizations serves it now. */
+async function readOrganization(id: string): Promise<Organization> {
+  const found = (await fetchOrganizations()).find((candidate) => candidate.id === id);
+  if (!found) throw new NotListed();
+  return found;
+}
+
+/**
+ * Manage organization's own read of the organization it is open on, from the opening's first read to
+ * each re-read after a change. Keyed by that organization, so an answer for an opening that has gone
+ * never lands, and only the newest read asked does.
+ */
+const read = useServerRead<string, Organization>(openOn, readOrganization, {
+  failure: 'Could not re-read the organization',
+  missing: (error) => error instanceof NotListed,
+});
+/** The list's copy it was opened with, each change made here taken into it. */
+const openedCopy = shallowRef<Organization | null>(null);
+/** The organization as last read, or the opened copy until a read lands; nothing once not listed. */
+const orgData = computed(() =>
+  read.phase.value === 'missing' ? null : (read.data.value ?? openedCopy.value),
+);
+/** This opening's first read failed: the copy's people are listed from then on, until one lands. */
+const firstReadFailed = ref(false);
+watch(read.key, () => (firstReadFailed.value = false), { flush: 'sync' });
+watch(read.phase, (phase) => {
+  if (phase === 'failed') firstReadFailed.value = true;
+});
+/** What Admins and Members say: loading, and nobody of the copy, while the first read is out. */
+const peopleState = computed(() =>
+  read.phase.value === 'loading' && !firstReadFailed.value ? 'loading' : 'ready',
+);
+/** A read that failed, or an organization no longer listed, said by the shell. */
+const errorMessage = computed(() => {
+  const phase = read.phase.value;
+  if (phase === 'missing') return 'You are no longer in this organization, or it has been deleted.';
+  return phase === 'failed' || phase === 'refresh_failed' ? read.sentence.value : '';
+});
+// The rename field takes each name that differs from the last, so a read that brings the same name
+// leaves one being typed alone.
+watch(
+  () => orgData.value?.name,
+  (name) => {
+    if (name !== undefined) renameValue.value = name;
+  },
+);
 /** What a confirmation over Manage organization is open on: nothing once it closes. */
 const over =
   <T,>(asked: () => T) =>
@@ -184,13 +238,14 @@ const invitations = useInvitationsWaiting({
   key: () => (props.manageOpen && canManage() ? (orgData.value?.id ?? null) : null),
   fetch: fetchOrganizationInvitations,
   withdraw: withdrawOrganizationInvitation,
-  ended: (isCurrent) => refreshOrg('Could not re-read the organization', isCurrent),
+  ended: rereadAfterAWrite,
 });
+// Each opening starts clean: the read itself moves with the organization it is open on.
 watch(
   () => [props.manageOpen, props.org] as const,
   ([open, org]) => {
+    openedCopy.value = open ? org : null;
     if (open && org) {
-      orgData.value = org;
       renameValue.value = org.name;
       showAddAdminForm.value = false;
       showAddMemberForm.value = false;
@@ -202,9 +257,6 @@ watch(
       invitations.reset();
       adminWords.value = '';
       memberWords.value = '';
-      errorMessage.value = '';
-    } else {
-      orgData.value = null;
     }
   },
   { immediate: true },
@@ -227,33 +279,33 @@ const mayWithdraw = (invitation: SentInvitation<OrganizationPlace>) =>
   isOwner() || invitation.role === 'member';
 
 /**
- * Re-read this organization so the dialog shows what it just did.
+ * Reads the organization again so the dialog shows what it just did.
  *
  * A membership change answers with a message and no document, so there is nothing to merge; and
  * guessing the new membership locally would be a second copy of the server's rules about who may
  * hold which role.
  *
- * Run inside a write, with its submission's `isCurrent`: once the opening the write was sent from
- * has gone (Manage organization closed, or opened on another organization), nothing is read, and a
- * read that lands after it writes nothing.
+ * Run inside a write, with its submission's `isCurrent`, so the hold lasts until the change shows:
+ * once the opening the write was sent from has gone (Manage organization closed, or opened on
+ * another organization), nothing is read. The read overtakes any asked before it, so an older answer
+ * never lands after it.
  */
-async function refreshOrg(failed: string, isCurrent: () => boolean): Promise<void> {
-  const id = orgData.value?.id;
-  if (!id || !isCurrent()) return;
-  try {
-    const mine = await fetchOrganizations();
-    if (!isCurrent()) return;
-    const found = mine.find((candidate) => candidate.id === id);
-    if (found) orgData.value = found;
-  } catch (err) {
-    if (!isCurrent()) return;
-    errorMessage.value = getApiErrorMessage(err, failed);
-  }
+async function rereadAfterAWrite(isCurrent: () => boolean): Promise<void> {
+  if (isCurrent()) await read.reread();
 }
 
-/** Saved, inside the write: the organization read again, so the hold lasts until it shows. */
-const readAfterSaving = (isCurrent: () => boolean) =>
-  refreshOrg('Saved, but could not re-read the organization', isCurrent);
+/**
+ * Shows a change made here that reads nothing of its own, a new name or default table: taken into
+ * the copy and into the organization as read. A read still out was asked before the change, so it is
+ * dropped and asked again; with nothing read yet, one is asked.
+ */
+function showChange(change: (org: Organization) => Organization) {
+  const id = read.key.value;
+  if (!id || !openedCopy.value) return;
+  openedCopy.value = change(openedCopy.value);
+  read.adopt(id, change);
+  if (!read.data.value) void read.reread();
+}
 
 /**
  * A change landed: its History reads it while the opening it was sent from lasts (`current`), and
@@ -278,7 +330,7 @@ function lateAnswer(answer: LateAnswer<unknown>): void {
  */
 async function readAgainIfChanged(err: unknown, isCurrent: () => boolean): Promise<void> {
   if (!isOrganizationChanged(err)) return;
-  await refreshOrg('Could not re-read the organization', isCurrent);
+  await rereadAfterAWrite(isCurrent);
   changeLanded(isCurrent());
 }
 
@@ -336,7 +388,7 @@ async function closeAddMember() {
 
 /** The default table a change answered, shown at once; its History reads the change. */
 function defaultsChanged(table: PermissionTableRow[]) {
-  if (orgData.value) orgData.value = { ...orgData.value, defaultPermissionTable: table };
+  showChange((org) => ({ ...org, defaultPermissionTable: table }));
   changesMade.value++;
   emit('changed');
 }
@@ -351,7 +403,7 @@ async function handleRename() {
   if (!org || name === org.name) return;
   await rename.submit(() => api.put(`/organizations/${encodeURIComponent(org.id)}`, { name }), {
     done: () => {
-      if (orgData.value) orgData.value = { ...orgData.value, name };
+      showChange((shown) => ({ ...shown, name }));
       changeLanded(true);
     },
     late: lateAnswer,
@@ -445,7 +497,7 @@ async function handleRemoveUser() {
       }
       // Held until the confirmation closes: during the re-read its Remove would send a second
       // removal.
-      await readAfterSaving(isCurrent);
+      await rereadAfterAWrite(isCurrent);
     },
     {
       done: async () => {
@@ -503,7 +555,7 @@ async function handlePlaceChange() {
       }
       // Held until the confirmation closes: during the re-read its confirm would send a second
       // change.
-      await readAfterSaving(isCurrent);
+      await rereadAfterAWrite(isCurrent);
       return landedIn;
     },
     {
@@ -576,6 +628,7 @@ function handleDeleted() {
           >
             <ListFrame
               v-model:words="adminWords"
+              :state="peopleState"
               :items="orgData.adminPeople"
               :finds="findsPerson"
               :itemKey="keyOfPerson"
@@ -688,6 +741,7 @@ function handleDeleted() {
           >
             <ListFrame
               v-model:words="memberWords"
+              :state="peopleState"
               :items="orgData.memberPeople"
               :finds="findsPerson"
               :itemKey="keyOfPerson"

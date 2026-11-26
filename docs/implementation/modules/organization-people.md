@@ -15,6 +15,8 @@ describes:
   - front-end/src/__tests__/changingAPlaceAsksFirst.test.ts
   - front-end/src/__tests__/manageOrganizationPeople.test.ts
   - front-end/e2e/an-organizations-people-change-place.spec.ts
+  - front-end/e2e/manage-organization-opens-as-it-is.spec.ts
+  - front-end/src/__tests__/manageOrganizationReadsOnOpen.test.ts
   - front-end/src/__tests__/manageOrganizationInvites.test.ts
 verified: 2026-11-25
 sources:
@@ -23,6 +25,7 @@ sources:
   - T411
   - T538
   - T583
+  - T637
 ---
 
 # The organization's people
@@ -99,10 +102,23 @@ Each re-read runs inside its write and asks the write's submission whether its o
 
 **No change writes the account's `organizations`**, which nothing reads (T583, [users and email](../data/users-and-email.md)).
 
+## Manage organization reads it as it opens
+
+**Manage organization** ([`ManageOrgOverlay.vue`](../../../front-end/src/views/ManageOrgOverlay.vue)) reads the organization as it opens and again after each write that changes its people, through `GET /organizations`, the list that serves each admin and member with their id and address.
+It is a keyed read ([`useServerRead`](../../../front-end/src/utils/useServerRead.ts)) of its own, so an answer for an opening that has gone lands nowhere and only the newest read asked does.
+It opened on the organizations list's copy and read the organization again only after a write of its own, so reopened before the list's read that closing asks had answered, it listed the admins and members as they were, for as long as it stayed open (T637).
+
+- Until the first read answers, the list's copy names the organization and says what the person may do, while Admins and Members say they are loading and list nobody.
+- A first read that fails leaves the copy listed, with the failure said, and a write's re-read keeps it listed until a read lands.
+- A re-read that fails keeps what was last read, with the failure said.
+- A list that no longer holds the organization shows nothing of it, with "You are no longer in this organization, or it has been deleted.".
+- A rename and a change to the default table are shown as soon as they are saved, and a read asked before either is dropped and asked again, so it never puts the old value back.
+- The rename field takes each name that differs from the one shown, so a read that brings the same name leaves one being typed alone.
+
 ## Make member and Make admin
 
 **Manage organization gives its owner "Make member" on each admin's row and "Make admin" on each member's**, secondary buttons before Remove, each naming the person in a visually hidden span, as Remove does.
-Each carries `data-dialog-not-first`, so Manage organization still opens on "Invite admin", never on the first admin's row ([dialogs](../conventions/dialogs.md)).
+Each carries `data-dialog-not-first`, so Manage organization never puts focus on one as its first control, the first admin's row included ([dialogs](../conventions/dialogs.md)).
 Each opens a confirmation in `AppDialog`, not destructive, whose words `organizationPlaceChange` in [`organizations.ts`](../../../front-end/src/utils/organizations.ts) gives: "Make <email> a member?", "They will read every market of <organization> instead of running it, unless a market gives them a role of its own.", confirmed by "Make member"; or "Make <email> an admin?", "They will run every market of <organization> as its Admin.", confirmed by "Make admin".
 `AppDialog` draws its title, as every dialog's, through `EmailAddress`, so a long address breaks only before its "@" or a dot ([dialogs](../conventions/dialogs.md)), and so does the Remove confirmation's.
 The flow is [B3a in organizations](../../business/flows/organizations.md#b3a-make-an-admin-a-member-or-a-member-an-admin).
@@ -126,6 +142,8 @@ A 404, someone removed meanwhile, is read as done, with focus on the list their 
 [`changingAPlaceAsksFirst.test.ts`](../../../front-end/src/__tests__/changingAPlaceAsksFirst.test.ts): the two buttons for the owner alone, the confirmations' words, Cancel and Escape, the request, the re-read and where focus goes, the 404 read as done, the 409 and any other refusal in the confirmation, and one request however often the confirm is pressed, the confirmation held by the shell while it writes, and a refusal not in the next change.
 [`manageOrganizationPeople.test.ts`](../../../front-end/src/__tests__/manageOrganizationPeople.test.ts): Rename held and sent once, and an invitation's refusal, a rename's answers and a stale re-read after a removal kept out of Manage organization opened on another organization.
 [`manageOrganizationInvites.test.ts`](../../../front-end/src/__tests__/manageOrganizationInvites.test.ts): Invite admin and Invite member, "Invited" and Withdraw, each held, sent once and kept to its opening.
+[`manageOrganizationReadsOnOpen.test.ts`](../../../front-end/src/__tests__/manageOrganizationReadsOnOpen.test.ts): the read as it opens and at each opening, nobody of the copy listed while it is out, the name it brings, a failed first read, an organization no longer listed, a read for a closed opening dropped, and a rename kept over a read asked before it.
+[`manage-organization-opens-as-it-is.spec.ts`](../../../front-end/e2e/manage-organization-opens-as-it-is.spec.ts): reopened on the stack with every read of the list held, after the person invited has accepted, it lists nobody until the read answers and then lists them.
 [`an-organizations-people-change-place.spec.ts`](../../../front-end/e2e/an-organizations-people-change-place.spec.ts): the owner makes an admin a member and back on the stack, each asked first, with the buttons' names, the rows, the focus, the History and a reload, at a desk and on a phone.
 
 ## Why
