@@ -35,8 +35,8 @@ sources:
   - T335
   - T452
   - T539
-  - T584
   - T583
+  - T584
 ---
 
 # Operations
@@ -485,7 +485,7 @@ Code 85 or 86 is an index of that name with other options or keys, to drop (`db.
 
 **"The indexes on applicant_login_challenges, sign_in_attempts and vendor_remembered_sign_ins could not be built"**.
 The log names Mongo's error by its type and code only, never its words, since a duplicate key error quotes a vendor's address: code 11000 is duplicate challenges, and 85 or 86 an index of the same name with other options or keys.
-These are applicants' sign-in codes, used once and expiring within ten minutes, and the sign-in rate-limit counters, which last a quarter hour or an hour, so nothing lasting is lost by clearing them: drop a conflicting index of the same name (`db.applicant_login_challenges.dropIndex('<name>')`, `db.sign_in_attempts.dropIndex('<name>')`), or remove duplicate challenges (`db.applicant_login_challenges.deleteMany({})`), then redeploy.
+These are applicants' sign-in codes, used once and expiring within ten minutes, and the sign-in rate-limit counters, which expire when their window ends ([the limits](implementation/data/users-and-email.md#the-sign-in-is-bounded)), so nothing lasting is lost by clearing them: drop a conflicting index of the same name (`db.applicant_login_challenges.dropIndex('<name>')`, `db.sign_in_attempts.dropIndex('<name>')`), or remove duplicate challenges (`db.applicant_login_challenges.deleteMany({})`), then redeploy.
 The third holds vendors' remembered sign-ins ("Remember me" on the vendor page); its one index is the TTL index `remembered_sign_in_ttl`, so drop a conflicting index of that name (`db.vendor_remembered_sign_ins.dropIndex('<name>')`) and keep the documents, whose loss only makes each remembered vendor enter a code once more.
 
 **"Could not build the indexes on organizer_sessions"**.

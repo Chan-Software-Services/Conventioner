@@ -164,9 +164,10 @@ export async function seedApplicantMarket(
 }
 
 /**
- * An applicant address no other test signs in on. The server takes at most five code requests and
- * ten code checks an address in fifteen minutes, counted across every market, so one address
- * shared by a file's tests, run again and again, is refused within a run (`sign_in_limits.py`).
+ * An applicant address no other test signs in on. The server limits the codes one caller asks for
+ * an address, and the wrong ones it tries, counted across every market
+ * (`back-end/sign_in_limits.py`), so one address shared by a file's tests, run again and again, is
+ * refused within a run.
  */
 export function anApplicantEmail(prefix = 'applicant-e2e'): string {
   return `${prefix}-${Date.now()}${randomInt(1000, 10000)}@example.com`;

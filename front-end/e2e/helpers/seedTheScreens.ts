@@ -305,8 +305,9 @@ export const SCREENS_INVITEE = {
 
 /**
  * `SCREENS_INVITEE`'s two invitations, sent only when none of that kind waits: every sweep file
- * seeds, and an address is sent at most five invitations a quarter hour. One sent on an earlier
- * seed waits 14 days, to that seed's `big`, which is still there.
+ * seeds, and the invitations sent to one address are limited (`INVITATION_PER_ADDRESS` in
+ * `back-end/sign_in_limits.py`). One sent on an earlier seed waits 14 days, to that seed's `big`,
+ * which is still there.
  */
 async function invitationsForTheInvitee(
   api: APIRequestContext,
@@ -326,7 +327,8 @@ async function invitationsForTheInvitee(
 /**
  * Two invitations waiting on `marketId`, an Admin's to a long address and a Viewer's, so Manage
  * market draws its "Invited" (T538). Each seed's addresses are its own: every sweep file seeds, and
- * an address is sent at most five invitations a quarter hour. Fixture data.
+ * the invitations sent to one address are limited (`INVITATION_PER_ADDRESS` in
+ * `back-end/sign_in_limits.py`). Fixture data.
  */
 async function twoInvitationsWaiting(api: APIRequestContext, marketId: string): Promise<void> {
   const stamp = Date.now();

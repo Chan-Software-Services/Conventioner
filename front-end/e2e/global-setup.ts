@@ -10,10 +10,10 @@ import { stackReady } from './helpers/stackReady';
  * and once the stack is ready, the back end answering and the sign-in page drawn (`stackReady.ts`).
  * The network comes first, since a page loaded while it changes would fail.
  *
- * The applicant sign-in limits count per address and per caller for a quarter of an hour, in the
- * database. Specs sign in with fixed addresses, and every browser request reaches the back end from
- * the same caller, so a second run within that quarter of an hour would start from the first one's
- * count and be refused.
+ * The applicant sign-in limits (`back-end/sign_in_limits.py`) count per address and per caller in
+ * fixed windows, in the database. Specs sign in with fixed addresses, and every browser request
+ * reaches the back end from the same caller, so a second run in the same window would start from
+ * the first one's count and be refused.
  *
  * It starts with none of the stack's seed locks held either (`stackLock.ts`): no worker of the run
  * has started, so a lock still standing, or a takeover's `.reap` lock, was left by an earlier
