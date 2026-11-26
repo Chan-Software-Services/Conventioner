@@ -92,7 +92,7 @@ test('an Editor changes the seats, but neither decides nor moves a phase once as
     await expect(page.getByTestId('app-monitor-decided-reject-button')).toHaveCount(0);
     // The review closed with the stage: its controls are gone, and no line says so (T466).
     await expect(page.getByTestId('market-setup-applications-condition')).toHaveCount(0);
-    // Publishing the verdicts stays an admin's.
+    // Publishing results stays an admin's.
     await expect(page.getByTestId('applications-publish-button')).toHaveCount(0);
   });
 });

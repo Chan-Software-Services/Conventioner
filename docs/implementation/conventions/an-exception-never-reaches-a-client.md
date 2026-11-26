@@ -103,7 +103,7 @@ describes:
   - back-end/application_status.py#_upsert
   - back-end/tests/test_no_log_line_carries_an_exceptions_message.py
   - back-end/utils/captcha.py#captcha_passes
-verified: 2026-11-25
+verified: 2026-11-26
 sources:
   - T74
   - E41/F01/S01
@@ -308,7 +308,7 @@ Before that it refuses a database the environment does not name, or the primary 
 - [`test_the_error_tracker_is_sent_no_value.py`](../../../back-end/tests/test_the_error_tracker_is_sent_no_value.py) raises in a route whose address, body, query, cookie, headers and locals hold a fixture address, answer and token, and finds exactly one event, carrying the exception's type, its frames and the route's rule, and none of the values; `/healthz`'s 503 is one event too, with no message.
 - [`test_the_hosts_request_limit.py`](../../../back-end/tests/test_the_hosts_request_limit.py) holds `MAX_CONTENT_LENGTH` to the host's 4,500,000 bytes, sends each import route a body one byte over it and finds 413 with the sentence and the file never inspected, and sends the inspect a body at it and finds it read.
 - [`test_captcha.py`](../../../back-end/tests/test_captcha.py) meets each of the human check's outages and finds one warning naming the kind, and each refusal, and finds nothing of the token, the caller, the secret, Cloudflare's words or a library's message in the log, and nothing printed.
-- [`test_account_emails_log_no_address.py`](../../../back-end/tests/test_account_emails_log_no_address.py) sends each of the five mails with email disabled, accepted, answered with no message id and refused by an error whose message holds the address, and finds the address, the error's text and the provider's response body in no log record.
+- [`test_account_emails_log_no_address.py`](../../../back-end/tests/test_account_emails_log_no_address.py) sends each of the six mails with email disabled, accepted, answered with no message id and refused by an error whose message holds the address, and finds the address, the error's text and the provider's response body in no log record.
 - CodeQL's `py/stack-trace-exposure` is the automated backstop: it is in the default suite CodeQL's workflow runs on every pull request to `dev`, every push and trial commit there and weekly ([CI and the gate](../testing/ci-and-the-gate.md#codeql)), and it flags a route that catches an exception and answers its text.
   It stops following a flow at a `raise`, so the client copy rule and these route tests hold the rest: a library's message carried into a client error's copy is invisible to it.
 

@@ -38,7 +38,7 @@ Publication is the single, deliberate moment anything more is told ([Publish res
 A rejected applicant seated by hand has a table, and an approved one the run could not place has none; so rejected and approved-without-a-seat read the same, and no reason is given to either.
 It is read on every request, so a seat changed by hand shows at once.
 
-**Reading stays open after applying closes** (E26/F07/S02): closing the applicant surface with applications hid every verdict before most organizers published one (bug 20).
+**Reading stays open after applying closes** (E26/F07/S02): closing the applicant surface with applications hid every applicant's outcome before most organizers published results (bug 20).
 A stranger applying to a closed market stays wrong, so the save refuses otherwise in words naming the phase, "Applications Closed" for a stopped form.
 
 ## Where it is kept

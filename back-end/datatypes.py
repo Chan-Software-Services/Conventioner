@@ -802,7 +802,9 @@ class Market(BaseModel):
     # Whether the organizer chose no automatic rejections (T206), as ``nothing_leads_the_card`` is
     # for the highlights: only ``save_rejection_rules`` writes it, true only while there is no rule.
     no_automatic_rejections: bool = False
-    results_published: bool = False  # Organizer-controlled gate: verdicts hidden from applicants until flipped
+    # Organizer-controlled gate: once flipped, each applicant's outcome (a table or none, with
+    # seats) is readable, never a verdict.
+    results_published: bool = False
     # Whether the organizer has stopped taking applications, inside the stage (E38/F04/S02): a fact
     # about the applicant form, not a phase (ADR 0005), so reviewing goes on. Server-owned: only
     # ``set_applications_stopped`` writes it. Entering assignment closes the form whatever it says.
