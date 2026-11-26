@@ -142,7 +142,7 @@ Every refusal that asks "are results published" of the assignment asks `results_
 `AssignmentComputedGuard` reads `unallocated_refusal`, and `AssignmentNotBeforeReviewGuard` reads `review_reopened_since_run` through the owner.
 A placement, a free and a swap record `after_results` in their history entry while `results_published` holds ([the market's history](../data/history.md)).
 
-The applicant-facing reads keep reading `resultsPublished` itself: `_application_response` in `back-end/api/applicants.py`, `results_are_out` and `vendor_page_market_by_slug` in [`back-end/market_documents.py`](../../../back-end/market_documents.py), and the automatic rejections' `Rulebook`.
+The applicant-facing reads keep reading `resultsPublished` itself: `save_applicant_application` in `back-end/api/applicants.py`, `results_are_out` and `vendor_page_market_by_slug` in [`back-end/market_documents.py`](../../../back-end/market_documents.py), and the automatic rejections' `Rulebook`.
 They ask whether applicants were told, which is the flag, not where the allocation stands, and the public slug path keeps its cheap projected read.
 
 The front end reads the served `allocation` and never derives it from rows: an absent one reads as `none`.

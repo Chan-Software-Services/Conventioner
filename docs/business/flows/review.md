@@ -329,7 +329,7 @@ Publishing the results, I7, is a step of the assignment: [the assignment and its
 - [Automatic rejections](../rules/automatic-rejections.md): the applications a rule rejected arrive decided, with the reason.
 - [Review needs an import](../rules/review-needs-an-import.md): on the Google Form path, the first import and Redo import.
 - [What each role may do](../rules/what-each-role-may-do.md): verdicts and follow-ups are an Editor's, moves an Admin's.
-- [An applicant never reads a verdict early](../rules/an-applicant-never-reads-a-verdict-early.md): nothing decided here reaches the applicant until results are published.
+- [An applicant never reads a verdict early](../rules/an-applicant-never-reads-a-verdict-early.md): nothing decided here reaches the applicant until the results are out.
 - [An archived market is read-only](../rules/an-archived-market-is-read-only.md).
 - [Vendor notes](../rules/vendor-notes.md): the card shows the vendor's request among their answers and the notes below them.
 - [An update is kept beside the vendor's answer](../rules/an-update-is-kept-beside-the-vendors-answer.md): the card and the All view read an updated answer in its place.
