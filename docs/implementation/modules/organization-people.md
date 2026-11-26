@@ -118,7 +118,7 @@ It opened on the organizations list's copy and read the organization again only 
 - A rename and a change to the default table are shown as soon as they are saved, and a read asked before either is dropped and asked again, so it never puts the old value back.
 - The rename field takes each name that differs from the one shown, so a read that brings the same name leaves one being typed alone.
 
-The list mounts one Manage organization for every organization, so each opening puts back what the last one left: both invite rows closed, their fields empty and nothing said under them, no confirmation asking, and the finds empty.
+The list mounts one Manage organization for every organization, so each opening starts afresh: both invite rows closed, their fields empty and nothing said under them, no confirmation asking, and the finds empty.
 Each row's Cancel and the opening clear it through the one function (`clearAddAdmin`, `clearAddMember`), since only Cancel emptied the field, and an address left by Escape or the close button came back on the next opening, of another organization too (T646).
 
 ## Make member and Make admin
