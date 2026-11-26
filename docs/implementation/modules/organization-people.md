@@ -112,6 +112,7 @@ It opened on the organizations list's copy and read the organization again only 
 - A first read that fails leaves the copy listed, with the failure said, and a write's re-read keeps it listed until a read lands.
 - A re-read that fails keeps what was last read, with the failure said.
 - A list that no longer holds the organization shows nothing of it, with "You are no longer in this organization, or it has been deleted.".
+- Focus the first read takes away, with the organization or a control the person may no longer use, goes back into the dialog.
 - A rename and a change to the default table are shown as soon as they are saved, and a read asked before either is dropped and asked again, so it never puts the old value back.
 - The rename field takes each name that differs from the one shown, so a read that brings the same name leaves one being typed alone.
 
@@ -142,7 +143,7 @@ A 404, someone removed meanwhile, is read as done, with focus on the list their 
 [`changingAPlaceAsksFirst.test.ts`](../../../front-end/src/__tests__/changingAPlaceAsksFirst.test.ts): the two buttons for the owner alone, the confirmations' words, Cancel and Escape, the request, the re-read and where focus goes, the 404 read as done, the 409 and any other refusal in the confirmation, and one request however often the confirm is pressed, the confirmation held by the shell while it writes, and a refusal not in the next change.
 [`manageOrganizationPeople.test.ts`](../../../front-end/src/__tests__/manageOrganizationPeople.test.ts): Rename held and sent once, and an invitation's refusal, a rename's answers and a stale re-read after a removal kept out of Manage organization opened on another organization.
 [`manageOrganizationInvites.test.ts`](../../../front-end/src/__tests__/manageOrganizationInvites.test.ts): Invite admin and Invite member, "Invited" and Withdraw, each held, sent once and kept to its opening.
-[`manageOrganizationReadsOnOpen.test.ts`](../../../front-end/src/__tests__/manageOrganizationReadsOnOpen.test.ts): the read as it opens and at each opening, nobody of the copy listed while it is out, the name it brings, a failed first read, an organization no longer listed, a read for a closed opening dropped, and a rename kept over a read asked before it.
+[`manageOrganizationReadsOnOpen.test.ts`](../../../front-end/src/__tests__/manageOrganizationReadsOnOpen.test.ts): the read as it opens and at each opening, nobody of the copy listed while it is out, the name it brings, a failed first read, an organization no longer listed, focus kept inside the dialog, nothing asked as it closes, a read for a closed opening dropped, and a rename kept over a read asked before it.
 [`manage-organization-opens-as-it-is.spec.ts`](../../../front-end/e2e/manage-organization-opens-as-it-is.spec.ts): reopened on the stack with every read of the list held, after the person invited has accepted, it lists nobody until the read answers and then lists them.
 [`an-organizations-people-change-place.spec.ts`](../../../front-end/e2e/an-organizations-people-change-place.spec.ts): the owner makes an admin a member and back on the stack, each asked first, with the buttons' names, the rows, the focus, the History and a reload, at a desk and on a phone.
 

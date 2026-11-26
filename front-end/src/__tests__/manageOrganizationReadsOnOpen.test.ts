@@ -205,6 +205,52 @@ describe('Manage organization reads the organization as it opens', () => {
     expect(shownName()).toBeUndefined();
   });
 
+  it.each([
+    ['no longer holds it', () => answers(0, org({ id: 'org-2' }))],
+    ['makes the person a member', () => answers(0, { ...TRUE_NOW, userRole: 'member' })],
+  ])('keeps focus inside the dialog when a read that %s takes its control', async (_, answer) => {
+    open();
+    await flushPromises();
+    const dialog = byTestId('manage-org-window')!;
+    expect(document.activeElement).toBe(byTestId('manage-org-add-admin-button'));
+
+    answer();
+    await flushPromises();
+
+    expect(byTestId('manage-org-add-admin-button')).toBeNull();
+    expect(dialog.contains(document.activeElement)).toBe(true);
+  });
+
+  it('leaves focus where the person moved it when the first read answers', async () => {
+    open();
+    await flushPromises();
+    renameField().focus();
+    answers(0, TRUE_NOW);
+    await flushPromises();
+
+    expect(document.activeElement).toBe(renameField());
+  });
+
+  it.each([
+    ['org', 'manageOpen'],
+    ['manageOpen', 'org'],
+  ] as const)(
+    'asks nothing more as it closes, %s going first, on an organization no longer listed',
+    async (first, second) => {
+      const wrapper = open();
+      answers(0, org({ id: 'org-2' }));
+      await flushPromises();
+      api.get.mockClear();
+      const closed = { manageOpen: false, org: null };
+
+      await wrapper.setProps({ [first]: closed[first] });
+      await wrapper.setProps({ [second]: closed[second] });
+      await flushPromises();
+
+      expect(api.get).not.toHaveBeenCalled();
+    },
+  );
+
   it('drops a read for an opening that has closed', async () => {
     const wrapper = open();
     await wrapper.setProps({ manageOpen: false, org: null });

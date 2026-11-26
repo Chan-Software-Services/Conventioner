@@ -128,6 +128,7 @@ const placing = ref<{
   text: string;
   confirmLabel: string;
 } | null>(null);
+const dialog = ref<InstanceType<typeof AppDialog> | null>(null);
 const adminsList = ref<HTMLElement | null>(null);
 const membersList = ref<HTMLElement | null>(null);
 /** What finds in Admins and in Members, for as long as the dialog is open: never in the address. */
@@ -164,10 +165,15 @@ const read = useServerRead<string, Organization>(openOn, readOrganization, {
 });
 /** The list's copy it was opened with, a new name or default table saved here taken into it. */
 const openedCopy = shallowRef<Organization | null>(null);
-/** The organization as last read, or the opened copy until a read lands; nothing once not listed. */
-const orgData = computed(() =>
-  read.phase.value === 'missing' ? null : (read.data.value ?? openedCopy.value),
-);
+/**
+ * The organization as last read, or until a read lands the opened copy of the organization it is
+ * open on; nothing while closed, or once it is no longer listed.
+ */
+const orgData = computed(() => {
+  if (read.phase.value === 'missing') return null;
+  const copy = openedCopy.value;
+  return read.data.value ?? (copy && copy.id === read.key.value ? copy : null);
+});
 /** This opening's first read failed: the copy's people are listed from then on, until one lands. */
 const firstReadFailed = ref(false);
 watch(read.key, () => (firstReadFailed.value = false), { flush: 'sync' });
@@ -183,6 +189,15 @@ const errorMessage = computed(() => {
   const phase = read.phase.value;
   if (phase === 'missing') return 'You are no longer in this organization, or it has been deleted.';
   return phase === 'failed' || phase === 'refresh_failed' ? read.sentence.value : '';
+});
+// The first read can take away what the dialog opened on, the whole organization or a control the
+// person may no longer use, which leaves focus on <body>: it goes back inside.
+watch(read.phase, async (phase, before) => {
+  if (before !== 'loading' || (phase !== 'ready' && phase !== 'missing')) return;
+  await nextTick();
+  if (props.manageOpen && document.activeElement === document.body) {
+    await dialog.value?.focusInside();
+  }
 });
 // The rename field takes each name that differs from the last, so a read that brings the same name
 // leaves one being typed alone.
@@ -593,6 +608,7 @@ function handleDeleted() {
 
 <template>
   <AppDialog
+    ref="dialog"
     :open="manageOpen"
     title="Manage organization"
     testid="manage-org"
