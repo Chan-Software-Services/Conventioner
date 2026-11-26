@@ -183,22 +183,23 @@ describe('filesToDeal', () => {
 });
 
 /**
- * A shard run from the command line, as CI's `e2e-shard` job runs it: a copy of the script in a
- * folder of its own, since it writes its deal record beside itself, with a stand-in for `npx` that
- * lists the suite, or the files the filters name, and notes what Playwright was asked to run.
+ * A shard run from the command line, as CI's `e2e-shard` job runs it, and a refresh, as a hand runs
+ * it: a copy of the script in a folder of its own, since it writes the timings beside itself and
+ * its deal record in `../test-results/`, with a stand-in for `npx` that lists the suite, or the
+ * files the filters name, and notes what Playwright was asked to run.
  */
-describe('a shard from the command line', () => {
+describe('a shard or a refresh from the command line', () => {
   const ROOT = '/repo/front-end/e2e';
   const SUITE = ['a.spec.ts', 'b.spec.ts', 'c.spec.ts', 'd.spec.ts'];
   const DEALT_BY = {
     source: 'the test timings',
     timings: { 'a.spec.ts': 60, 'b.spec.ts': 120, 'c.spec.ts': 180, 'd.spec.ts': 240 },
   };
-  const NPX = `#!${process.execPath}
+  const npx = (suite: string[]) => `#!${process.execPath}
 const args = process.argv.slice(2);
 if (args.includes('--list')) {
   const filters = args.filter((arg) => arg.startsWith('/')).map((arg) => new RegExp(arg.slice(1, -1)));
-  const files = ${JSON.stringify(SUITE)}.filter(
+  const files = ${JSON.stringify(suite)}.filter(
     (file) => filters.length === 0 || filters.some((filter) => filter.test('${ROOT}/' + file)),
   );
   console.log(JSON.stringify({ config: { rootDir: '${ROOT}' }, suites: files.map((file) => ({ file })) }));
@@ -208,8 +209,13 @@ if (args.includes('--list')) {
 `;
 
   /** Runs the script with the arguments `args` makes of the paths of its two files: the timings,
-   * and the `--specs` file, which holds `specs` when that is given and is missing otherwise. */
-  function run(args: (files: { timings: string; specs: string }) => string[], specs?: string) {
+   * and the `--specs` file, which holds `specs` when that is given and is missing otherwise.
+   * Playwright lists `suite`. */
+  function run(
+    args: (files: { timings: string; specs: string }) => string[],
+    specs?: string,
+    suite = SUITE,
+  ) {
     const folder = mkdtempSync(join(tmpdir(), 'e2e-shards-'));
     try {
       const scripts = join(folder, 'scripts');
@@ -220,7 +226,7 @@ if (args.includes('--list')) {
         copyFileSync(join(dirname(timingsFile()), name), join(scripts, name));
       }
       writeFileSync(join(scripts, 'package.json'), '{ "type": "module" }');
-      writeFileSync(join(bin, 'npx'), NPX, { mode: 0o755 });
+      writeFileSync(join(bin, 'npx'), npx(suite), { mode: 0o755 });
       const files = {
         timings: join(folder, 'timings.json'),
         specs: join(folder, 'specs.json'),
@@ -301,6 +307,19 @@ if (args.includes('--list')) {
     });
   });
 
+  it('words a whole suite of one spec file in the singular, and of two in the plural', () => {
+    for (const [suite, dealt] of [
+      [['a.spec.ts'], '1 of 1 spec file, '],
+      [['a.spec.ts', 'b.spec.ts'], '2 of 2 spec files, '],
+    ] as const) {
+      const shard = run(({ timings }) => ['--shard=1/1', `--timings=${timings}`], undefined, [
+        ...suite,
+      ]);
+      expect(shard.code, shard.said).toBe(0);
+      expect(shard.said).toContain(`e2e shard 1/1: ${dealt}`);
+    }
+  });
+
   it('fails before running anything, naming each named spec Playwright does not list', () => {
     const shard = run(
       ({ timings, specs }) => ['--shard=1/2', `--timings=${timings}`, `--specs=${specs}`],
@@ -328,6 +347,28 @@ if (args.includes('--list')) {
       expect(shard.code, `${bad}: ${shard.said}`).toBe(1);
       expect(shard.said, String(bad)).toContain(`::error::${shard.specsFile}`);
       expect(shard.ran, String(bad)).toEqual([]);
+    }
+  });
+
+  it('words a refresh of one spec file from one run in the singular, and of two in the plural', () => {
+    for (const [suite, count, worded] of [
+      [['a.spec.ts'], 1, '1 spec file from 1 run, '],
+      [['a.spec.ts', 'b.spec.ts'], 2, '2 spec files from 2 runs, '],
+    ] as const) {
+      const reports = mkdtempSync(join(tmpdir(), 'e2e-refresh-'));
+      try {
+        const runs = Array.from({ length: count }, (_, n) => join(reports, `run-${n + 1}`));
+        for (const folder of runs) {
+          mkdirSync(folder);
+          const seconds = Object.fromEntries(suite.map((file) => [file, [[1000]]]));
+          writeFileSync(join(folder, 'results.json'), JSON.stringify(report(seconds)));
+        }
+        const refreshed = run(() => ['refresh', ...runs], undefined, [...suite]);
+        expect(refreshed.code, refreshed.said).toBe(0);
+        expect(refreshed.said).toContain(`e2e-shard-timings.json: ${worded}`);
+      } finally {
+        rmSync(reports, { recursive: true, force: true });
+      }
     }
   });
 
@@ -427,6 +468,13 @@ describe('timingsFromReports', () => {
     const shard1 = report({ 'a.spec.ts': [[1000]] });
     expect(() => timingsFromReports(listed, [shard1])).toThrow(
       /2 listed spec files are in no report: b\.spec\.ts, c\.spec\.ts/,
+    );
+  });
+
+  it('words one missing spec file in the singular', () => {
+    const shard1 = report({ 'a.spec.ts': [[1000]], 'b.spec.ts': [[2000]] });
+    expect(() => timingsFromReports(listed, [shard1])).toThrow(
+      /1 listed spec file is in no report: c\.spec\.ts/,
     );
   });
 
@@ -828,6 +876,20 @@ describe('the check from the command line', () => {
     });
   });
 
+  it('words published timings of one spec file in the singular, and of two in the plural', () => {
+    for (const [files, published] of [
+      [['a.spec.ts'], '1 spec file, '],
+      [['a.spec.ts', 'b.spec.ts'], '2 spec files, '],
+    ] as const) {
+      const run = check({ scope: 'whole', files: [...files] }, ({ dir, publish }) => [
+        dir,
+        `--publish=${publish}`,
+      ]);
+      expect(run.code, run.said).toBe(0);
+      expect(run.summary).toContain(`Published ${TIMINGS_ARTIFACT}: ${published}`);
+    }
+  });
+
   it('passes a named run with --named, saying how much of the suite ran', () => {
     const run = check(selection, ({ dir, named }) => [dir, `--named=${named}`], selectionList);
     expect(run.code, run.said).toBe(0);
@@ -961,6 +1023,15 @@ describe('shardSummary', () => {
   it('opens in the singular when the test map named one file', () => {
     expect(shardSummary('x', [1], [], { scope: 'named', files: 1, listed: 287 })).toContain(
       'The 1 spec file the test map named, of the 287 the suite lists, ran, dealt by x.',
+    );
+  });
+
+  it('words a spread of one second in the singular, and of two in the plural', () => {
+    expect(shardSummary('x', [600, 601], [], whole)).toContain(
+      'Spread: 1 second between the fastest and the slowest shard',
+    );
+    expect(shardSummary('x', [600, 602], [], whole)).toContain(
+      'Spread: 2 seconds between the fastest and the slowest shard',
     );
   });
 

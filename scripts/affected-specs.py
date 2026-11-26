@@ -87,7 +87,7 @@ from typing import Dict, List, NamedTuple, Optional, Sequence, Set, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from test_map import function_at, function_spans  # noqa: E402
+from test_map import counted, function_at, function_spans  # noqa: E402
 
 E2E = "front-end/e2e/"
 SRC = "front-end/src/"
@@ -897,10 +897,6 @@ def capitalize_first(text: str) -> str:
     return text[:1].upper() + text[1:]
 
 
-def counted(count: int, noun: str) -> str:
-    return f"{count} {noun}" + ("" if count == 1 else "s")
-
-
 def reasons(row: dict) -> str:
     """A row's first three reasons, and how many more."""
     why = row["why"][:3] + ([f"and {len(row['why']) - 3} more"] if len(row["why"]) > 3 else [])
@@ -1025,7 +1021,7 @@ def verdicts(failed: Set[str], chosen: Chosen) -> List[Tuple[str, str, str]]:
             out.append((
                 spec,
                 "left to CI",
-                f"rank {row['rank']}, past the cap of {chosen.minutes:g} CI minutes: "
+                f"rank {row['rank']}, past the cap of {counted(chosen.minutes, 'CI minute')}: "
                 + reasons(row),
             ))  # fmt: skip
         elif chosen.source is None:
@@ -1371,7 +1367,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if not run and not left:
         print("affected-specs: the change reaches no spec: nothing to run")
     elif not run:
-        print(f"affected-specs: the first spec is past the cap of {args.minutes:g} CI minutes: nothing to run")
+        cap = counted(args.minutes, "CI minute")
+        print(f"affected-specs: the first spec is past the cap of {cap}: nothing to run")
     else:
         verb = "runs" if args.run else "would run"
         print(
