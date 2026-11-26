@@ -1152,9 +1152,9 @@ def publish_results(market_id: str, asked: Actions.Asked) -> Tuple[Dict[str, Any
     ``asked``, the signed-in organizer's Publish results asking.
 
     This is the single, deliberate, organizer-controlled moment the review verdicts become
-    visible to the applicants who hold them. Before this call, every application reads as
-    ``open`` ("Submitted") to its applicant, whatever review has decided. After it, applicants
-    see their outcome: a table with their seats, or none, and never a verdict.
+    visible to the applicants who hold them. Before this call, every approved and rejected
+    application reads as ``under_review`` to its applicant. After it, applicants see their
+    actual outcome.
 
     On a Google Form market it is also what opens the vendor page (``vendor_page_market_by_slug``),
     since its vendors have nothing to read there before it.
