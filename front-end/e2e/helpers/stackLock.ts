@@ -23,8 +23,12 @@ import { stack } from './stack';
  * replaces the worker, so its `finally` never runs), so the retry waits only until the old worker
  * has exited, never for a stale age. The takeover is made under a second lock, `<lock>.reap`, and
  * removes the lock only when its owner is still the one judged gone, so a waiter that judged it
- * never removes one another waiter made meanwhile. A live holder is waited on for `waitMs`, then
- * the waiter fails naming the lock. `global-setup.ts` clears the stack's locks before a run.
+ * never removes one another waiter made meanwhile. A release or a takeover first moves the lock
+ * aside, renaming it in one step to a name of its own, and removes it under that name: a removal
+ * by the lock's own name would leave it an empty directory for a moment, which a waiter's rename
+ * would land on, and the removal would then fail on the waiter's lock. A live holder is waited on
+ * for `waitMs`, then the waiter fails naming the lock. `global-setup.ts` clears the stack's locks
+ * before a run.
  */
 export interface LockTiming {
   /** How often a waiter looks again. */
@@ -86,6 +90,18 @@ function take(path: string, owner: string): boolean {
   }
 }
 
+/** Remove the lock at `path`: move it aside in one step, then remove it under its new name. */
+function remove(path: string): void {
+  const aside = `${path}.${randomBytes(8).toString('hex')}.gone`;
+  try {
+    renameSync(path, aside);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+    throw error;
+  }
+  rmSync(aside, { recursive: true, force: true });
+}
+
 /** Remove the lock at `path` when it still names `judged`, a holder gone; true when removed. */
 function reap(path: string, judged: string): boolean {
   const reaping = `${path}.reap`;
@@ -97,7 +113,7 @@ function reap(path: string, judged: string): boolean {
   }
   try {
     if (ownerOf(path) !== judged) return false;
-    rmSync(path, { recursive: true, force: true });
+    remove(path);
     return true;
   } finally {
     rmSync(reaping, { recursive: true, force: true });
@@ -126,7 +142,7 @@ export async function withLock<T>(
   try {
     return await body();
   } finally {
-    if (ownerOf(path) === owner) rmSync(path, { recursive: true, force: true });
+    if (ownerOf(path) === owner) remove(path);
   }
 }
 
@@ -146,7 +162,7 @@ export function withStackLock<T>(name: string, body: () => Promise<T>): Promise<
 /**
  * Remove every lock of this run's stack, for `global-setup.ts`, which runs before any worker of
  * the run: a lock then standing was left by an earlier run, and so may a takeover's `.reap` lock
- * be, which a waiter killed in its few file calls would leave.
+ * or a lock moved aside be, which a waiter killed in its few file calls would leave.
  */
 export function clearStackLocks(dir: string = tmpdir()): void {
   rmSync(stackLocksDir(stackBackend(), dir), { recursive: true, force: true });

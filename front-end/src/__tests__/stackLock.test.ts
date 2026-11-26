@@ -12,7 +12,10 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  renameSync,
+  rmdirSync,
   rmSync,
+  unlinkSync,
   utimesSync,
   writeFileSync,
 } from 'node:fs';
@@ -24,6 +27,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // that read and what the lock does next.
 const fsHooks = vi.hoisted(() => ({
   afterOwnerRead: undefined as ((file: string) => void) | undefined,
+  /** Stands in for the lock's next removal of a directory holding an `owner` file. */
+  removeLock: undefined as ((target: string) => void) | undefined,
 }));
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>();
@@ -34,6 +39,16 @@ vi.mock('node:fs', async (importOriginal) => {
       fsHooks.afterOwnerRead?.(String(args[0]));
       return answer;
     }) as typeof actual.readFileSync,
+    rmSync: ((...args: Parameters<typeof actual.rmSync>) => {
+      const target = String(args[0]);
+      const removeLock = fsHooks.removeLock;
+      if (removeLock && actual.existsSync(`${target}/owner`)) {
+        fsHooks.removeLock = undefined;
+        removeLock(target);
+        return;
+      }
+      actual.rmSync(...args);
+    }) as typeof actual.rmSync,
   };
 });
 
@@ -45,18 +60,19 @@ beforeEach(() => {
 });
 afterEach(() => {
   fsHooks.afterOwnerRead = undefined;
+  fsHooks.removeLock = undefined;
   rmSync(dir, { recursive: true, force: true });
 });
 
 /** A lock at `path` as its holder `owner` makes it: a directory holding its `owner` file. */
-function plant(path: string, owner: string, minutesOld = 0): void {
+function plant(path: string, owner: string, { old = false } = {}): void {
   mkdirSync(path, { recursive: true });
   writeFileSync(join(path, 'owner'), owner);
-  if (minutesOld) {
-    const old = new Date(Date.now() - minutesOld * 60_000);
-    utimesSync(path, old, old);
-  }
+  if (old) utimesSync(path, LONG_AGO, LONG_AGO);
 }
+
+/** A time before any run, for a lock made long ago. */
+const LONG_AGO = new Date('2026-01-01T00:00:00Z');
 
 /** This test process's own id, so a planted owner's process runs. */
 const LIVE = `${process.pid} a-live-holder`;
@@ -114,7 +130,7 @@ describe('withLock', () => {
 
   it('waits on a holder whose process runs, however old its lock, and never removes it', async () => {
     const path = join(dir, 'lock');
-    plant(path, LIVE, 10);
+    plant(path, LIVE, { old: true });
     const events: string[] = ['a in'];
     setTimeout(() => {
       events.push('a out');
@@ -131,14 +147,23 @@ describe('withLock', () => {
   });
 
   it("takes over at once a lock whose holder's process is gone, as a timed-out hook leaves", async () => {
+    // A waiter that waited even once would sleep its minute's poll, past the test's second.
     const path = join(dir, 'lock');
     plant(path, GONE);
-    const started = Date.now();
-    await expect(withLock(path, async () => 'taken', { pollMs: 5, waitMs: 1_000 })).resolves.toBe(
+    await expect(withLock(path, async () => 'taken', { pollMs: 60_000, waitMs: 0 })).resolves.toBe(
       'taken',
     );
-    expect(Date.now() - started).toBeLessThan(500);
     expect(existsSync(path)).toBe(false);
+  }, 1_000);
+
+  it('never takes over while another waiter holds the takeover, and fails naming the lock', async () => {
+    const path = join(dir, 'lock');
+    plant(path, GONE);
+    mkdirSync(`${path}.reap`);
+    await expect(withLock(path, async () => 'never', { pollMs: 5, waitMs: 50 })).rejects.toThrow(
+      path,
+    );
+    expect(readFileSync(join(path, 'owner'), 'utf8')).toBe(GONE);
   });
 
   it('never lets a waiter remove a lock another waiter took between its two steps', async () => {
@@ -176,6 +201,26 @@ describe('withLock', () => {
       plant(path, LIVE);
     });
     expect(readFileSync(join(path, 'owner'), 'utf8')).toBe(LIVE);
+  });
+
+  it('releases in one step, so a waiter that takes the lock as it goes leaves the release whole', async () => {
+    const path = join(dir, 'lock');
+    const b = `${process.pid} b`;
+    const answer = await withLock(path, async () => {
+      // The release's removal, as Node's native one goes: the owner file first, then the
+      // directory by its name; waiter B takes the lock between the two.
+      fsHooks.removeLock = (target) => {
+        unlinkSync(join(target, 'owner'));
+        const staged = `${path}.b`;
+        mkdirSync(staged);
+        writeFileSync(join(staged, 'owner'), b);
+        renameSync(staged, path);
+        rmdirSync(target);
+      };
+      return 'done';
+    });
+    expect(answer).toBe('done');
+    expect(readFileSync(join(path, 'owner'), 'utf8')).toBe(b);
   });
 
   it('fails, naming the lock, when a holder whose process runs holds it past the wait', async () => {
