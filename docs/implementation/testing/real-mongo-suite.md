@@ -32,6 +32,7 @@ sources:
   - T452
   - T583
   - T539
+  - T647
 ---
 
 # The real-MongoDB suite
@@ -196,6 +197,7 @@ An owed day's first record is an insert, whose refusal does come back, and the o
 
 An invitation is one upsert by its target and address, and only the boot's unique index on those three keeps two sent at once one document ([invitations](../modules/invitations.md)).
 [`real_mongo/test_invitations_on_the_server.py`](../../../back-end/tests/real_mongo/test_invitations_on_the_server.py) races two through `POST /markets/<id>/invitations`, by the owner and an Admin, which leave one document whose `id` both are answered and send two emails, and eight `invite` calls, which leave one; it also reads the three indexes the boot builds and a stored time served in UTC.
+It withdraws an invitation sent twice: naming the first send's served `sentAt` is the 409 and naming the listed one withdraws it, since the server keeps `sent_at` to the millisecond and reads it back without its zone.
 The index's two builds and its refusal over planted records are in the boot-index rows above.
 
 ## A payment entry holds what it read

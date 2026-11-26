@@ -94,7 +94,9 @@ class TestInvitingAtOnce:
 
 
 class TestWithdrawingTheSendItWasReadAt:
-    def test_the_served_send_withdraws_it_and_an_earlier_one_does_not(self, market, mail):
+    def test_the_served_send_withdraws_it_and_an_earlier_one_does_not(
+        self, market, mail, monkeypatch,
+    ):
         """The server keeps ``sent_at`` to the millisecond and hands it back without its zone:
         the ``sentAt`` a reader is served is still the one the withdrawal's read and delete
         match."""
@@ -110,6 +112,9 @@ class TestWithdrawingTheSendItWasReadAt:
                 f"{invitations}/{read['id']}", query_string={"sentAt": read["sentAt"]})
 
         confirmed = invite()
+        # Sent again a second on: two sends never share the millisecond the server keeps.
+        now = Invitations.now
+        monkeypatch.setattr(Invitations, "now", lambda: now() + timedelta(seconds=1))
         again = invite()
 
         refused = withdraw(confirmed)

@@ -592,9 +592,10 @@ describe('Withdraw', () => {
   });
 
   it('names the send its confirmation opened on, though the list behind is read again', async () => {
+    const sentAgain = new Date(2026, 10, 25, 9, 30).toISOString();
     invited = [invitation()];
     api.delete.mockImplementation(async () => {
-      invited = [invitation({ sentAt: new Date(2026, 10, 25, 9, 30).toISOString() })];
+      invited = [invitation({ sentAt: sentAgain })];
       throw refusing(409, 'That invitation was sent again meanwhile.');
     });
     await open();
@@ -618,7 +619,7 @@ describe('Withdraw', () => {
     await flushPromises();
 
     expect(api.delete).toHaveBeenLastCalledWith('/markets/market-1/invitations/inv-1', {
-      params: { sentAt: new Date(2026, 10, 25, 9, 30).toISOString() },
+      params: { sentAt: sentAgain },
     });
   });
 

@@ -86,11 +86,11 @@ test('Try again after the list read failed opens it on the organization its addr
   });
   const orgs = new OrganizationsPage(page);
   await page.goto(`/organizations?manage=${orgId}`);
-  await expect(page.getByTestId('organizations-read-failed')).toBeVisible();
+  await expect(orgs.readFailed).toBeVisible();
   await expect(orgs.manageWindow).toHaveCount(0);
 
   failing = false;
-  await page.getByTestId('organizations-retry').click();
+  await orgs.retryButton.click();
   await orgs.waitForManageOverlay();
   await expect(orgs.renameInput).toHaveValue(name);
 
