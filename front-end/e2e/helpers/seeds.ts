@@ -253,7 +253,9 @@ export async function removeFromOrganization(
  *
  * For a spec whose subject needs a CHOICE of organization: with one, the create-market dialog
  * picks it for you. Such a spec passed only when an earlier one happened to have created more,
- * which split runs (CI shards) stopped guaranteeing.
+ * which split runs (CI shards) stopped guaranteeing. The list is read and the rest created under
+ * the stack's lock for the user's organizations, so two workers that both find too few make the
+ * rest once (`stackLock.ts`).
  */
 export async function ensureTestOrgs(
   request: APIRequestContext,
@@ -263,20 +265,22 @@ export async function ensureTestOrgs(
   count: number,
 ): Promise<void> {
   await loginViaApi(request, baseURL, email, password);
-  const orgsRes = await request.get(`${baseURL}/organizations`);
-  if (!orgsRes.ok()) {
-    throw new Error(`Organization list failed: ${orgsRes.status()} ${await orgsRes.text()}`);
-  }
-  const { organizations = [] } = (await orgsRes.json()) as { organizations?: unknown[] };
-  for (let n = organizations.length; n < count; n++) {
-    const res = await request.post(`${baseURL}/organizations`, {
-      headers: { 'Content-Type': 'application/json' },
-      data: { name: `E2E Test Org ${n + 1} ${Date.now()}` },
-    });
-    if (!res.ok()) {
-      throw new Error(`Test org creation failed: ${res.status()} ${await res.text()}`);
+  await withStackLock(`the organizations of ${email}`, async () => {
+    const orgsRes = await request.get(`${baseURL}/organizations`);
+    if (!orgsRes.ok()) {
+      throw new Error(`Organization list failed: ${orgsRes.status()} ${await orgsRes.text()}`);
     }
-  }
+    const { organizations = [] } = (await orgsRes.json()) as { organizations?: unknown[] };
+    for (let n = organizations.length; n < count; n++) {
+      const res = await request.post(`${baseURL}/organizations`, {
+        headers: { 'Content-Type': 'application/json' },
+        data: { name: `E2E Test Org ${n + 1} ${Date.now()}` },
+      });
+      if (!res.ok()) {
+        throw new Error(`Test org creation failed: ${res.status()} ${await res.text()}`);
+      }
+    }
+  });
 }
 
 /**

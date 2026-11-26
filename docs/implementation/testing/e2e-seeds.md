@@ -93,7 +93,7 @@ A spec that needs an account not yet verified signs up through the real route, `
 `POST /markets` answers 400 to a payload with no `organizationId`, an unknown organization, or one the caller is not a member of ([the organization document](../data/organization-document.md)).
 So anything that creates a market attaches one: [`helpers/seeds.ts`](../../../front-end/e2e/helpers/seeds.ts) exports `ensureTestOrgAuthenticated()` (for a request context already signed in, by `loginViaApi()` or, on `page.request`, by the page's own sign-in) and `ensureTestOrg()` (which logs in first), both reusing the user's first organization or creating `E2E Test Org`, under the stack's lock after reading again, so two workers that both find none make one ([E2E patterns](e2e-patterns.md#specs-that-need-the-stack-to-themselves)); the seed helpers return it as `orgId`.
 A spec that creates a market through the UI calls `ensureTestOrg()` in `beforeAll`, or the create dialog's organization list is empty and its submit stays disabled.
-`ensureTestOrgs(count)` is for a spec whose subject is a choice of organization, which a split run (CI shards) no longer guaranteed by accident.
+`ensureTestOrgs(count)` is for a spec whose subject is a choice of organization, which a split run (CI shards) no longer guaranteed by accident; it reads the user's organizations and creates the rest under the stack's lock, so two workers that both find too few make the rest once.
 `ensureOrganizationAdmin(orgId, person)` ([`helpers/grantMarketRole.ts`](../../../front-end/e2e/helpers/grantMarketRole.ts)) makes a verified user an admin of that organization, through the owner's session the request carries, and so Admin on every market it holds.
 It is idempotent across runs, so it reads the organization first: an admin already is left as they are, a member is made an admin by the place change their row's "Make admin" sends, and anyone else is invited and accepts, as below.
 Every spec using it adds its own account to the shared `E2E Test Org`, so that account is Admin on every market seeded there and no other spec signs in as it.
@@ -167,7 +167,7 @@ Each helper is one block, what it leaves and its notes, one note a line; a new h
 **`seedPeopleAtScale()`** ([file](../../../front-end/e2e/helpers/seedPeopleAtScale.ts))
 
 - Leaves: a `form` market in `applications` whose organization has 150 people, the case every people list and chooser must hold (T204):
-  - 153 accounts, `person-001@people-at-scale.test` to `person-153@people-at-scale.test`, made by one `create_test_user.py --bulk`
+  - 153 accounts, `person-001@people-at-scale.test` to `person-153@people-at-scale.test`, made by one `create_test_user.py --bulk` under the stack's lock, since every spec that seeds people at scale asks for the same addresses
   - an organization of its own, "Example People Org" and a unique number, owned by the seed owner, persons 001 to 003 its admins and 004 to 153 its members, each invited and accepting one at a time through `placeInOrganization()`
   - 5 open applications
   - Editor on the market for the first 20 members, invited and accepting through `grantMarketRole()`

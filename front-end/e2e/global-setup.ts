@@ -1,6 +1,7 @@
 import type { FullConfig } from '@playwright/test';
 import { mongoEval } from './helpers/mongo';
 import { hostNetworkSettled } from './helpers/networkSettles';
+import { clearStackLocks } from './helpers/stackLock';
 import { stackReady } from './helpers/stackReady';
 
 /**
@@ -13,9 +14,14 @@ import { stackReady } from './helpers/stackReady';
  * database. Specs sign in with fixed addresses, and every browser request reaches the back end from
  * the same caller, so a second run within that quarter of an hour would start from the first one's
  * count and be refused.
+ *
+ * It starts with none of the stack's seed locks held either (`stackLock.ts`): no worker of the run
+ * has started, so a lock still standing was left by a killed worker of an earlier run, and no
+ * waiter ever removes one. Like the counters, that assumes one run at a time on a stack.
  */
 export default async function globalSetup(config: FullConfig): Promise<void> {
   mongoEval('db.sign_in_attempts.deleteMany({})');
+  clearStackLocks();
   await hostNetworkSettled();
   const baseURL = config.projects[0]?.use.baseURL;
   if (!baseURL) throw new Error('e2e: the config names no baseURL to wait for the stack at');
