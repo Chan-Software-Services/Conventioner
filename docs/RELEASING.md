@@ -26,8 +26,8 @@ describes:
   - back-end/migrations/migrate_owed_day_state.py
   - back-end/migrations/migrate_application_status.py
   - back-end/migrations/migrate_business_name.py
-  - back-end/migrations/migrate_drop_organization_lists.py
   - front-end/vite.config.ts#assertHumanCheckSiteKey
+  - back-end/migrations/migrate_drop_organization_lists.py
 verified: 2026-11-25
 sources:
   - T74
@@ -38,8 +38,9 @@ sources:
   - T273
   - T317
   - T567
-  - T583
   - T539
+  - T584
+  - T583
   - T617
 ---
 
@@ -380,6 +381,19 @@ A ceiling question sends one heading's text.
 A heading that holds an email, link, handle or phone number is not sent.
 The upload step tells the organizer this in one line, shown only when the key is set.
 A failure, a rate limit or a wait past 5 seconds leaves the rules' answer, marked "Couldn't reach TypeSafe".
+
+### Optional: error tracking
+
+| Variable          | What it is                                                                                                                                                                                                       | What an unset value does                                                                              |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `SENTRY_DSN`      | The back-end Sentry project's DSN. Every unexpected exception, warning and error log line (but `werkzeug`'s and `client_errors`'), `/healthz` 503 and boot refusal is sent to it.                                | Nothing breaks: the back end never imports the SDK, and errors are only in Vercel's hour of logs.     |
+| `VITE_SENTRY_DSN` | The front-end Sentry project's DSN, **build time**. Errors in an organizer's or a vendor's browser, and the first policy violation of each directive and blocked origin, are sent to it, at most 20 a page load. | Nothing breaks: the build has no Sentry chunk, and a browser's errors stay in that browser's console. |
+
+Neither is a boot or build requirement; a blank or placeholder `SENTRY_DSN` counts as unset (`back-end/utils/configured_secret.py`), as does a blank `VITE_SENTRY_DSN`, and a back-end DSN Sentry cannot read logs a warning and leaves tracking off.
+A set `VITE_SENTRY_DSN` that is not a DSN, or whose host the Content-Security-Policy's `connect-src` in `front-end/vercel.json` does not allow (today `https://*.ingest.us.sentry.io`, Sentry's US region), fails the build, naming the variable.
+A DSN's key is Sentry's public client key, which every browser receives anyway, so neither is a secret.
+What an event may hold, and never holds, is [ADR 0049](adr/0049-what-may-be-sent-to-the-error-tracker.md); setting the projects up is [Setting up Sentry](OPERATIONS.md#setting-up-sentry).
+A local stack sets neither, so it sends nothing.
 
 ### Optional: Discord
 

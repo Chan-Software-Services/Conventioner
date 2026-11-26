@@ -116,7 +116,8 @@ class MarketKeyMigrationUnverifiableError(MarketKeyMigrationError):
         super().__init__(
             f"Could not read the market-document migration markers "
             f"({', '.join(repr(marker) for marker in MARKET_MIGRATION_IDS)}) from the "
-            f"'{SCHEMA_COLLECTION}' collection: {cause!r}. An unknown migration state is not a "
+            f"'{SCHEMA_COLLECTION}' collection ({type(cause).__name__}, code "
+            f"{getattr(cause, 'code', None)}). An unknown migration state is not a "
             f"migrated one, so this refuses to serve rather than risk hiding every market "
             f"stored under legacy keys. Make the database reachable, then confirm the "
             f"migration manually:\n{MARKET_KEY_MIGRATION_RECOVERY}"

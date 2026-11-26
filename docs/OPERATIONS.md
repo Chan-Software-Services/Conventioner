@@ -35,6 +35,7 @@ sources:
   - T335
   - T452
   - T539
+  - T584
   - T583
 ---
 
@@ -89,8 +90,10 @@ Values are never committed, and the app refuses to boot on a blank, a placeholde
 | `TURNSTILE_SECRET_KEY`                                                     | back end                                 | Cloudflare dashboard, Turnstile, the widget's secret key                                                                                                     |
 | `TYPESAFE_API_KEY`                                                         | back end                                 | TypeSafe console (optional; unset means the rules alone)                                                                                                     |
 | `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `DISCORD_BOT_TOKEN`          | back end                                 | Discord Developer Portal, the Conventioner application: OAuth2's client id and secret, Bot's token (optional, all three or none; unset means Discord is off) |
+| `SENTRY_DSN`                                                               | back end                                 | Sentry, the Python project's Client Keys (optional; unset means no error tracking, [Setting up Sentry](#setting-up-sentry))                                  |
 | `VITE_FLASK_HOST`                                                          | front end, **build time**                | `https://api.conventioner.io`                                                                                                                                |
 | `VITE_TURNSTILE_SITE_KEY`                                                  | front end, **build time**                | Cloudflare dashboard, Turnstile, the same widget's site key                                                                                                  |
+| `VITE_SENTRY_DSN`                                                          | front end, **build time**                | Sentry, the Browser JavaScript project's Client Keys (optional; unset means no error tracking)                                                               |
 | `VERCEL_TOKEN`                                                             | GitHub, environment `production`, secret | vercel.com/account/tokens, scoped to the team                                                                                                                |
 | `VERCEL_ORG_ID`, `VERCEL_BACKEND_PROJECT_ID`, `VERCEL_FRONTEND_PROJECT_ID` | GitHub, repository variables             | the ids in the table above                                                                                                                                   |
 
@@ -544,16 +547,18 @@ In short (the detail is [RELEASING.md](RELEASING.md)):
 
 ## Watching it run
 
-| What                          | Where                                                                                                                                                                                                                        |
-| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Is it up                      | `curl https://api.conventioner.io/healthz`                                                                                                                                                                                   |
-| Back-end errors and logs      | Vercel, the back-end project, Logs; or `vercel logs --deployment <id>` (Vercel CLI, logged in to the team)                                                                                                                   |
-| Which build a domain serves   | `curl https://api.conventioner.io/healthz` and `curl https://conventioner.io/version.json` (the commit each was built from); `vercel inspect https://api.conventioner.io` (and `https://conventioner.io`) for the deployment |
-| Deploys and their checks      | GitHub, Actions, Deploy                                                                                                                                                                                                      |
-| Email delivery                | Resend dashboard, Emails (each send, bounce and complaint)                                                                                                                                                                   |
-| Database load and connections | Atlas, the cluster's Metrics                                                                                                                                                                                                 |
+| What                          | Where                                                                                                                                                                                                                                                                                |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Is it up                      | `curl https://api.conventioner.io/healthz`                                                                                                                                                                                                                                           |
+| Back-end errors and logs      | Vercel, the back-end project, Logs; or `vercel logs --deployment <id>` (Vercel CLI, logged in to the team)                                                                                                                                                                           |
+| Errors, kept 30 days          | Sentry, the Python project's Issues (the back end) and the Browser JavaScript project's (the front end), once [set up](#setting-up-sentry); an issue raised in a request names its route's rule and any market in it, and each names the commit it came from when the build knows it |
+| Which build a domain serves   | `curl https://api.conventioner.io/healthz` and `curl https://conventioner.io/version.json` (the commit each was built from); `vercel inspect https://api.conventioner.io` (and `https://conventioner.io`) for the deployment                                                         |
+| Deploys and their checks      | GitHub, Actions, Deploy                                                                                                                                                                                                                                                              |
+| Email delivery                | Resend dashboard, Emails (each send, bounce and complaint)                                                                                                                                                                                                                           |
+| Database load and connections | Atlas, the cluster's Metrics                                                                                                                                                                                                                                                         |
 
 Vercel's Hobby plan keeps runtime logs for about an hour, so read them while the problem is happening.
+Sentry keeps each error for 30 days, without any library exception's message the back end's own code logs, bar the CSV import's parse warning, and with every address replaced ([ADR 0049](adr/0049-what-may-be-sent-to-the-error-tracker.md)): it says what failed and where, and the log, while it lasts, says more.
 
 Deploy run 42487768583 (2026-11-08) went red at a front-end check that read the old build 0.44 seconds after the alias, before the workflow waited for each domain to serve the new commit ([how a deploy proves itself](RELEASING.md#how-a-deploy-proves-itself)).
 It deployed all the same: on 2026-11-10 both projects' Production deployments were read, and each domain served that run's build of `18ad1d84` (v1.1.0's code), the newest, with no rollback.
@@ -579,12 +584,28 @@ The team heartbeat ([agent-team](agents/issue-tracker.md#where-things-live)'s `t
 
 Turned on 2026-11-10:
 
-| Service                            | What                                                                                                     | How                                                   |
-| ---------------------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| Vercel                             | Deployment failures, and Domains: configuration and renewals                                             | push and email; Hobby has no usage-limit notification |
-| GitHub                             | failed workflow runs only                                                                                | email, and GitHub Mobile push                         |
-| Atlas, project `conventioner-prod` | Data Size above 4 GB (the Flex cluster's cap is 5 GB), and connections above 80% of the configured limit | email                                                 |
-| Atlas, the organization            | "Credit card is about to expire"                                                                         | email                                                 |
+| Service                            | What                                                                                                      | How                                                   |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| Vercel                             | Deployment failures, and Domains: configuration and renewals                                              | push and email; Hobby has no usage-limit notification |
+| GitHub                             | failed workflow runs only                                                                                 | email, and GitHub Mobile push                         |
+| Atlas, project `conventioner-prod` | Data Size above 4 GB (the Flex cluster's cap is 5 GB), and connections above 80% of the configured limit  | email                                                 |
+| Atlas, the organization            | "Credit card is about to expire"                                                                          | email                                                 |
+| Sentry, both projects              | a new issue: an error of a kind not seen before (not yet set up: [Setting up Sentry](#setting-up-sentry)) | email                                                 |
+
+### Setting up Sentry
+
+Daniel's steps, once; until they are done the code sends nothing, and nothing breaks.
+
+1. Create the Sentry organization on the free Developer plan, in the **US** region: the front end's policy allows `https://*.ingest.us.sentry.io` alone.
+2. Create two projects: a **Python** one for the back end and a **Browser JavaScript** one for the front end.
+3. In each project's Settings, Security and Privacy, tick **Prevent Storing of IP Addresses**.
+4. Keep each project's default alert on a new issue, by email to Daniel.
+5. Set each project's DSN (Settings, Client Keys) as a **Production** variable: `SENTRY_DSN` on the back-end Vercel project, `VITE_SENTRY_DSN` on the front-end one ([optional: error tracking](RELEASING.md#optional-error-tracking)).
+6. Redeploy: GitHub, Actions, **Deploy**, Run workflow, from `main`.
+
+A back-end DSN Sentry cannot read leaves the back end booting with tracking off, and its log says `SENTRY_DSN is not a DSN Sentry can read`.
+A front-end DSN that is not one, or on a region's host the policy does not allow, fails the front end's build instead, naming `VITE_SENTRY_DSN`.
+A local stack and the test suite set no DSN, so neither sends anything to these projects.
 
 ## The host's limits
 

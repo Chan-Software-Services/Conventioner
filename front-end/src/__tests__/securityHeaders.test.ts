@@ -52,6 +52,27 @@ describe('the headers vercel.json sends on every path', () => {
     });
   });
 
+  it('are a policy of exactly these directives, with nowhere to report to', () => {
+    // No `report-uri` or `report-to`: a browser's own report carries the page's whole address, a
+    // reset token or a vendor's address with it; the error tracker reports each refusal instead
+    // (ADR 0049).
+    expect([...policy().keys()].sort()).toEqual(
+      [
+        'default-src',
+        'script-src',
+        'style-src',
+        'img-src',
+        'font-src',
+        'connect-src',
+        'frame-src',
+        'object-src',
+        'base-uri',
+        'form-action',
+        'frame-ancestors',
+      ].sort(),
+    );
+  });
+
   it('allow only the app itself unless a directive names more', () => {
     expect(policy().get('default-src')).toEqual(["'self'"]);
     expect(policy().get('object-src')).toEqual(["'none'"]);
@@ -67,7 +88,12 @@ describe('the headers vercel.json sends on every path', () => {
     expect(policy().get('style-src')).toEqual(["'self'"]);
     expect(policy().get('img-src')).toEqual(["'self'", 'blob:']);
     expect(policy().get('font-src')).toEqual(["'self'"]);
-    expect(policy().get('connect-src')).toEqual(["'self'", 'https://api.conventioner.io']);
+    expect(policy().get('connect-src')).toEqual([
+      "'self'",
+      'https://api.conventioner.io',
+      // The front end's error tracker, in Sentry's US region (ADR 0049).
+      'https://*.ingest.us.sentry.io',
+    ]);
     expect(policy().get('frame-src')).toEqual(['https://challenges.cloudflare.com']);
   });
 

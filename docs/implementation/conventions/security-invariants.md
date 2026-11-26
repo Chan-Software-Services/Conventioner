@@ -53,6 +53,7 @@ sources:
   - T338
   - T318
   - T422
+  - T584
   - T539
 ---
 
@@ -86,6 +87,7 @@ A token longer than the 2048 characters Cloudflare issues is no Turnstile token:
 A request with no token is refused everywhere, the local stack included, so a screen that forgets the token fails in E2E rather than in production.
 Cloudflare's published test secrets (`1x0000...AA` and its kin, which pass or fail every token) are refused at boot, hatch or not, by a shape in [`configured_secret`](../../../back-end/utils/configured_secret.py).
 The converse holds too: a value that turns on a feature and defends nothing is optional, read through `configured_secret` when asked for, and never a boot requirement: `TYPESAFE_API_KEY`, and the three Discord values, without which the Discord card says Discord is not set up ([the Discord connection](../modules/discord.md)).
+`SENTRY_DSN` is optional too, though read once at boot, by the error tracker: none means the SDK is never imported, and a DSN Sentry cannot read logs one warning and leaves tracking off rather than stopping the boot ([error tracking](../modules/error-tracking.md), [ADR 0049](../../adr/0049-what-may-be-sent-to-the-error-tracker.md)).
 
 ## The one escape hatch
 
@@ -297,13 +299,18 @@ They are `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when
 The policy limits what script can run in the tab, the applicant's session included.
 
 **The policy names every source the app loads from, and lets no inline code or eval run.**
-`default-src 'self'`, with `object-src 'none'`, `base-uri 'self'`, `form-action 'self'` and `frame-ancestors 'none'`; scripts from the app and the human check's `https://challenges.cloudflare.com`, styles and fonts from the app, images from the app and `blob:` (a floorplan's image is fetched and drawn from an object URL), connections to the app and `https://api.conventioner.io`, and frames only the human check's `https://challenges.cloudflare.com`, as [Cloudflare's CSP reference](https://developers.cloudflare.com/turnstile/reference/content-security-policy/) lists Turnstile's sources (read 2026-11-24), which ask nothing of `connect-src`.
+`default-src 'self'`, with `object-src 'none'`, `base-uri 'self'`, `form-action 'self'` and `frame-ancestors 'none'`; scripts from the app and the human check's `https://challenges.cloudflare.com`, styles and fonts from the app, images from the app and `blob:` (a floorplan's image is fetched and drawn from an object URL), connections to the app, `https://api.conventioner.io` and Sentry's US ingest hosts (`https://*.ingest.us.sentry.io`, where [the front end's errors](../modules/error-tracking.md#the-front-end) are sent), and frames only the human check's `https://challenges.cloudflare.com`, as [Cloudflare's CSP reference](https://developers.cloudflare.com/turnstile/reference/content-security-policy/) lists Turnstile's sources (read 2026-11-24), which ask nothing of `connect-src`.
 A production build served under this policy by `vite preview` loaded the widget, made its token and signed up with no violation reported (T539).
 There is no `'unsafe-inline'` and no `'unsafe-eval'`: the built `index.html` has no inline script, Vue sets a bound style through the CSSOM (which the policy does not govern), and a build that calls `eval` or `Function` fails CI's [eval check](../testing/ci-and-the-gate.md#no-string-evaluated-as-script).
 A new origin the app loads from (an analytics script, an image host) goes into its directive in the same PR.
+The build reads `connect-src` too: a `VITE_SENTRY_DSN` whose host it does not allow fails the build, naming the variable, so the tracker's host and the policy cannot drift apart.
 
 **The browser enforces it**, as `Content-Security-Policy`: it ran in production as `Content-Security-Policy-Report-Only` first, and the Deploy workflow refuses a front end that sends the policy only as a report.
-It has no reporting endpoint, so a refusal shows only in a browser's console; walk a production build under it with `npm run build-only && npm run preview`, since `vite preview` serves `vercel.json`'s headers ([`deployedHeaders`](../../../front-end/vite.config.ts)), and the dev server, whose styles are injected inline, is not a build the policy describes.
+**Refusals reach Sentry**, when the build sets `VITE_SENTRY_DSN`: the [front end's error tracker](../modules/error-tracking.md#the-front-end) listens for the browser's `securitypolicyviolation` event and sends the first of each directive and blocked origin in a page load as a warning, within the page's 20 events, with only what [ADR 0049](../../adr/0049-what-may-be-sent-to-the-error-tracker.md) allows of it.
+There is no `report-uri` or `report-to`: a browser's own report carries the page's whole address, a reset token or a vendor's address with it, and `vercel.json` cannot follow whether a DSN is set.
+Read them in the front-end Sentry project as the issues tagged `caught_by:csp`, each titled `Content-Security-Policy blocked <directive> from <origin>`, with `csp_directive` and `csp_blocked` as tags and the script and line in its `violation` context; a source to add, or a directive to tighten, is judged on that record.
+With no DSN a refusal shows only in a browser's console.
+Walk a production build under the policy with `npm run build-only && npm run preview`, since `vite preview` serves `vercel.json`'s headers ([`deployedHeaders`](../../../front-end/vite.config.ts)), and the dev server, whose styles are injected inline, is not a build the policy describes.
 The preview sends `/api` where the dev server does, since Vite's preview takes `server.proxy` when it has no proxy of its own: to `VITE_BACKEND_URL`, else `https://127.0.0.1:5001`, the primary checkout's back end.
 So on a worktree's stack nobody can sign in under the preview unless `VITE_BACKEND_URL` names that stack's back end, and the config reads it from the shell, never from `front-end/.env`.
 `scripts/th-compose.sh ports` prints a running stack's back-end port as `TH_BACKEND_PORT`: on a treehouse slot that is 5001 plus ten for each slot ([the port map](../../../scripts/README-treehouse.md#port-map-per-worktree-slot)), and on a stack whose ports Docker picked (`TH_PORTS=auto`) only `ports` gives it.
@@ -316,7 +323,7 @@ VITE_ALLOW_INSECURE_LOCAL_DEV=true npm run build-only && VITE_BACKEND_URL="https
 ```
 
 `VITE_ALLOW_INSECURE_LOCAL_DEV` lets the build go without a site key ([the front end's half](#the-front-ends-half)); sign in at the address the preview prints.
-[`securityHeaders.test.ts`](../../../front-end/src/__tests__/securityHeaders.test.ts) pins the headers and the policy's shape, and that `vite preview` serves them on the root and a deep link; the Deploy workflow checks that the staged front end sends every one before it is promoted, and that `conventioner.io` does once it serves the new commit.
+[`securityHeaders.test.ts`](../../../front-end/src/__tests__/securityHeaders.test.ts) pins the headers and the policy's shape, its directives exactly, so a `report-uri` or `report-to` fails it, and that `vite preview` serves them on the root and a deep link; the Deploy workflow checks that the staged front end sends every one before it is promoted, and that `conventioner.io` does once it serves the new commit.
 
 **Every API answer carries `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` and `Strict-Transport-Security: max-age=63072000; includeSubDomains`**, added by one `after_request`, [`install_security_headers()`](../../../back-end/utils/security_headers.py), so a route added later, an error answer and a CORS preflight carry them without doing anything.
 The transport-security header is the front end's value, sent by the API itself so that its HTTPS-only stance does not rest on the `max-age=63072000` Vercel adds on its own.

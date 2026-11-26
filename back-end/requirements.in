@@ -19,3 +19,5 @@ Pillow
 # through pyckingsolver, which is now in requirements-floorplan-solver.in.
 shapely>=2.0
 numpy
+# Error tracking, imported only when SENTRY_DSN is set (error_tracking.py, ADR 0049).
+sentry-sdk==3.0.0

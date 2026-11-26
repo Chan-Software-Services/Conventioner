@@ -102,6 +102,7 @@ describes:
   - back-end/host_limits.py
   - back-end/tests/test_the_hosts_request_limit.py
   - back-end/application_status.py#_upsert
+  - back-end/tests/test_no_log_line_carries_an_exceptions_message.py
   - back-end/utils/captcha.py#captcha_passes
 verified: 2026-11-25
 sources:
@@ -124,6 +125,7 @@ sources:
   - T335
   - T422
   - T507
+  - T584
   - T539
 ---
 
@@ -209,6 +211,7 @@ What stays a builtin is a bug if it escapes: the room with neither walls nor a s
 - A `ClientError` is answered `jsonify(error.body())` with `error.status`, and is not logged: it is an answer, not a failure.
 - A body over `MAX_CONTENT_LENGTH`, the host's 4.5 MB (`MAX_REQUEST_BODY_BYTES` in [`back-end/host_limits.py`](../../../back-end/host_limits.py)), raises Werkzeug's `RequestEntityTooLarge` where the route first reads it, and is answered `{"error": REQUEST_TOO_LARGE}`, "This was larger than the 4.5 MB one request can carry.", 413, in place of Werkzeug's HTML page; production's host refuses such a body before Flask sees it ([the host's limits](../../OPERATIONS.md#the-hosts-limits)), so this is what a local stack answers in its place.
 - Any other `Exception` is logged once with `logger.error`, with no `exc_info`, and answered `{"error": "Internal server error"}`, 500.
+  Before the line is logged, `error_tracking.report(error)` sends it to the error tracker when a DSN is set, as the 500's one event: the `client_errors` logger is never one of its events, so the line is not a second ([error tracking](../modules/error-tracking.md)).
   A Werkzeug `HTTPException` is an `Exception` too, so this handler returns one unchanged: Flask's 404 and 405, an `abort()` and Flask-Login's 401 answer as Flask writes them.
 - The handler is on `Exception`, not `InternalServerError`, because under `TESTING` or debug Flask propagates an unhandled exception instead of calling a 500 handler; registered on `Exception`, the suite exercises it the way production runs it.
 
@@ -253,8 +256,18 @@ An applicant's code send that raises (`request_login_code` in [`back-end/api/app
 An owed day the tidy after a write of the assignment could not move (`assignment_written` in [`back-end/api/payments.py`](../../../back-end/api/payments.py), its record kept changing or the event refused) is named by the market's id and the date, never the vendor's address, and the write, which has landed, still answers as it did ([payments](../data/payments.md#the-one-writer)).
 The human check (`captcha_passes` in [`back-end/utils/captcha.py`](../../../back-end/utils/captcha.py)) prints nothing and logs four things: no secret it can use, outside the escape hatch, as an error naming `TURNSTILE_SECRET_KEY`; Cloudflare out of reach, as one warning naming only the kind of outage (an exception's type, the HTTP status, "not JSON" or `internal-error`), and the request let through; a refused token as an info line with none of Cloudflare's codes or words; and an exception that is not the network's as an error by its type's name alone.
 Two lines keep a message on purpose: `healthz`'s `logger.exception`, since the database driver's message is how an operator reads an outage and holds no request's value, and the CSV import's parse warning, since the `csv` module's messages name a limit or a character class, never a cell.
+`healthz`'s message never reaches the error tracker, whose events carry an exception by its type alone ([ADR 0049](../../adr/0049-what-may-be-sent-to-the-error-tracker.md)); the CSV import's warning is an event, and its words, the `csv` module's message among them, are sent with every address replaced.
 
-No route in `app.py` answers what it caught: `healthz` alone catches, to answer 503 with `"status": "unavailable"` and its build's commit, when the database does not answer, and the floorplan blueprints keep their own catches, which answer the generic 500 and log, until they are rewritten.
+**No other log line formats a caught exception's message.**
+A library's message may quote what it was given, an applicant's address or answer among it, and a log line may become an error-tracker event kept for 30 days, where Vercel keeps the line for an hour.
+So a logging call (`logger.<level>` or `logging.<level>`, any level) in an `except` handler never formats the exception it caught: not as an argument, not in an f-string, not through `str()`, `repr()` or `.args`, and not through `traceback.format_exc()`, which prints the message under the frames.
+It names the exception's type (`type(e).__name__`), an attribute that holds no value (`e.code`), `parse_failure_detail(e)` or `traceback_without_messages(e)`.
+The floorplan, floorplan template and PDF routes, the placement solver and its fallback, and creating and deleting a market's organization link each log the type this way; an upload or a delete of a floorplan image that fails logs its traceback without messages.
+An exception class defined in this repository may be formatted, since its message is our code's sentence: the boot refusals in `app.py` and the PDF converter's `UnreadablePdf`.
+A sentence of ours that wraps a library's failure names it by its type and code, never its message, as each boot refusal does (`MarketKeyMigrationUnverifiableError` in [`back-end/market_documents.py`](../../../back-end/market_documents.py) among them), since a boot refusal is logged whole and sent to the error tracker whole.
+The CSV import's `csv.Error` is the one library class allowed, for the reason above.
+
+No route in `app.py` answers what it caught: `healthz` alone catches, to answer 503 with `"status": "unavailable"` and its build's commit, when the database does not answer, and the floorplan blueprints keep their own catches, which answer the generic 500 and log the exception's type, until they are rewritten.
 
 **A body that is not an object is refused in words.**
 Every route in `app.py` that reads its body in the view reads it with `json_object` in [`back-end/utils/request_body.py`](../../../back-end/utils/request_body.py), and no view there reads `request` for a body another way.
@@ -290,13 +303,17 @@ Before that it refuses a database the environment does not name, or the primary 
   Each refusal of the modules above, raised for real where a route reaches it and spied on as it passes, is answered with exactly its own status and `body()`.
   Each refused parse above answers its own copy with nothing of the parser's message or the input in it, and its log holds the field but not the input; so does a stored organization that cannot be read.
   An unknown URL, a wrong method and a signed-out call still answer Flask's 404, 405 and Flask-Login's 401.
+- [`test_no_log_line_carries_an_exceptions_message.py`](../../../back-end/tests/test_no_log_line_carries_an_exceptions_message.py) walks the syntax of every back-end module outside `tests/` and fails on a logging call in an `except` handler that formats the exception it caught, naming each file, line and call.
+  A handler whose every class is a `class` statement the same walk finds, by its last dotted name, is passed over, and so is a (module, class) pair in its `ALLOWED`, which holds `csv_import.py`'s `csv.Error` and its reason; a test fails once a pair names a handler that is gone.
+  Its own fixture modules prove it flags an f-string, a `%s` argument, `str(e)`, `repr(e)`, `e.args` and `traceback.format_exc()`, and passes `type(e).__name__`, `e.code`, `parse_failure_detail(e)`, `traceback_without_messages(e)`, a repository class and the allowed pair, only in its own module.
+- [`test_the_error_tracker_is_sent_no_value.py`](../../../back-end/tests/test_the_error_tracker_is_sent_no_value.py) raises in a route whose address, body, query, cookie, headers and locals hold a fixture address, answer and token, and finds exactly one event, carrying the exception's type, its frames and the route's rule, and none of the values; `/healthz`'s 503 is one event too, with no message.
 - [`test_the_hosts_request_limit.py`](../../../back-end/tests/test_the_hosts_request_limit.py) holds `MAX_CONTENT_LENGTH` to the host's 4,500,000 bytes, sends each import route a body one byte over it and finds 413 with the sentence and the file never inspected, and sends the inspect a body at it and finds it read.
 - [`test_captcha.py`](../../../back-end/tests/test_captcha.py) meets each of the human check's outages and finds one warning naming the kind, and each refusal, and finds nothing of the token, the caller, the secret, Cloudflare's words or a library's message in the log, and nothing printed.
 - [`test_account_emails_log_no_address.py`](../../../back-end/tests/test_account_emails_log_no_address.py) sends each of the five mails with email disabled, accepted, answered with no message id and refused by an error whose message holds the address, and finds the address, the error's text and the provider's response body in no log record.
 - CodeQL's `py/stack-trace-exposure` is the automated backstop: it is in the default suite CodeQL's workflow runs on every pull request to `dev`, every push and trial commit there and weekly ([CI and the gate](../testing/ci-and-the-gate.md#codeql)), and it flags a route that catches an exception and answers its text.
   It stops following a flow at a `raise`, so the client copy rule and these route tests hold the rest: a library's message carried into a client error's copy is invisible to it.
 
-What breaks it: a route `except` that answers what it caught, a library's message in client copy, or a 500 body with more than `error` in it.
+What breaks it: a route `except` that answers what it caught, a library's message in client copy or in a log line, or a 500 body with more than `error` in it.
 
 ## What the organizer reads
 
