@@ -7,9 +7,9 @@ summary file, and the exit code. The stub answers each API path with a scripted 
 every request, in the pattern of test_promote_check.py's, which this file does not import.
 
 The workflow's tests read .github/workflows/test.yml and the two actions under .github/actions/ as
-text, evaluate the workflow's and the actions' conditions over the cases they decide, and run steps'
-shells as the runner runs them (`bash -e`), with a stand-in for the program a step runs where the
-test scripts its answer.
+text, evaluate the workflow's job conditions, some of its step conditions and the actions'
+conditions over the cases they decide, and run steps' shells as the runner runs them (`bash -e`),
+with a stand-in for the program a step runs where the test scripts its answer.
 """
 import json
 import os
@@ -1748,8 +1748,9 @@ def test_a_missing_selection_script_runs_the_whole_suite(tmp_path):
     assert result.stdout == f"{COULD_NOT_DECIDE}\n"
 
 
-# The workflow's and the actions' conditions are evaluated, as the runner would, so a test says
-# what a job or step does, not how its condition is written.
+# The workflow's job conditions, some of its step conditions and the actions' conditions are
+# evaluated, as the runner would, so their tests say what a job or step does, not how its condition
+# is written.
 
 TOKEN = re.compile(r"\s*('[^']*'|==|!=|&&|\|\||[!()]|[\w.-]+)")
 # A reference or a function's name starts with a letter or `_`, so no number is read as one.
@@ -1779,7 +1780,8 @@ def tokens_of(expression):
 def result_of(expression, context):
     """The result of an expression of references, 'string literals', brackets, calls of fromJSON and
     the status functions, and the operators !, == and !=, && and ||, each binding before the next. A
-    reference or status function the context lacks, or any other form, raises."""
+    reference the context lacks, success(), failure() or cancelled() where it lacks that one, or any
+    other form, raises."""
     tokens = tokens_of(expression)
 
     def taken(token):
