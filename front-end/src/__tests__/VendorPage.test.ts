@@ -253,7 +253,7 @@ describe('whether a market has a vendor page, as the server decides (ADR 0022)',
 });
 
 describe('the status a vendor reads', () => {
-  it('reads Submitted until results are published, whatever the review decided', () => {
+  it('reads Submitted until the results are out, whatever the review decided', () => {
     expect(statusHeadline(application({ outcome: null }))).toBe('Submitted');
   });
 
@@ -596,7 +596,7 @@ describe('the page, signed in', () => {
     expect(wrapper.get('[data-testid="vendor-page-info"]').text()).toBe(NO_APPLICATION_CLOSED);
   });
 
-  it('reads the result and each seat once results are published', async () => {
+  it('reads the result and each seat once the results are out', async () => {
     fetchVendorPage.mockResolvedValue(
       pageOf({ phase: MarketPhase.Assignment, takesApplications: false, resultsPublished: true }),
     );

@@ -1,4 +1,6 @@
-"""After results are published, an applicant reads one of two outcomes (E36/F05/S02).
+"""Once the results are out, an applicant reads one of two outcomes (E36/F05/S02).
+
+The results are out once published, or once the market reached its market days unpublished.
 
 "You have a table", with each table and date, or "You did not get assigned" - worked out from the
 stored seats on every read, never from the verdict: a rejected vendor seated by hand has a table,
@@ -29,7 +31,7 @@ PLACED = [seat("ana@example.com"), seat("ana@example.com", "2026-11-19", "A 2"),
           seat("ben@example.com", table="A 3")]
 
 
-def test_before_publication_there_is_no_outcome():
+def test_before_the_results_are_out_there_is_no_outcome():
     served = ApplicantsApi._application_response(application(), False, PLACED)
 
     assert served["status"] == "open"

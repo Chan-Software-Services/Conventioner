@@ -1,5 +1,6 @@
 /**
- * Two outcomes after the results are published (E36/F05/S02), worded once.
+ * Two outcomes once the results are out (E36/F05/S02), worded once: published, or the market
+ * days reached unpublished.
  */
 import { describe, expect, it } from 'vitest';
 import { outcomeHeadline, seatLine } from '@/utils/applicantOutcome';
@@ -10,7 +11,7 @@ describe('what an applicant reads', () => {
     expect(outcomeHeadline({ outcome: 'not_assigned' })).toBe('You did not get assigned');
   });
 
-  it('reads nothing before the results are published', () => {
+  it('reads nothing before the results are out', () => {
     expect(outcomeHeadline({ outcome: null })).toBeNull();
     expect(outcomeHeadline({})).toBeNull();
   });
