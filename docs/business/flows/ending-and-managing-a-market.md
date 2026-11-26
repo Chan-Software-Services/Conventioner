@@ -176,7 +176,7 @@ Covered by:
 - [`people-at-scale-market.spec.ts`](../../../front-end/e2e/people-at-scale-market.spec.ts) (the list at 154 people: a page at a time, finding one person, the place kept; on a phone at 390 and 320)
 - [`removing-someone-asks-first.spec.ts`](../../../front-end/e2e/removing-someone-asks-first.spec.ts) (the confirmation's words, Cancel, Escape, confirming and where focus goes, someone removed in another window included, at 1440 and 390; at 390 the address in Remove's and a role change's title broken only before its "@" or a dot)
 - `screen-sweeps-*.spec.ts`, the sweeps' states "the manage-market dialog, an organization's people", "the manage-market dialog, inviting someone", "the manage-market dialog, two invitations waiting", "the manage-market dialog, removing a market role" and "the manage-market dialog, changing a market role"
-- `the-manage-market-dialog-holds-together.spec.ts` (the product's control size, the invite row on one line at a desk and stacked on a phone, a typed address shown in full at 1440, 641, 390 and 320, the row empty at Editor after Escape on one market and Manage market on another, and after Cancel, the destructive delete, and an invitation to someone already on the market refused)
+- `the-manage-market-dialog-holds-together.spec.ts` (the product's control size, the invite row on one line at a desk and stacked on a phone, a typed address shown in full at 1440, 641, 390 and 320, the row empty at Editor after Escape on one market and Manage market on another, the destructive delete, and an invitation to someone already on the market refused)
 - `tier2.spec.ts` ("invite a user who accepts, change their role, and remove them from the market")
 
 ## L3a. Set who may do what
