@@ -2,11 +2,12 @@
  * Manage market, meeting "market changed" from a role write, re-reads who has access (ADR 0024);
  * from a change to the permission table or a rename, it re-reads the market the same way.
  *
- * Giving, changing and taking a role each hold the roles they read; when another organizer changed
- * them first, the server stores nothing and answers its one 409, `{"error": <the sentence>, "code":
+ * Changing and taking a role each hold the roles they read; when another organizer changed them
+ * first, the server stores nothing and answers its one 409, `{"error": <the sentence>, "code":
  * "market_changed"}`. Manage market keeps a copy of the market of its own, so it re-reads that copy,
- * and the sentence stands where that action's refusal has always stood: under the add form, in the
- * removal's confirmation, under the person's row.
+ * and the sentence stands where that action's refusal has always stood: in the removal's
+ * confirmation, under the person's row. An invitation writes no role, so it never meets a changed
+ * market, and its refusals read nothing again.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils';
@@ -35,7 +36,6 @@ const SENTENCE =
   'This market changed while you were working on it, so your change was not saved. ' +
   'Reload to see the latest, then make your change again.';
 const EMAIL = 'walk390@example.com';
-const OTHER = 'added-meanwhile@example.com';
 
 function person(overrides: Partial<PersonWithAccess> = {}): PersonWithAccess {
   return {
@@ -83,10 +83,6 @@ function changedMeanwhile(people: PersonWithAccess[]) {
 
 const byTestId = (id: string) => document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
 const marketReads = () => api.get.mock.calls.filter(([url]) => url === '/markets/market-1').length;
-const shownEmails = () =>
-  [...document.querySelectorAll('[data-testid="manage-market-person"] .user-email')].map((cell) =>
-    cell.textContent?.trim(),
-  );
 
 let served: Market;
 
@@ -118,42 +114,18 @@ beforeEach(() => {
 });
 
 describe('Manage market meets a market that changed under a role write', () => {
-  it('re-reads who has access after a refused add, and says the sentence under the form', async () => {
-    api.post.mockImplementation(
-      changedMeanwhile([person(), person({ userId: 'u-o', email: OTHER })]),
-    );
-    await open();
-    byTestId('manage-market-add-user-button')!.click();
-    await flushPromises();
-    const input = byTestId('manage-market-add-user-input') as HTMLInputElement;
-    input.value = 'newcomer@example.com';
-    input.dispatchEvent(new Event('input'));
-    await flushPromises();
-    const readsBefore = marketReads();
-
-    byTestId('manage-market-add-user-submit')!.click();
-    await flushPromises();
-
-    expect(byTestId('manage-market-add-user-error')!.textContent?.trim()).toBe(SENTENCE);
-    expect(marketReads()).toBe(readsBefore + 1);
-    expect(shownEmails()).toContain(OTHER);
-    // What was typed stays, so making the change again is one press.
-    expect((byTestId('manage-market-add-user-input') as HTMLInputElement).value).toBe(
-      'newcomer@example.com',
-    );
-  });
-
-  it('reads nothing again after an add refused for any other reason', async () => {
+  it('reads the market not again after a refused invitation', async () => {
+    const sentence = `${EMAIL} already has a role on this market. Change it in their row under Users with access.`;
     api.post.mockRejectedValue(
       Object.assign(new AxiosError('refused'), {
-        response: { status: 400, data: { error: 'User not found' } },
+        response: { status: 400, data: { error: sentence } },
       }),
     );
     await open();
     byTestId('manage-market-add-user-button')!.click();
     await flushPromises();
     const input = byTestId('manage-market-add-user-input') as HTMLInputElement;
-    input.value = 'nobody@example.com';
+    input.value = EMAIL;
     input.dispatchEvent(new Event('input'));
     await flushPromises();
     const readsBefore = marketReads();
@@ -161,7 +133,7 @@ describe('Manage market meets a market that changed under a role write', () => {
     byTestId('manage-market-add-user-submit')!.click();
     await flushPromises();
 
-    expect(byTestId('manage-market-add-user-error')!.textContent?.trim()).toBe('User not found');
+    expect(byTestId('manage-market-add-user-error')!.textContent?.trim()).toBe(sentence);
     expect(marketReads()).toBe(readsBefore);
   });
 

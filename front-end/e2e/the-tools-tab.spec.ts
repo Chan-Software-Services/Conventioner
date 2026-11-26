@@ -6,6 +6,7 @@ import { marketScreenPath, marketSetupPath } from './helpers/marketScreens';
 import { mongoEval } from './helpers/mongo';
 import { fakeDiscordId, seedFakeDiscordServer } from './helpers/fakeDiscord';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { withUser } from './helpers/withUser';
 import { PHONE } from './helpers/screens';
 import { widths } from './helpers/phoneWindow';
@@ -81,10 +82,7 @@ test('the Discord card stands on the Tools tab, left of Stats, and no longer on 
       inviteLink: 'https://discord.gg/riverside',
     })} } })`,
   );
-  const granted = await request.post(`${BACKEND_URL}/markets/${marketId}/roles`, {
-    data: { user_email: VIEWER.email, role: 'viewer' },
-  });
-  expect(granted.ok(), await granted.text()).toBeTruthy();
+  await grantMarketRole(request, marketId, VIEWER, 'viewer');
 
   await page.goto(marketSetupPath(marketId, 'setup'));
   await expect(page.getByTestId('plan-card-dates')).toBeVisible({ timeout: 15000 });

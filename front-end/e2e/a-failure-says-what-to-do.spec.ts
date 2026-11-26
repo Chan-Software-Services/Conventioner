@@ -289,18 +289,19 @@ test.describe('a failed write', () => {
   test('Manage organization says which kind of failure it was', async ({
     authenticatedPage: page,
   }) => {
-    const add = /\/organizations\/[^/]+\/admins$/;
+    // The invitation's route: every failure is played, so no invitation is ever made.
+    const invite = /\/organizations\/[^/]+\/invitations$/;
     await page.goto('/organizations');
     await page.getByTestId('organizations-manage-button').first().click();
     await page.getByTestId('manage-org-add-admin-button').click();
-    await page.getByTestId('manage-org-add-admin-input').fill('new-admin@example.com');
+    await page.getByTestId('manage-org-add-admin-input').fill('new-admin@example.test');
 
     // The form stays open on a failure, to be sent again as it is.
     for (const { kind, says } of KINDS) {
-      await failOnce(page, add, kind, 'POST');
+      await failOnce(page, invite, kind, 'POST');
       await page.getByTestId('manage-org-add-admin-submit').click();
       await expect(page.getByTestId('manage-org-add-admin-error')).toHaveText(says);
-      await page.unroute(add);
+      await page.unroute(invite);
     }
   });
 });

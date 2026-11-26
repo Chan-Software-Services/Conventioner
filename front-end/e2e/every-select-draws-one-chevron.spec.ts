@@ -16,6 +16,7 @@ import {
 import { seedDraftMarket } from './helpers/seedDraftMarket';
 import { seedLayout } from './helpers/seeds';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { withUser } from './helpers/withUser';
 import { ApplicationFormPage } from './pages/ApplicationFormPage';
 import { LayoutPage } from './pages/LayoutPage';
@@ -221,10 +222,7 @@ async function seedALockedAnswer(request: APIRequestContext): Promise<string> {
   const moved = await request.post(`${market}/transition`, { data: { toPhase: 'assignment' } });
   expect(moved.ok(), await moved.text()).toBeTruthy();
   ensureVerifiedUser(EDITOR.email, EDITOR.password);
-  const granted = await request.post(`${market}/roles`, {
-    data: { user_email: EDITOR.email, role: 'editor' },
-  });
-  expect(granted.ok(), await granted.text()).toBeTruthy();
+  await grantMarketRole(request, marketId, EDITOR, 'editor');
   return marketId;
 }
 

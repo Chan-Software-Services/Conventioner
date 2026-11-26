@@ -7,6 +7,7 @@ import {
   transitionMarket,
 } from './helpers/seedPhaseMarket';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { LoginPage } from './pages/LoginPage';
 
 /**
@@ -83,10 +84,7 @@ test.beforeAll(async ({ request }) => {
       [VIEWER, 'viewer'],
       [EDITOR, 'editor'],
     ] as const) {
-      const res = await request.post(`${BACKEND_URL}/markets/${marketId}/roles`, {
-        data: { user_email: person.email, role },
-      });
-      expect(res.ok(), await res.text()).toBeTruthy();
+      await grantMarketRole(request, marketId, person, role);
     }
   }
 });

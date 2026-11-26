@@ -15,7 +15,7 @@ describes:
   - front-end/src/__tests__/thePublicMapCard.test.ts
   - front-end/e2e/the-public-map-card.spec.ts
   - back-end/market_documents.py#public_map_is_open
-verified: 2026-11-17
+verified: 2026-11-25
 sources:
   - T422
   - T469

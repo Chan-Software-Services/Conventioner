@@ -2,6 +2,7 @@ import { request as apiRequest, type Locator, type Page } from '@playwright/test
 import { test, expect, TEST_USER, BACKEND_URL } from './fixtures';
 import { loginViaApi, seedPublishedMarketWithAssignments } from './helpers/seeds';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { AttendanceStatusPage } from './pages/AttendanceStatusPage';
 import { LoginPage } from './pages/LoginPage';
 import { calendarToday } from './helpers/vendorSignIn';
@@ -132,10 +133,7 @@ test.beforeAll(async ({ request }) => {
     [VIEWER, 'viewer'],
     [EDITOR, 'editor'],
   ] as const) {
-    const res = await request.post(`${BACKEND_URL}/markets/${marketId}/roles`, {
-      data: { user_email: person.email, role },
-    });
-    expect(res.ok(), await res.text()).toBeTruthy();
+    await grantMarketRole(request, marketId, person, role);
   }
   for (const [vendorEmail, path] of [
     [HERE, 'attendance'],

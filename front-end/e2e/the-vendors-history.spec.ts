@@ -7,6 +7,7 @@ import { approvedVendorApplication, insertApplications } from './helpers/seedApp
 import { seedPhaseMarket, transitionMarket } from './helpers/seedPhaseMarket';
 import { marketScreenPath } from './helpers/marketScreens';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { withUser } from './helpers/withUser';
 import { ManageMarketPage } from './pages/ManageMarketPage';
 import { putVerdict } from './helpers/putVerdict';
@@ -245,9 +246,7 @@ test("a Viewer the history's row is raised above has no History tab and no Permi
   ensureVerifiedUser(VIEWER.email, VIEWER.password);
   const { marketId, marketName } = await seedTwoVendors(request);
   const market = `${BACKEND_URL}/markets/${marketId}`;
-  await ok(
-    await request.post(`${market}/roles`, { data: { user_email: VIEWER.email, role: 'viewer' } }),
-  );
+  await grantMarketRole(request, marketId, VIEWER, 'viewer');
   // As the owner raises it from the Permissions dialog.
   await ok(await request.put(`${market}/permissions/read-history`, { data: { role: 'editor' } }));
 

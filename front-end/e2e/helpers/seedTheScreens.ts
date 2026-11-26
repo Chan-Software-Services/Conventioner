@@ -10,8 +10,8 @@ import {
   type RoleRunOutcome,
 } from './fakeDiscord';
 import { transitionMarket } from './seedPhaseMarket';
+import { ensureOrganizationAdmin, grantMarketRole, placeInOrganization } from './grantMarketRole';
 import {
-  ensureOrganizationAdmin,
   ensureTestOrgAuthenticated,
   loginViaApi,
   marketNameToSlug,
@@ -50,7 +50,10 @@ export interface SeededMarket {
 }
 
 export interface TheScreensSeed {
-  /** A draft with a 70-character name, a four-date, three-section plan and a long form. */
+  /**
+   * A draft with a 70-character name, a four-date, three-section plan and a long form, and two
+   * invitations waiting on it, one to a long address (`twoInvitationsWaiting`).
+   */
   draft: SeededMarket;
   /** A draft whose Upper Hall layout has its floorplan and no scale yet (T257, `seedLayout`). */
   layout: SeededLayout;
@@ -116,7 +119,8 @@ export interface TheScreensSeed {
   applicant: { email: string };
   /**
    * An organization of the organizer's own, its name long and its admin's and member's addresses
-   * long (T148), so Manage organization draws its people.
+   * long (T148), so Manage organization draws its people, with an admin's invitation to a long
+   * address and `SCREENS_INVITEE`'s member invitation waiting (`anAdminInvitationWaiting`).
    */
   organization: { name: string };
   /**
@@ -318,9 +322,51 @@ async function invitationsForTheInvitee(
   }
 }
 
+/**
+ * Two invitations waiting on `marketId`, an Admin's to a long address and a Viewer's, so Manage
+ * market draws its "Invited" (T538). Each seed's addresses are its own: every sweep file seeds, and
+ * an address is sent at most five invitations a quarter hour. Fixture data.
+ */
+async function twoInvitationsWaiting(api: APIRequestContext, marketId: string): Promise<void> {
+  const stamp = Date.now();
+  await inviteToMarket(
+    api,
+    marketId,
+    `e2e-screens-invited-organizer-${stamp}@riverside-makers.example.test`,
+    'admin',
+  );
+  await inviteToMarket(api, marketId, `e2e-screens-invited-${stamp}@example.test`, 'viewer');
+}
+
+/**
+ * An admin's invitation to a long address waiting on `organizationId`, beside `SCREENS_INVITEE`'s
+ * member one, so Manage organization draws its "Invited" with a row of each place (T538). The
+ * organization is the same on every seed of a stack and an invitation waits 14 days, so it is sent
+ * only when no admin's invitation waits; its address is the seed's own. Fixture data.
+ */
+async function anAdminInvitationWaiting(
+  api: APIRequestContext,
+  backend: string,
+  organizationId: string,
+): Promise<void> {
+  const listed = await api.get(`${backend}/organizations/${organizationId}/invitations`);
+  if (!listed.ok()) {
+    throw new Error(`Invitations read failed: ${listed.status()} ${await listed.text()}`);
+  }
+  const { invitations } = (await listed.json()) as { invitations: Array<{ role: string }> };
+  if (invitations.some((invitation) => invitation.role === 'admin')) return;
+  await inviteToOrganization(
+    api,
+    organizationId,
+    `e2e-screens-invited-admin-${Date.now()}@riverside-makers.example.test`,
+    'admin',
+  );
+}
+
 /** The other reviewer of `dealt`, a Viewer on that market only; fixture data. */
 const DEALT_REVIEWER = 'e2e-screens-reviewer@example.com';
 const DEALT_REVIEWER_PASSWORD = 'e2epassword123';
+const DEALT_REVIEWER_ACCOUNT = { email: DEALT_REVIEWER, password: DEALT_REVIEWER_PASSWORD };
 const UNDECIDED = ['open', 'under_review'];
 
 /** A person as the server stores one on an application: their user's id and their address. */
@@ -360,10 +406,7 @@ async function dealtMarket(
     plan(dates),
   );
   const at = `${backend}/markets/${market.marketId}`;
-  const role = await api.post(`${at}/roles`, {
-    data: { user_email: DEALT_REVIEWER, role: 'viewer' },
-  });
-  if (!role.ok()) throw new Error(`Role failed: ${role.status()} ${await role.text()}`);
+  await grantMarketRole(api, market.marketId, DEALT_REVIEWER_ACCOUNT, 'viewer');
   const chosen = await api.put(`${at}/reviewers`, {
     data: { reviewers: [email, DEALT_REVIEWER] },
   });
@@ -484,10 +527,7 @@ async function firstImportMarket(
     plan(dates),
     'csv',
   );
-  const role = await api.post(`${backend}/markets/${market.marketId}/roles`, {
-    data: { user_email: DEALT_REVIEWER, role: 'viewer' },
-  });
-  if (!role.ok()) throw new Error(`Role failed: ${role.status()} ${await role.text()}`);
+  await grantMarketRole(api, market.marketId, DEALT_REVIEWER_ACCOUNT, 'viewer');
   return market;
 }
 
@@ -527,12 +567,14 @@ async function organizationWithPeople(
     if (!made.ok()) throw new Error(`Organization failed: ${made.status()} ${await made.text()}`);
     org = (await mine())!;
   }
-  await ensureOrganizationAdmin(api, backend, org.id, DEALT_REVIEWER);
+  await ensureOrganizationAdmin(api, backend, org.id, DEALT_REVIEWER_ACCOUNT);
   if (!org.memberPeople?.some((member) => member.email === ORGANIZATION_MEMBER)) {
-    const member = await api.post(`${backend}/organizations/${org.id}/members`, {
-      data: { user_email: ORGANIZATION_MEMBER },
-    });
-    if (!member.ok()) throw new Error(`Member failed: ${member.status()} ${await member.text()}`);
+    await placeInOrganization(
+      api,
+      org.id,
+      { email: ORGANIZATION_MEMBER, password: ORGANIZATION_MEMBER_PASSWORD },
+      'member',
+    );
   }
   return { id: org.id, name: ORGANIZATION_NAME };
 }
@@ -559,10 +601,7 @@ async function organizationMarket(
     'form',
     organizationId,
   );
-  const given = await api.post(`${backend}/markets/${market.marketId}/roles`, {
-    data: { user_email: DEALT_REVIEWER, role: 'editor' },
-  });
-  if (!given.ok()) throw new Error(`Role failed: ${given.status()} ${await given.text()}`);
+  await grantMarketRole(api, market.marketId, DEALT_REVIEWER_ACCOUNT, 'editor');
   return market;
 }
 
@@ -758,10 +797,7 @@ export async function seedTheScreens(
   await walk(api, backend, email, big.marketId, UP_TO_ASSIGNMENT);
   await assignAndPublish(api, backend, email, big.marketId);
   ensureVerifiedUser(SCREENS_EDITOR.email, SCREENS_EDITOR.password);
-  const editor = await api.post(`${backend}/markets/${big.marketId}/roles`, {
-    data: { user_email: SCREENS_EDITOR.email, role: 'editor' },
-  });
-  if (!editor.ok()) throw new Error(`Role failed: ${editor.status()} ${await editor.text()}`);
+  await grantMarketRole(api, big.marketId, SCREENS_EDITOR, 'editor');
 
   const rules = await createMarket(api, backend, email, uniqueMarketName('Spring Rules'), {
     ...plan(two),
@@ -845,6 +881,8 @@ export async function seedTheScreens(
   const { id: organizationId, ...organization } = await organizationWithPeople(api, backend);
   const ofTheOrganization = await organizationMarket(api, backend, email, organizationId);
   await invitationsForTheInvitee(api, big.marketId, organizationId);
+  await anAdminInvitationWaiting(api, backend, organizationId);
+  await twoInvitationsWaiting(api, draft.marketId);
 
   const layout = await seedLayout(api, backend, email, password, { layout: true });
   const laidOut = await seedLayout(api, backend, email, password, {

@@ -138,7 +138,7 @@ A new control is one line under its screen, and a new screen is a block beside t
 
 **Manage market**
 
-- each role's select, Remove, Add user: the row that gives the role (`canManageRoles` in [`permissions.ts`](../../../front-end/src/utils/permissions.ts))
+- each role's select, Remove, Invite someone, each invitation's Withdraw: the row that gives the role (`canManageRoles` in [`permissions.ts`](../../../front-end/src/utils/permissions.ts)); "Invited" and its read: either of those rows
 - the Permissions section's Show and its dialog's rows; its changes; each row's select and Reset to built-in defaults: Read the market; Read the market's history; Change this table
 - History: Read the market's history
 - Rename: Change Market Setup

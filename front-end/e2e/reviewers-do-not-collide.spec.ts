@@ -8,6 +8,7 @@ import {
 } from './helpers/seedPhaseMarket';
 import { oneByOnePath } from './helpers/marketScreens';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { mongoEval } from './helpers/mongo';
 import { withUser } from './helpers/withUser';
 
@@ -42,10 +43,7 @@ async function decideOneCardTwice(
   await transitionMarket(request, BACKEND_URL, TEST_USER.email, marketId, 'applications');
   seedApplicationWithStatus(marketId, 'open', 'nadia@ember.test');
   seedApplicationWithStatus(marketId, 'open', 'theo@thistle.test');
-  const granted = await request.post(`${BACKEND_URL}/markets/${marketId}/roles`, {
-    data: { user_email: second.email, role: second.role },
-  });
-  expect(granted.ok(), await granted.text()).toBeTruthy();
+  await grantMarketRole(request, marketId, second, second.role);
 
   const first = new ApplicationMonitorPage(page);
   await page.goto(oneByOnePath(marketId));

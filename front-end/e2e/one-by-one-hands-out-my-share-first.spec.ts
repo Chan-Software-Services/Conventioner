@@ -7,6 +7,7 @@ import {
 } from './helpers/seedPhaseMarket';
 import { oneByOnePath } from './helpers/marketScreens';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { withUser } from './helpers/withUser';
 import { ApplicationMonitorPage } from './pages/ApplicationMonitorPage';
 
@@ -42,9 +43,8 @@ async function marketInReview(request: APIRequestContext): Promise<string> {
     [ANA, 'viewer'],
     [BEN, 'viewer'],
     [CAL, 'admin'],
-  ]) {
-    const res = await request.post(`${api}/roles`, { data: { user_email: email, role } });
-    expect(res.ok(), await res.text()).toBeTruthy();
+  ] as const) {
+    await grantMarketRole(request, marketId, { email, password: PASSWORD }, role);
   }
   const chosen = await request.put(`${api}/reviewers`, { data: { reviewers: [ANA, BEN] } });
   expect(chosen.ok(), await chosen.text()).toBeTruthy();

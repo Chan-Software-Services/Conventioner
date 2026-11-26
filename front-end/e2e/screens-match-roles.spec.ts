@@ -3,7 +3,6 @@ import { marketScreenPath, marketSetupPath, oneByOnePath } from './helpers/marke
 import { seedAssignedMarket } from './helpers/seedAssignedMarket';
 import { seedApplicantMarket, planSetupObject } from './helpers/seedApplicantMarket';
 import {
-  ensureOrganizationAdmin,
   loginViaApi,
   removeFromOrganization,
   seedPublishedMarketWithAssignments,
@@ -13,7 +12,7 @@ import { MarketsPage } from './pages/MarketsPage';
 import { TablesPage } from './pages/TablesPage';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
 import { withUser } from './helpers/withUser';
-import { grantMarketRole } from './helpers/grantMarketRole';
+import { ensureOrganizationAdmin, grantMarketRole } from './helpers/grantMarketRole';
 
 /**
  * A market's screens offer each person only what their role lets them do (bug 37, E26/F08/S01).
@@ -199,7 +198,7 @@ test.describe('an organization admin with no role on the market', () => {
       TEST_USER.email,
       TEST_USER.password,
     );
-    await ensureOrganizationAdmin(request, BACKEND_URL, published.orgId, ORG_ADMIN.email);
+    await ensureOrganizationAdmin(request, BACKEND_URL, published.orgId, ORG_ADMIN);
   });
 
   // The seed's shared organization, left as the seed made it for the specs after this one.

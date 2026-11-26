@@ -63,8 +63,8 @@ sources:
   - T538
   - T539
   - T510
-  - T612
   - T618
+  - T612
 ---
 
 # E2E patterns

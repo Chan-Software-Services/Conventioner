@@ -10,7 +10,7 @@ sources:
 
 A person invited to a role on a market, or a place in an organization, gains it only by accepting the invitation, signed in with the address it was sent to.
 Inviting someone gives one answer for every address: whether or not the address has an account, the invite answers the same status and body, the address is sent the same email, and the market's or the organization's history records the same entry.
-Manage market's "Add user" and Manage organization's "Add admin" and "Add member" still add a person directly, at once, until they invite instead and the direct adds are removed.
+Manage market's "Invite someone" and Manage organization's "Invite admin" and "Invite member" invite ([managing who has access](../flows/ending-and-managing-a-market.md#l3-manage-who-has-access), [inviting an admin or a member](../flows/organizations.md#b2-invite-an-admin-or-a-member)); the routes that added a person directly, at once, remain on the server, called by no screen, only until they are removed.
 
 ## The rule
 

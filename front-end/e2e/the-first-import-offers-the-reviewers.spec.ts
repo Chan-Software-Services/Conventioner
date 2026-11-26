@@ -7,6 +7,7 @@ import {
 } from './helpers/seedApplicantMarket';
 import { marketScreenPath } from './helpers/marketScreens';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { MarketsPage } from './pages/MarketsPage';
 
 /**
@@ -68,10 +69,7 @@ async function draftWithPeople(request: APIRequestContext, fields?: Record<strin
     { setupObject: planSetupObject(), intakeMode: 'csv', fields },
   );
   for (const email of [ANA, BEN]) {
-    const res = await request.post(`${BACKEND_URL}/markets/${market.marketId}/roles`, {
-      data: { user_email: email, role: 'viewer' },
-    });
-    expect(res.ok(), await res.text()).toBeTruthy();
+    await grantMarketRole(request, market.marketId, { email, password: PASSWORD }, 'viewer');
   }
   return market;
 }

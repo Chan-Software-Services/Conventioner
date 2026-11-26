@@ -20,7 +20,7 @@ sources:
 **Where they start:** the link in the invitation's email, `/invitations`, or "See invitations" on the Markets list.
 **Serves:** [A request can only do what its session may](../intents/a-request-can-only-do-what-its-session-may.md).
 
-An organizer who may give a role on a market, or a place in an organization, invites an address to it, and only accepting it gives the role or the place ([a person accepts before they join](../rules/a-person-accepts-before-they-join.md)).
+An organizer who may give a role on a market, or a place in an organization, invites an address to it, and only accepting it gives the role or the place ([a person accepts before they join](../rules/a-person-accepts-before-they-join.md)); on a market that is Manage market's "Invite someone", which lists what waits under "Invited" until it is accepted or withdrawn ([L3](ending-and-managing-a-market.md#l3-manage-who-has-access)), through the same [`invitations.ts`](../../../front-end/src/utils/invitations.ts).
 The Invitations page ([`InvitationsView.vue`](../../../front-end/src/views/InvitationsView.vue)) lists every invitation waiting for the signed-in address, newest first, each a row ([`InvitationRow.vue`](../../../front-end/src/components/InvitationRow.vue)) answered in place; its words are [`invitations.ts`](../../../front-end/src/utils/invitations.ts)'s.
 The routes it reads and answers through are [the invitations module](../../implementation/modules/invitations.md#answering-an-invitation)'s.
 Only invitations to the signed-in address are listed, so a forwarded email lets nobody else answer one.
