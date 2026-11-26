@@ -20,6 +20,7 @@ from flask import Flask, Response, jsonify, request
 from pydantic import ValidationError
 from werkzeug.exceptions import HTTPException, RequestEntityTooLarge
 
+import error_tracking
 from host_limits import REQUEST_TOO_LARGE
 
 logger = logging.getLogger(__name__)
@@ -27,8 +28,9 @@ logger = logging.getLogger(__name__)
 INTERNAL_SERVER_ERROR = "Internal server error"
 
 # What a 500's log line may name to find the market or organization it concerned. Never the path,
-# the query string, the body or `vendor_email`: each of those can hold an applicant's address.
-_LOGGED_VIEW_ARGS = ("market_id", "market_slug", "org_id")
+# the query string, the body or `vendor_email`: each of those can hold an applicant's address. The
+# error tracker's list, so an event and a log line never name different things.
+_LOGGED_VIEW_ARGS = error_tracking.NAMED_VIEW_ARGS
 
 
 class ClientError(Exception):
@@ -109,13 +111,16 @@ def answer_too_large(_error: RequestEntityTooLarge) -> Tuple[Response, int]:
 
 
 def answer_unexpected(error: Exception) -> HTTPException | Tuple[Response, int]:
-    """Log what escaped a route and answer nothing of it.
+    """Report what escaped a route to the error tracker, log it, and answer nothing of it.
 
     Flask finds this handler for its own answers too, an `HTTPException` being an `Exception`: a
     404 or 405, an `abort()`, Flask-Login's 401. Those are answers already, and pass unchanged.
     """
     if isinstance(error, HTTPException):
         return error
+    # The error tracker's one event for it: this logger is never one of its events, and Flask's
+    # integration never sees an exception a handler answered.
+    error_tracking.report(error)
     concerning = "".join(
         f" {name}={request.view_args[name]}"
         for name in _LOGGED_VIEW_ARGS

@@ -447,6 +447,32 @@ class TestAnUploadIsHeldToItsLimits:
         assert response.get_json() == {"error": "Venue plan.pdf could not be read as a PDF."}
         assert images.files == {}
 
+    def test_the_refusal_is_logged_by_pdfiums_error_type_never_its_message(
+        self, sign_in, market, images, monkeypatch, caplog,
+    ):
+        # The log line becomes an error tracker breadcrumb, so PDFium's words, which our code did
+        # not write, are never in it (ADR 0049).
+        said = "Failed to load document (PDFium: alice@example.com)"
+
+        def will_not_open(_data, *_args, **_kwargs):
+            raise PdfConverter.pdfium.PdfiumError(said)
+
+        monkeypatch.setattr(PdfConverter.pdfium, "PdfDocument", will_not_open)
+
+        with caplog.at_level("DEBUG"):
+            response = _upload(
+                sign_in("owner@example.com"),
+                file=(io.BytesIO(_one_page_pdf()), "Venue plan.pdf", "application/pdf"),
+            )
+
+        assert response.status_code == 400
+        refused = [r for r in caplog.records if r.getMessage().startswith("Refused an unreadable PDF")]
+        assert len(refused) == 1
+        assert "PdfiumError" in refused[0].getMessage()
+        for record in caplog.records:
+            assert "alice@example.com" not in record.getMessage()
+            assert "Failed to load document" not in record.getMessage()
+
 
     def test_a_pdf_that_opens_but_will_not_draw_is_refused_naming_the_file(
         self, sign_in, market, images, monkeypatch,

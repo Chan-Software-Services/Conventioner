@@ -5,7 +5,6 @@ Uses GridFS for storage and pypdfium2 for PDF-to-image conversion.
 
 import io
 import logging
-import traceback
 from typing import Optional
 
 from bson import ObjectId
@@ -15,6 +14,7 @@ from PIL import Image as PILImage
 
 from api.floorplans_access import image_asking, image_refusal, market_refusal
 import api.market_actions as Actions
+from client_errors import traceback_without_messages
 import floorplan_limits as Limits
 import history as History
 from services.gridfs_service import delete_image, get_image, upload_image
@@ -33,7 +33,7 @@ def _get_image_dimensions(image_data: bytes):
         img = PILImage.open(io.BytesIO(image_data))
         return img.size  # (width, height)
     except Exception as exc:
-        logger.warning(f"Could not determine image dimensions: {exc}")
+        logger.warning("Could not determine image dimensions: %s", type(exc).__name__)
         return (0, 0)
 
 
@@ -165,8 +165,7 @@ def upload_floorplan():
         }), 201
 
     except Exception as exc:
-        logger.error(f"Error uploading floorplan: {exc}")
-        logger.error(traceback.format_exc())
+        logger.error("Error uploading floorplan\n%s", traceback_without_messages(exc))
         return jsonify({"error": "Internal server error"}), 500
 
 
@@ -241,6 +240,5 @@ def delete_floorplan(gridfs_id: str):
         return jsonify({"message": "Image deleted successfully"}), 200
 
     except Exception as exc:
-        logger.error(f"Error deleting floorplan {gridfs_id}: {exc}")
-        logger.error(traceback.format_exc())
+        logger.error("Error deleting floorplan %s\n%s", gridfs_id, traceback_without_messages(exc))
         return jsonify({"error": "Internal server error"}), 500
