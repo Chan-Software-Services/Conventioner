@@ -23,7 +23,8 @@ sources:
 
 # An applicant never reads a verdict early
 
-An applicant's own page, the market's vendor page ([ADR 0022](../../adr/0022-the-vendor-page-is-signed-in.md)), reads "Submitted" until the organizer publishes results, whatever review has decided; after that it reads "You have a table", with their seats, or "You did not get assigned", and never a verdict or a reason.
+An applicant's own page, the market's vendor page ([ADR 0022](../../adr/0022-the-vendor-page-is-signed-in.md)), reads "Submitted" until the results are out, whatever review has decided; after that it reads "You have a table", with their seats, or "You did not get assigned", and never a verdict or a reason.
+The results are out once the organizer publishes them, or once the market reaches its market days unpublished.
 Applying, and changing one's answers, is open only while the market is in `applications` and the organizer has not stopped taking applications (`takes_applications`); reading one's application is open in every phase but draft on a form market, and on a Google Form market once its results are published or it has reached its market days.
 
 **Serves:** [Vendors apply on the market's own page](../intents/vendors-apply-on-the-markets-own-page.md) and [Results go out once, and settle the allocation](../intents/results-go-out-once-and-settle-the-allocation.md).
@@ -32,7 +33,8 @@ Applying, and changing one's answers, is open only while the market is in `appli
 
 An organizer must not leak a half-finished review, and must keep the freedom to change their mind until anyone is told.
 The automatic rules judge an application in the request that saves it, so a status beside "Submitted" told an applicant a rule had rejected them the moment they submitted, and editing their answers flipped it back (E36/F05/S01).
-Publication is the single, deliberate moment anything more is told ([Publish results waits for the allocation](publish-results-waits-for-the-allocation.md)); why the seat and not the verdict is what an applicant reads is [ADR 0013](../../adr/0013-verdicts-settle-with-the-review-and-results-settle-the-allocation.md).
+Publication is the deliberate, organizer-controlled moment anything more is told ([Publish results waits for the allocation](publish-results-waits-for-the-allocation.md)); only a market that reached its market days without it serves outcomes unpublished.
+Why the seat and not the verdict is what an applicant reads is [ADR 0013](../../adr/0013-verdicts-settle-with-the-review-and-results-settle-the-allocation.md).
 
 **The outcome is read off the stored seats, never the verdict** (E36/F05/S02).
 A rejected applicant seated by hand has a table, and an approved one the run could not place has none; so rejected and approved-without-a-seat read the same, and no reason is given to either.

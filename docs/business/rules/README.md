@@ -20,7 +20,7 @@ One line per node, sorted by file name.
 - [A vendor's save is held to the form they saw](a-vendors-save-is-held-to-the-form-they-saw.md) - a save carries the form version its page read, and one from a page drawn from another form is refused, storing nothing, "This form changed since you opened it. Reload to continue."
 - [Adding a vendor who never applied](adding-a-vendor-who-never-applied.md) - from Assignment on, added by name, address and the answers its prices read, approved, assigned by hand, never in the table allocation
 - [An amount reads to the cent](an-amount-reads-to-the-cent.md) - every amount on screen and in the file reads in the market's currency with two decimals, "$50.00", "-$15.00"; one table of cases pins both sides
-- [An applicant never reads a verdict early](an-applicant-never-reads-a-verdict-early.md) - "Submitted" until results are published, then a table or none, read off the stored seats
+- [An applicant never reads a verdict early](an-applicant-never-reads-a-verdict-early.md) - "Submitted" until the results are out, then a table or none, read off the stored seats
 - [An archived market is read-only](an-archived-market-is-read-only.md) - nobody changes a finished market's record; roles and deletion are not changes
 - [An archived market that ran stays a record](an-archived-market-that-ran-stays-a-record.md) - its vendor page stays up, marked ended, and takes no check-in
 - [An assignment knows when it is out of date](an-assignment-knows-when-it-is-out-of-date.md) - the result says which of the rules, the plan and the approved applications changed since it ran
