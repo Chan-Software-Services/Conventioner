@@ -4,7 +4,7 @@ kind: flow
 describes:
   - front-end/src/views/AttendanceStatusView.vue
   - front-end/src/components/vendorPage/VendorCheckIn.vue
-verified: 2026-11-19
+verified: 2026-11-26
 sources:
   - brain-dump/2026-10-19#15
   - E10/F01/S02

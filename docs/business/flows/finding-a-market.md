@@ -1,7 +1,7 @@
 ---
 layer: business
 kind: flow
-verified: 2026-11-13
+verified: 2026-11-26
 sources:
   - wayfinding/readable-journey/07
   - E21/F02/S02

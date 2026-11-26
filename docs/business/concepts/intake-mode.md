@@ -1,7 +1,7 @@
 ---
 layer: business
 kind: concept
-verified: 2026-10-29
+verified: 2026-11-26
 ---
 
 # Intake mode
