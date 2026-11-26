@@ -49,7 +49,7 @@ Finished. A market that has run and is over, or one abandoned before it ever ran
 _Avoid_: Published, closed
 
 **Intake mode**:
-How a market receives its vendors - by importing a CSV, or through the public application form. Exactly one, chosen while the market is a draft and frozen thereafter. It decides whether vendors apply on the market's vendor page and when its market page and vendor page first answer (a CSV market's once its results are published), but never gates check-in, and never gates authoring the form itself: a CSV market still has an application form, because the essential questions define the offering the CSV maps onto.
+How a market receives its vendors - by importing a CSV, or through the public application form. Exactly one, chosen while the market is a draft and frozen thereafter. It decides whether vendors apply on the market's vendor page and when its market page and vendor page first answer (a CSV market's once its results are published or it reaches its market days), but never gates check-in, and never gates authoring the form itself: a CSV market still has an application form, because the essential questions define the offering the CSV maps onto.
 See [Intake mode](docs/business/concepts/intake-mode.md).
 
 **CSV import**:

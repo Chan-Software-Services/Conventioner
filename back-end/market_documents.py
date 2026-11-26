@@ -397,7 +397,8 @@ def market_serves_applicants(market_doc: Dict[str, Any]) -> bool:
     Its intake mode is ``form``. A CSV market's vendors never apply in this product: they are
     imported from a file the organizer already collected, so its application form answers for it
     exactly as for a market that does not exist. Its vendors still get a vendor page, without an
-    application, once its results are published (``vendor_page_market_by_slug``).
+    application, once its results are published or it has reached its market days
+    (``vendor_page_market_by_slug``).
 
     The question is stated once here, which is the same reason ``applicant_intake_market_by_slug``
     below is one lookup rather than a check in each endpoint: both gates ask it, and the vendor's

@@ -33,7 +33,7 @@ describes:
   - front-end/src/utils/useUpdatedWords.ts
   - front-end/src/components/attendance/laidOutLocations.ts
   - back-end/migrations/add_check_outs_from_sheet.py
-verified: 2026-11-25
+verified: 2026-11-26
 sources:
   - wayfinding/real-market-readiness/map
   - wayfinding/claims-and-room/map
@@ -267,7 +267,7 @@ The notice follows the server's order: before the market's days or once it has e
 The other days read "(checked in at <time>, checked out at <time>)" and the ended market's record "Checked in at <time>, checked out at <time>" (`cameAndLeft`).
 The store's `checkOut(date, doorCode)` and `undoCheckOut(date)` are built as `checkIn` and `undoCheckIn` are, with the fallbacks "You were not checked out. Please try again." and "Your check-out was not undone. Please try again.".
 `aVendorChecksOut.test.ts` holds each state with the switch on, off and missing from the read, the scanned code's outcomes and each refusal; [`a-vendor-checks-out.spec.ts`](../../../front-end/e2e/a-vendor-checks-out.spec.ts) walks it at 390 under a phone's emulation: a check-in, a second scan that fills the field and sends nothing, the check-out and its undo, each state's controls 44px and inside the window, then a market with the switch off, the scan's notice signed out, the at-the-door lines, and both doors back once it is turned on.
-It works alike on both kinds of market: a Google Form market's vendor page opens once its results are published ([a gated market answers as absent](../../business/rules/a-gated-market-answers-as-absent.md)).
+It works alike on both kinds of market: a Google Form market's vendor page opens once its results are published or it reaches its market days ([a gated market answers as absent](../../business/rules/a-gated-market-answers-as-absent.md)).
 [`checkin.spec.ts`](../../../front-end/e2e/checkin.spec.ts) walks the door: the organizer makes the code, a vendor opens its `url` signed out, signs in and lands checked in, and the roster says "Scanned in"; a new code makes the old `url` refuse; a typed code and its Undo; a scan with no table today; a held code that checks in no other vendor, after another address is sent a code or a sign-in that ran out; and the old endpoints' 404.
 
 **An organizer checks a vendor in through `api/door.py`**: the table's Check vendors in row ([the market's actions](market-actions.md)), EDITOR by default, the bar every market write sets, so a door volunteer is added to the market as an editor.
