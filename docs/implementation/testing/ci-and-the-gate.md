@@ -20,8 +20,8 @@ describes:
   - .github/actions/e2e-stack/action.yml
   - .github/actions/front-end-deps/action.yml
   - scripts/chromium-packages.sh
-  - scripts/nm-lint.sh
   - scripts/ci_suite.py
+  - scripts/nm-lint.sh
   - scripts/e2e_retries.py
   - scripts/affected-specs.py#ci_decision
   - scripts/affected-specs.py#shard_count
@@ -44,12 +44,12 @@ sources:
   - T375
   - T424
   - T464
-  - T527
   - T508
-  - T565
   - T528
-  - T582
+  - T527
   - T510
+  - T565
+  - T582
   - T606
   - T612
 ---
@@ -66,7 +66,7 @@ What each suite covers is [TESTING.md](../../TESTING.md); how a commit reaches p
 Its token is read-only (`permissions: contents: read`, and `actions: read` too, to read other runs, on the `suite` job for the queue's run and the test maps, on `e2e-shard` for [the timings artifact](#the-timings-refresh-themselves), on `e2e-select` and `e2e` for the newest `test-map` artifact, and on `e2e-retries` for other runs' shard reports), every action is pinned by its full commit SHA with the version in a comment beside it, which [Dependabot](#dependabot) bumps together, and no checkout keeps its git credentials (`persist-credentials: false`), since no job pushes.
 No `${{ }}` expression is written inside a `run:` script: a value reaches the shell through the step's `env:` and is read as a variable.
 A push to a pull request's branch cancels the run of its earlier head (`concurrency`); a push to `dev` or `main` never cancels one, since each commit there keeps the checks a promotion reads, and neither does a trial commit, whose group is its own queue branch and commit.
-Every job but `e2e-shard` (whose checks are `e2e shard <n>/<shards>`, the run's count of shards, 10 on a whole run) sets `name:` to its id, the name `dev`'s and `main`'s rules require its check by, so renaming a job drops a required check.
+Every job but `e2e-shard` (whose checks are `e2e shard <n>/<shards>`, the run's count of shards, 5 on a whole run) sets `name:` to its id, the name `dev`'s and `main`'s rules require its check by, so renaming a job drops a required check.
 CodeQL's analysis is [a workflow of its own](#codeql), whose three checks `dev` requires too.
 
 Each job is one block, what it runs one item a line ([two features never share a line](../conventions/two-features-never-share-a-line.md)); a new job is a block beside the job it is most like, and a new step of a job is one item beside the step it is most like.
@@ -127,10 +127,10 @@ Each job is one block, what it runs one item a line ([two features never share a
 
 **`e2e-shard`**
 
-- one runner a shard, ten (`E2E_SHARDS`) unless [`e2e-select` asked for fewer](#what-a-pull-requests-e2e-run-runs), each running the [shared actions](#the-e2e-stack-and-its-caches), which fill `front-end/node_modules`, install Chromium, load the stack's images from the cache or build them, start the stack and seed it with `seed_fixture.sh --primary`, then taking [the timings to deal by](#the-timings-refresh-themselves) and running the spec files [dealt to it by them](#the-e2e-shards), with `DISABLE_CAPTCHA`, `DISABLE_EMAIL` and `DISCORD_FAKE` set
+- one runner a shard, five (`E2E_SHARDS`) unless [`e2e-select` asked for fewer](#what-a-pull-requests-e2e-run-runs), each running the [shared actions](#the-e2e-stack-and-its-caches), which fill `front-end/node_modules`, install Chromium, load the stack's images from the cache or build them, start the stack and seed it with `seed_fixture.sh --primary`, then taking [the timings to deal by](#the-timings-refresh-themselves) and running the spec files [dealt to it by them](#the-e2e-shards), with `DISABLE_CAPTCHA`, `DISABLE_EMAIL` and `DISCORD_FAKE` set, and `E2E_WORKERS` at two
 - on a pull request whose selection named specs, it deals those alone (`--specs=`)
 - skipped, before its matrix expands, on a pull request whose selection named no spec
-- it posts a flaky-test summary and uploads its JSON report and its deal record (`e2e-results-shard-<n>`, kept 90 days) on every run, and on failure uploads the whole report
+- it posts a flaky-test summary and uploads its JSON report, its deal record and its passes' seconds (`e2e-phases.json`) (`e2e-results-shard-<n>`, kept 90 days) on every run, and on failure uploads the whole report
 - on a nightly or hand-started run alone (`RECORD_TEST_MAP`) it also records [the test map](the-test-map.md) (`TEST_MAP_OUT`) and uploads the records with the back end's timestamped log (`test-map-shard-<n>`, kept 90 days)
 
 **`warm-caches`**
@@ -141,9 +141,9 @@ Each job is one block, what it runs one item a line ([two features never share a
 
 **`e2e`**
 
-- passes only when every shard did and [the shards ran every spec file exactly once](#the-timings-refresh-themselves), or, on a pull request whose scope is `named`, each file of the selection's list exactly once; the check writes what ran, the timings' source, each shard's seconds and their spread to the job summary
+- passes only when every shard did and [the shards ran every spec file exactly once](#the-timings-refresh-themselves), or, on a pull request whose scope is `named`, each file of the selection's list exactly once; the check writes what ran, the timings' source, each shard's seconds and two passes, and their spread to the job summary
 - on a pull request whose selection named no spec, passes with no shard run, and says so in the job summary
-- its step "A folder of results for each of this run's shards", before the check, gives the check and the audits one folder a shard: it moves into shard 1's folder the files of a lone artifact, which the download unpacks straight into its path, and removes each folder numbered above this run's count of shards, left by an earlier attempt that asked for more
+- its step "A folder of results for each of this run's shards", before the check, gives the check and the audits one folder a shard: it moves into shard 1's folder the files of a lone artifact (its report, deal record and passes' seconds), which the download unpacks straight into its path, and removes each folder numbered above this run's count of shards, left by an earlier attempt that asked for more
 - on a push to `dev` or a trial commit, whose shards all passed, it publishes the next timings (`e2e-shard-timings`, kept 90 days); a run whose shards did not all pass, or ran none, publishes nothing
 - on a pull request it then runs [the selection audit](the-test-map.md#where-a-miss-shows), which lists each spec the shards failed in the job's summary as ran, left to CI or missed by `affected-specs.py` for the pull request's diff, each miss also a warning annotation once a test map exists, its step continuing on error so it never decides the job
 - on a trial commit it runs [the queue's audit](the-test-map.md#where-a-miss-shows) instead, which says of each spec the shards failed how the pull request's own run [would have treated it](#what-a-pull-requests-e2e-run-runs): ran it by name, ran it within the whole suite, or left it out, each spec left out also a warning annotation, its step continuing on error too
@@ -160,7 +160,7 @@ Each job is one block, what it runs one item a line ([two features never share a
 - a run counts when it completed on a push to `dev`, a nightly or hand-started run on `dev`, or a trial commit of `dev`'s merge queue, and left an unexpired `e2e-results-shard-<n>` artifact, so a warm push and a night whose commit had a map are passed over; it reads each such artifact's `results.json`, GitHub's list of runs a page of 100 at a time, ten pages at most
 - the summary is a table of each such test, by its spec file and title, how many of the runs it passed only on a retry in, and a link to each run, most first; a run whose artifacts it could not all read is named under the table with the reason
 - the runner's own `python3`, since the script needs only the standard library, with the run's read-only token, which it never sends to the storage an artifact's zip redirects to
-- each counted run costs about a dozen requests of GitHub's API (its artifacts' list and a zip for each of the ten shards), and a run passed over costs its artifacts' list alone, about one for each merge (its warm push), so 20 runs are about 250, a quarter of the 1,000 an hour the run's token may make for the repository, which the Test, Promote and Deploy runs' reads share: more would leave those reads rate-limited, and they fail closed, a push's `suite` to `full` and Promote's and Deploy's checks to a refusal, until the hour resets
+- each counted run costs about seven requests of GitHub's API (its artifacts' list and a zip for each of the five shards), and a run passed over costs its artifacts' list alone, about one for each merge (its warm push), so 20 runs are about 150, a seventh of the 1,000 an hour the run's token may make for the repository, which the Test, Promote and Deploy runs' reads share: more would leave those reads rate-limited, and they fail closed, a push's `suite` to `full` and Promote's and Deploy's checks to a refusal, until the hour resets
 - a 403 or a 429 from GitHub's API (the rate limit, or a token that may not read Actions) on a run's artifacts, a zip or a later page of runs stops the walk, and the summary holds the runs read before it and names where it stopped; on the first page of runs the script fails with the reason
 - a refusal by the storage a zip redirects to (a signed address expired or refused, which no other read shares) is named under the table with its host, like any report it could not read, and the walk goes on
 - it continues on error (`continue-on-error: true`), so a report it could not make never decides the run's conclusion, and it is not a required check
@@ -182,7 +182,11 @@ Under `CI`, Playwright retries twice and sets `failOnFlakyTests` ([`front-end/pl
 Every failed attempt and every retry keeps its trace, so the shard's `playwright-artifacts-shard-<n>` artifact, uploaded on that failure, holds every failed attempt's trace beside its passing retry's ([when a test fails](../../TESTING.md#when-a-test-fails)).
 Such a run is red, so a trial commit is queued again or a shard run again, and the test is easily forgotten: the nightly [`e2e-retries`](#ci) job's summary lists each test that passed only on a retry over `dev`'s last 20 runs that ran the shards, the merge queue's among them.
 Anyone with a token that may read the repository's Actions makes the same report for more runs, up to those among the newest 1,000 Test runs GitHub lists, a personal token from its own budget of 5,000 requests an hour, with `GITHUB_REPOSITORY=Chan-Software-Services/Conventioner GITHUB_TOKEN=<token> python3 scripts/e2e_retries.py --runs <n>`.
-Within a shard the tests share one database (`workers: 1`); never across shards.
+Within a shard the tests share one database; never across shards.
+Each shard runs its hand in two passes ([`front-end/scripts/e2e-shards.ts`](../../../front-end/scripts/e2e-shards.ts)): first the spec files of the `chromium-serial` project, the serial list's ([`front-end/e2e/serialSpecs.ts`](../../../front-end/e2e/serialSpecs.ts)), which share state a second worker would change under them, at one worker, then the rest at two (`E2E_WORKERS`, which only the shards set; the config's one when unset), and merges the two passes' reports into the one the `e2e` job reads.
+Both passes run whatever the first's result, so one failed serial spec never hides the rest of the hand, and the shard fails with the first pass that failed.
+Each pass keeps its own HTML report and traces, in `playwright-report/<pass>/` and `test-results/<pass>/`, so the failure artifact holds both; `test-results/e2e-phases.json` holds each pass's file count, wall seconds and exit status, and the shard's log a line for each pass (`e2e shard <n>/<total>: the serial pass, <files> files, took <s> s`).
+A spec joins the serial list by [E2E patterns](e2e-patterns.md#specs-that-need-the-stack-to-themselves)' rule.
 
 ## Which suite a run runs
 
@@ -231,7 +235,7 @@ The first that applies decides (`ci_decision`):
 **A named run takes as many shards as its minutes need** (`shard_count`): none for no spec, else the named minutes divided by a whole run's share (the suite's minutes over `E2E_SHARDS`), rounded up, at least one, and never more than the named specs or `E2E_SHARDS`.
 So each of its shards holds about a whole run's share of the suite or less.
 
-**`E2E_SHARDS`**, the workflow's `env`, `"10"`, is a whole run's count of shards: `decide` passes it as `--max-shards`, `test-map` expects that many shards' records, and `e2e` keeps that many folders of results on a run whose `e2e-select` set no `shards`.
+**`E2E_SHARDS`**, the workflow's `env`, `"5"`, is a whole run's count of shards: `decide` passes it as `--max-shards`, `test-map` expects that many shards' records, and `e2e` keeps that many folders of results on a run whose `e2e-select` set no `shards`.
 The shards' matrix falls back to a list of 1 to it, written out because `strategy` cannot read `env`; `scripts/tests/test_ci_suite.py` holds the two together, so change both.
 
 **Every doubt runs the whole suite.**
@@ -251,7 +255,7 @@ One that failed runs and decides again, as every job does under "Re-run all jobs
 **A nightly Test run on `dev`'s tip makes [the test map](the-test-map.md), and makes none when that commit already has one.**
 `schedule` runs it at 19:17 UTC (`17 19 * * *`, off the hour GitHub's scheduler is busiest at), and `workflow_dispatch` the same on demand, `gh workflow run test.yml --ref dev`.
 Its `suite` asks GitHub for the `test-map` artifacts (`/actions/artifacts?name=test-map`): an unexpired one whose run is on `dev` at the commit, whichever run made it, is `none`, so a night with no merge costs only `suite`, [`python-advisories`](#ci), the daily advisory scan, and [`e2e-retries`](#ci), the report of the tests that passed only on a retry (a map made on another branch does not count, since [`affected-specs.py`](../../../scripts/affected-specs.py) never reads it); none such is `map`, and so is GitHub unread, since a map made twice costs only runner minutes.
-On `map` the run runs the ten shards, each recording (`RECORD_TEST_MAP`), and then `test-map`, about 170 runner minutes; no other test job, `python-advisories` aside, and `e2e-retries` beside them, so it posts the required checks on `dev`'s tip only as skipped, which read as passing, never a red one.
+On `map` the run runs the five shards, each recording (`RECORD_TEST_MAP`), and then `test-map`, which cost about 170 runner minutes when it ran ten shards of one worker, a figure not yet measured at five shards of two; no other test job, `python-advisories` aside, and `e2e-retries` beside them, so it posts the required checks on `dev`'s tip only as skipped, which read as passing, never a red one.
 Recording is the nightly run's alone, so its slowdown is on no pull request's or queue's path: a test that fails only while recording fails the nightly run, which no rule reads, never a merge, and its shard's records still make the map.
 A nightly run whose `suite` job itself fails (a runner or checkout failure, since `ci_suite.py` says `map` on any doubt) runs the whole suite instead, as any empty word does, and posts the required checks on `dev`'s tip under their names, newer than the queue's; a red one among them may lead `main`'s rule to refuse the App's fast-forward of that commit though Promote's own check passes, so `main` stays unmoved until a re-run of that run's failed jobs passes and Promote runs again.
 A nightly run's ref is `refs/heads/dev` and its commit `dev`'s tip, so its concurrency group is the push run's of that commit, behind which it waits while that run is going.
@@ -273,13 +277,13 @@ On it `github.base_ref` and `github.event.pull_request` are empty, since they be
 | `knowledge-graph`                                                     | the scripts' tests and `knowledge_graph.py check`; the drift step, which reads `github.base_ref`, is skipped, as on a push, since it judges a pull request against its base, which the pull request's own run does                                                                                                        |
 | `real-data-and-workflows`                                             | zizmor offline and actionlint; the real-data scans and zizmor online (`if:` a pull request), and gitleaks (`if:` a pull request or a push), are skipped                                                                                                                                                                   |
 | `python-advisories`                                                   | skipped (`if:` not a `merge_group`); not a required check                                                                                                                                                                                                                                                                 |
-| `e2e-shard`                                                           | every step, as on a push, all ten shards over every spec, but shard 1 saves no cache ([why](#the-e2e-stack-and-its-caches)) and no shard records [the test map](the-test-map.md), which only the nightly run records (`RECORD_TEST_MAP`)                                                                                  |
+| `e2e-shard`                                                           | every step, as on a push, all five shards over every spec, but shard 1 saves no cache ([why](#the-e2e-stack-and-its-caches)) and no shard records [the test map](the-test-map.md), which only the nightly run records (`RECORD_TEST_MAP`)                                                                                 |
 | `e2e`                                                                 | its `if:`, which reads `suite`'s empty `run` as the whole suite, and the deal's check, which takes no `--named` and so fails a shard that dealt less than every spec; it publishes the next timings, as a push to `dev` whose shards run does; the queue audit runs; the pull request's (`if:` a pull request) is skipped |
 | `test-map`                                                            | skipped (`if:` a nightly or hand-started run), as on every push; not a required check                                                                                                                                                                                                                                     |
 | CodeQL's `analyze`, the three `Analyze (<language>)` checks           | every step, as on a push: none has an `if:`                                                                                                                                                                                                                                                                               |
 
 Each workflow's concurrency group is `<its name>-<its queue branch's ref>-<its sha>` (`Test-...`, `CodeQL-...`), so no other run shares it and none is cancelled.
-The queue builds at most two trial commits at once: one asks for 19 of [the account's 20 jobs](#the-e2e-shards), so a third would only wait for runners, while a second fills the runners the first leaves idle in its long `e2e` tail.
+The queue builds at most two trial commits at once, a setting of Daniel's left as it was when a trial commit asked for 19 of [the account's 20 jobs](#the-e2e-shards): one now runs at most 14 at once, so a second still waits for some of its runners, while it fills those the first leaves idle in its long `e2e` tail.
 The queue drops an entry whose required check has not reported within 120 minutes, above the 98 the slowest of 80 recent Test runs took.
 Promotion reads a trial commit's run: [`promote_check.py`](../../../scripts/promote_check.py) takes the newest Test run on the commit from `dev`'s queue or a push to `dev`, so the push run of a merged commit decides, and a commit the queue merged inside a batch, whose push was a later commit, is decided by its own queue run.
 
@@ -287,17 +291,20 @@ Promotion reads a trial commit's run: [`promote_check.py`](../../../scripts/prom
 
 Each `e2e-shard` job runs [`front-end/scripts/e2e-shards.ts`](../../../front-end/scripts/e2e-shards.ts) `--shard=<n>/<shards>`, not Playwright's `--shard`.
 Playwright's `--shard` cuts the alphabetical list of spec files into runs of equal test count, whatever the tests cost (with `fullyParallel: false` a spec file is never split), so on the first six-shard run the three people-at-scale files, whose names sort together, all landed on one shard: 24 minutes of tests on it, 6 on another, and 28 minutes for the workflow.
-The script lists the suite with `playwright test --list`, deals the spec files heaviest first, each to the shard with the fewest seconds so far, by [the timings](#the-timings-refresh-themselves), and runs its own hand in alphabetical order.
-The hands depend only on the list and the timings, so every runner given the same timings deals the same ones and each spec file is in exactly one (`src/__tests__/e2eShards.test.ts`); before it runs, the script lists its hand again through the filters it passes and fails the shard if Playwright selects any other set of files.
-A spec file with no timing yet weighs the median of those measured.
-With `--specs=<file>`, a JSON list of spec files, which CI passes on [a pull request that named specs](#what-a-pull-requests-e2e-run-runs), it deals that list alone, by the same timings, and fails before it runs anything on a name Playwright does not list, naming each, as for a spec file that holds no test.
+The script lists the suite with `playwright test --list`, deals the spec files heaviest first, each to the shard with the least wall time so far, by [the timings](#the-timings-refresh-themselves), and runs its own hand in alphabetical order, in the two passes [CI](#ci) describes.
+A file weighs its share of its shard's wall time: a file of the serial list its seconds, since the serial pass runs one file at a time, and any other its seconds over the parallel pass's workers, the list's `config.workers` (`E2E_WORKERS`), since that pass runs that many at once.
+One deal over both passes' files evens each shard's two passes summed, which a deal per pass would not: it would even each pass, but not their sum.
+With no serial file and one worker it deals by the timings alone.
+The hands depend only on the list, the timings, the serial list and the workers, so every runner given the same ones deals the same hands and each spec file is in exactly one (`src/__tests__/e2eShards.test.ts`); before it runs, the script lists its hand again through the filters it passes and fails the shard if Playwright selects any other set of files.
+A spec file with no timing yet weighs the median of those measured, divided as any other file is.
+With `--specs=<file>`, a JSON list of spec files, which CI passes on [a pull request that named specs](#what-a-pull-requests-e2e-run-runs), it deals that list alone, by the same weights, and fails before it runs anything on a name Playwright does not list, naming each, as for a spec file that holds no test.
 
 ### The timings refresh themselves
 
 The timings are each spec file's seconds, the summed duration of every attempt of every test in it, from CI's own reports; no one refreshes them by hand.
 
 - **Published.**
-  On a push to `dev` or a trial commit, whose ten shards all passed, the `e2e` job blends the timings the run dealt by with the seconds it measured, 0.3 of this run to 0.7 of the earlier timings (`BLEND_WEIGHT`), a file new to the timings taking its measure alone, and uploads them as the `e2e-shard-timings` artifact.
+  On a push to `dev` or a trial commit, whose five shards all passed, the `e2e` job blends the timings the run dealt by with the seconds it measured, 0.3 of this run to 0.7 of the earlier timings (`BLEND_WEIGHT`), a file new to the timings taking its measure alone, and uploads them as the `e2e-shard-timings` artifact.
   Over twelve runs that weight left the next run's shards about 130 seconds apart where one run's timings alone left them about 200, since a file's time moves by about a fifth from run to run.
 - **Taken.**
   Each shard first runs `node scripts/e2e-shards.ts timings <file>`, which takes the newest `e2e-shard-timings` artifact made at least 10 minutes (`TIMINGS_MARGIN_MS`) before its own run was created, by the Test workflow on a push to `dev` or a trial commit in this repository: never a pull request's, whose code no one has merged.
@@ -309,14 +316,15 @@ The timings are each spec file's seconds, the summed duration of every attempt o
 - **Never a failed shard.**
   With no such artifact (as before the first one is published, or after 90 days without one), a corrupt one, or GitHub's API failing (after up to three tries), the shard deals by the committed [`front-end/scripts/e2e-shard-timings.json`](../../../front-end/scripts/e2e-shard-timings.json) with a warning annotation, and a corrupt artifact is never passed over for an older one, so every shard falls back alike.
 - **Checked.**
-  Each shard writes its deal record, `test-results/e2e-deal.json` (the timings' source, the timings, its scope, `whole` or `named`, how many spec files Playwright listed, the files it dealt from and its hand), uploaded beside its report.
-  Once every shard has passed, `e2e` runs `node scripts/e2e-shards.ts check`, which fails the job unless every shard dealt every listed file, all by the same timings, and the reports hold each exactly once; shards that dealt by different timings, as when one fell back on a failed API call while the others took the artifact, may leave a file no shard ran, which was never tested.
+  Each shard writes its deal record, `test-results/e2e-deal.json` (the timings' source, the timings, its scope, `whole` or `named`, how many spec files Playwright listed, the files it dealt from, its hand, the listed serial files and the parallel pass's workers), uploaded beside its report.
+  Once every shard has passed, `e2e` runs `node scripts/e2e-shards.ts check`, which fails the job unless every shard dealt every listed file, all by the same timings, serial files and workers, and the reports hold each exactly once; shards that dealt by different timings, as when one fell back on a failed API call while the others took the artifact, or read another serial list or worker count, may leave a file no shard ran, which was never tested.
   With `--named=<file>`, which `e2e` passes only on a pull request whose scope is `named`, it demands instead that every shard dealt exactly the files of that list and the reports hold each once.
   A run that publishes timings is never a pull request's, and the script refuses `--named` with `--publish`.
-  Shards that all fell back to the committed file, for different reasons, dealt by the same timings and pass.
+  Shards that all fell back to the committed file, for different reasons, dealt by the same timings and pass; a deal record from before the two passes reads as no serial file at one worker.
   A re-run of the whole run then deals again by the same artifact.
 - **Read.**
-  Each shard's log names the timings it dealt by and the minutes they give its hand; the `e2e` job's summary opens with what ran and by which timings, "Every spec file the suite lists ran, dealt by <source>." or "The <n> spec files the test map named, of the <M> the suite lists, ran, dealt by <source>.", or, when the check found a problem, only "Dealt by <source>."; the source is each source and its shards when they differ; then each shard's seconds of tests and the spread between the fastest and the slowest.
+  Each shard's log names the timings it dealt by, the minutes of wall time the weights give its hand and how many of its files are serial (`e2e shard 3/5: 57 of 284 spec files, 3 serial, about 16.4 minutes by <source>`), and marks each serial file of its hand.
+  The `e2e` job's summary opens with what ran and by which timings, "Every spec file the suite lists ran, dealt by <source>." or "The <n> spec files the test map named, of the <M> the suite lists, ran, dealt by <source>.", or, when the check found a problem, only "Dealt by <source>."; the source is each source and its shards when they differ; then for each shard its seconds of tests and the wall seconds of its serial pass and its parallel pass, from its `e2e-phases.json` (a dash for a pass it did not run, or a shard with no phases file); the spread between the fastest and the slowest shard is over the two passes summed when every shard has phases, else over the seconds of tests.
 
 The committed file is the fallback, and `scripts/affected-specs.py` reads it.
 It was refreshed last from twelve whole runs on `dev` and the merge queue, 44525439048 to 44721661345, blended oldest first as CI publishes them; to refresh it again, download each run's reports into a folder of its own and give the folders oldest first, the newest a whole run:
@@ -329,17 +337,24 @@ cd front-end && node scripts/e2e-shards.ts refresh <folder>...
 and commit the rewritten file in its own `ci:` PR.
 The refresh lists the suite and refuses, naming each file, when a spec file it lists is in none of the newest run's reports, as when a shard stopped before Playwright wrote its report, so a missing shard never drops its files to the median.
 
-**Ten shards, since the suite is the run's critical path.**
-With six, the slowest shard ended a median 21.5 minutes into a run, while every other job was done by 2.7; a shard is about 3 minutes of setup and its share of the suite, so ten bring a shard to about 12 minutes at about 13 more runner-minutes of setup a run.
-That holds while runners are free: the account is on GitHub Free, which runs 20 jobs at once across the repository.
-A pull request's run into `dev` asks for at most 20 jobs at once, so it fits alone, and fewer when [slimmed](#what-a-pull-requests-e2e-run-runs) to fewer than ten shards: at its start the six short jobs (`backend`, `knowledge-graph`, `real-data-and-workflows`, `frontend-unit`, `frontend-lint-and-types` and `docker-build`), `e2e-select` beside them and CodeQL's three; the shards, ten at most, once `e2e-select` is done; `python-advisories` only once `real-data-and-workflows`, under a minute, is done; and `e2e` only once the shards are done.
-A push to `main` asks for the six short jobs, the ten shards and CodeQL's three at its start, 19, then `python-advisories` and `e2e` as above.
-A trial commit's run asks for the same with no `python-advisories`, 19 in all.
-A [warm push](#which-suite-a-run-runs) to `dev` asks for three, `suite` then `warm-caches` and `python-advisories`, and CodeQL's three; a whole-suite push to `dev` asks for `suite` first, then the six short jobs and the ten shards, then `python-advisories` once `real-data-and-workflows` is done and `e2e` once the shards are done.
-A [nightly run](#the-nightly-test-map) asks for `suite` and `e2e-retries`, then the ten shards and `python-advisories`, then `test-map`, twelve at once at most; one whose commit has a map asks for `suite` and `e2e-retries`, then `python-advisories`.
-That is why the five short checks (drift, the real-data scan with gitleaks, zizmor offline, zizmor online and actionlint) are steps of `knowledge-graph` and `real-data-and-workflows`: as five jobs of their own they made one run ask for 24, more than the account runs at once.
+**Five shards of two workers, since the account's 20 jobs are the bottleneck.**
+With six shards at one worker, the slowest shard ended a median 21.5 minutes into a run, while every other job was done by 2.7; a shard is about 3 minutes of setup and its share of the suite, so ten at one worker brought a shard to about 12 minutes (the merge queue's run 45292846424: its slowest shard job 796 s, 123 billed E2E minutes).
+That holds only while runners are free: the account is on GitHub Free, which runs 20 jobs at once across all its repositories, agent-team's and Conventioner's together.
+Every GitHub-hosted job gets a fresh machine of its own, so a crowd of jobs slows none of them, it only makes them wait: on a busy day (2026-11-24) one of agent-team's trial commits waited about 100 of its run's 142 minutes for runners, once for each of the run's three stages, and the queue dropped entries that would have passed.
+A second Playwright worker on each of ten shards (T564's runs 45329264648 and 45343265262) passed every test with no flake, cut the billed E2E minutes to 103 and 95 and the slowest shard job to 698 s and 653 s, but ran each test of the parallel pass 31% to 40% slower, two of them sharing a runner's 4 CPUs with the stack.
+That saving buys job slots rather than speed: five shards of two workers ask for half the shard jobs ten do, at an E2E wall time T564 estimated at about 18 minutes against the queue run's 13.
+Measured on the change's own green runs at five shards of two workers, dealt by timings measured at one worker: before `dev`'s invitation seeds, the slowest shard job took 1,025 s ([run 45630847154](https://github.com/Chan-Software-Services/Conventioner/actions/runs/45630847154)) and 1,179 s ([run 45635196562](https://github.com/Chan-Software-Services/Conventioner/actions/runs/45635196562)), 1,102 s (18.4 minutes) on average, with the shards 219 s and 420 s apart and 78 and 77 billed E2E minutes.
+With them, `people-at-scale-reviewers.spec.ts` alone takes 12.8 minutes of one worker, and the slowest shard job took 1,112 s (18.5 minutes, [run 45726851570](https://github.com/Chan-Software-Services/Conventioner/actions/runs/45726851570)), with the shards 245 s apart and 85 billed E2E minutes.
+When the slowest shard job of two green runs averages over 22 minutes, the matrix goes back to ten shards, at two workers.
+A pull request's run into `dev` asks for 17 in all, 14 at once at most, and fewer when [slimmed](#what-a-pull-requests-e2e-run-runs) to fewer than five shards: at its start the six short jobs (`backend`, `knowledge-graph`, `real-data-and-workflows`, `frontend-unit`, `frontend-lint-and-types` and `docker-build`), `e2e-select` beside them and CodeQL's three; the shards, five at most, once `e2e-select` is done; `python-advisories` only once `real-data-and-workflows`, under a minute, is done; and `e2e` only once the shards are done.
+A push to `main` asks for the six short jobs, the five shards and CodeQL's three at its start, 14, then `python-advisories` and `e2e` as above, 16 in all.
+A trial commit's run asks for the same with no `python-advisories`, 15 in all, 14 at once at most.
+A [warm push](#which-suite-a-run-runs) to `dev` asks for three, `suite` then `warm-caches` and `python-advisories`, and CodeQL's three; a whole-suite push to `dev` asks for `suite` first, then the six short jobs and the five shards, then `python-advisories` once `real-data-and-workflows` is done and `e2e` once the shards are done.
+A [nightly run](#the-nightly-test-map) asks for `suite` and `e2e-retries`, then the five shards and `python-advisories`, then `test-map`, seven at once at most; one whose commit has a map asks for `suite` and `e2e-retries`, then `python-advisories`.
+That is why the five short checks (drift, the real-data scan with gitleaks, zizmor offline, zizmor online and actionlint) are steps of `knowledge-graph` and `real-data-and-workflows`: as five jobs of their own they made one run at ten shards ask for 24, more than the account runs at once.
 `python-advisories` is a job of its own, since a step's failure would fail a required check, so it waits for `real-data-and-workflows` instead, and takes the runner that job leaves.
-With another run going, shards still wait: on one such run four shards queued 9 to 12 minutes, and the run ended at 23 minutes while each shard's own time was 10.5 to 12.5.
+With another run going, shards still wait: on one run at ten shards four shards queued 9 to 12 minutes, and the run ended at 23 minutes while each shard's own time was 10.5 to 12.5.
+The matrix lists the shards, and each shard's `total` is `strategy.job-total`, the count of shards the matrix expanded, so the two move together.
 
 ## The e2e stack and its caches
 

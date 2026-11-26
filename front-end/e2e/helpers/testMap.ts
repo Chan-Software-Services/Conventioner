@@ -1,32 +1,42 @@
 /**
  * The test map's recording (T349): what each E2E test reached, written beside a normal run.
  *
- * On only when `TEST_MAP_OUT` names a file, which CI's shards set on the nightly Test run alone (or
- * one started by hand); with it unset `withTheTestMap` hands back the `test` it was given, so every
- * other run, a pull request's, the merge queue's and a push's, is untouched.
+ * On only when `TEST_MAP_OUT` names a directory, which CI's shards set on the nightly Test run
+ * alone (or one started by hand); with it unset `withTheTestMap` hands back the `test` it was
+ * given, so every other run, a pull request's, the merge queue's and a push's, is untouched.
  * When on, every spec's `test` (through `fixtures.ts`) also records, per test:
  *
  *  - every request each browser context makes under `/src/` (the app's modules, which Vite's dev
  *    server serves one by one, each at its file's path) and `/api/` (the pages' own API calls);
+ *  - every call of an API request context (`request`, `page.request`, `context.request`,
+ *    `playwright.request.newContext()`), which is how Node's helpers seed and read the stack, a
+ *    call straight to the back end keyed as the dev server's proxy keys it;
  *  - the V8 block coverage of each page's `/src/` modules (through a DevTools session of its own,
  *    Chromium), as the stretches that ran, taken before a page or its context closes;
- *  - its start and end on the wall clock, so the back end's own log (`docker compose logs
- *    --timestamps`) can be laid against the one test running then (`workers: 1`), its calls from
- *    Node's helpers included.
+ *  - its start and end on the wall clock, so the build can audit the back end's own log
+ *    (`docker compose logs --timestamps`) for request lines no test recorded.
  *
- * and appends one JSON line for it to `TEST_MAP_OUT`; a retry is a line of its own. A context a
- * `beforeAll` opens records nothing, since no test is running. `scripts/test_map.py build` turns the
- * lines into the map (`docs/implementation/testing/the-test-map.md`).
+ * and appends one JSON line for it to `records-<workerIndex>.jsonl` in `TEST_MAP_OUT`, a file a
+ * worker, so two workers' lines never interleave; a retry is a line of its own. What a worker's
+ * contexts and calls reach between two of its tests (a `beforeAll` seeding, a worker fixture)
+ * counts for no test: it is a `"between"` line of its own, with its window, which the build's
+ * audit reads, since at two workers it reaches the back end inside the other worker's test.
+ * `scripts/test_map.py build` turns the lines into the map
+ * (`docs/implementation/testing/the-test-map.md`).
  */
 import { appendFileSync, mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { join } from 'node:path';
 import type {
+  APIRequestContext,
+  APIResponse,
   Browser,
   BrowserContext,
   CDPSession,
   Page,
   test as playwrightTest,
 } from '@playwright/test';
+
+import { stack } from './stack';
 
 type Range = { startOffset: number; endOffset: number; count: number };
 type CoveredFunction = { ranges: readonly Range[] };
@@ -77,24 +87,69 @@ function union(a: readonly Stretch[], b: readonly Stretch[]): Stretch[] {
 
 /**
  * What a request counts as: an app module by its path (`/src/App.vue`), an API call by its method
- * and path (`GET /api/markets/m-1`), each without its query; anything else, null.
+ * and path (`GET /api/markets/m-1`), each without its query; anything else, null. A URL at
+ * `backendOrigin`, the back end's own address, is an API call keyed at `/api` and its path, as the
+ * dev server's proxy, which takes `/api` off, keys the same call from a page.
  */
-export function requestKey(method: string, url: string): string | null {
-  let path: string;
+export function requestKey(method: string, url: string, backendOrigin?: string): string | null {
+  let parsed: URL;
   try {
-    path = new URL(url).pathname;
+    parsed = new URL(url);
   } catch {
     return null;
+  }
+  const path = parsed.pathname;
+  if (backendOrigin !== undefined && parsed.origin === backendOrigin) {
+    return `${method} /api${path}`;
   }
   if (path.startsWith('/src/')) return path;
   if (path.startsWith('/api/')) return `${method} ${path}`;
   return null;
 }
 
+/** The file a worker appends its records to, in the `TEST_MAP_OUT` directory. */
+export function recordsFile(dir: string, workerIndex: number): string {
+  return join(dir, `records-${workerIndex}.jsonl`);
+}
+
 type Recording = { requests: Set<string>; coverage: Map<string, Stretch[]> };
+type Between = { start: number; requests: Set<string> };
 
 /** The test running now, in this worker; null between tests. */
 let recording: Recording | null = null;
+/** What this worker reaches between two of its tests, once it records; null in a test. */
+let between: Between | null = null;
+
+/** Where a request made now counts: the running test, else the stretch between tests. */
+function counting(): { requests: Set<string> } | null {
+  return recording ?? between;
+}
+
+/** Starts the stretch between two tests (or before the first), which counts for no test. */
+export function startBetween(): Between {
+  between = { start: Date.now(), requests: new Set() };
+  return between;
+}
+
+/** Ends the stretch between tests, handing it back. */
+export function endBetween(): Between | null {
+  const ended = between;
+  between = null;
+  return ended;
+}
+
+/** Starts recording a test, which every request from here on counts for. */
+export function startRecording(): Recording {
+  recording = { requests: new Set(), coverage: new Map() };
+  return recording;
+}
+
+/** Ends the test's recording, handing it back; nothing counts for a test until the next starts. */
+export function endRecording(): Recording | null {
+  const ended = recording;
+  recording = null;
+  return ended;
+}
 
 const started = new WeakSet<Page>();
 const stopped = new WeakSet<Page>();
@@ -171,7 +226,8 @@ function attach(context: BrowserContext) {
   attached.add(context);
   context.on('request', (request) => {
     const key = requestKey(request.method(), request.url());
-    if (key && recording) recording.requests.add(key);
+    const into = counting();
+    if (key && into) into.requests.add(key);
   });
   context.on('page', (page) => void startPage(page));
   for (const page of context.pages()) void startPage(page);
@@ -200,14 +256,59 @@ function patchBrowser(browser: Browser) {
   };
 }
 
+type Fetch = APIRequestContext['fetch'];
+const wrapped = new WeakSet<object>();
+/** The back end's own address, at which an API call keys as the proxy keys it. */
+let backEnd: string | undefined;
+
+/**
+ * Counts every call of the API request context class that `context` is one of for the test
+ * running when the call started, or for the stretch between tests, keyed by its response's URL
+ * (`requestKey`, at `backendOrigin`).
+ *
+ * The class's `get`, `post`, `put`, `patch`, `delete` and `head` all call its `fetch` (Playwright
+ * 1.65; `theTestMapRecords.test.ts` fails should `get` or `post` stop doing so), so wrapping that
+ * once counts every context's calls, the `request` fixture's, `page.request`'s and each
+ * `playwright.request.newContext()`'s alike. A call that throws counts for none, and one started
+ * with no test running counts for no test, only for the stretch between tests when one is open;
+ * one answered after its test ended counts for the test it started in.
+ */
+export function recordApiCalls(context: APIRequestContext, backendOrigin: string): void {
+  backEnd = new URL(backendOrigin).origin;
+  const prototype = Object.getPrototypeOf(context) as { fetch: Fetch };
+  if (wrapped.has(prototype)) return;
+  wrapped.add(prototype);
+  const fetch = prototype.fetch;
+  prototype.fetch = async function (
+    this: APIRequestContext,
+    urlOrRequest,
+    options,
+  ): Promise<APIResponse> {
+    const into = counting();
+    const response = await fetch.call(this, urlOrRequest, options);
+    const method =
+      options?.method ?? (typeof urlOrRequest === 'string' ? 'GET' : urlOrRequest.method());
+    const key = requestKey(method.toUpperCase(), response.url(), backEnd);
+    if (key && into) into.requests.add(key);
+    return response;
+  };
+}
+
 type Test = typeof playwrightTest;
 
-/** `base`, recording the test map to `TEST_MAP_OUT` when it is set, else `base` itself. */
+/** Appends what a worker reached between two of its tests, unless it reached nothing. */
+function appendBetween(file: string, ended: Between | null) {
+  if (!ended?.requests.size) return;
+  const line = { between: true, start: ended.start, end: Date.now() };
+  appendFileSync(file, `${JSON.stringify({ ...line, requests: [...ended.requests].sort() })}\n`);
+}
+
+/** `base`, recording the test map into `TEST_MAP_OUT` when it is set, else `base` itself. */
 export function withTheTestMap(base: Test): Test {
   const out = process.env.TEST_MAP_OUT;
   if (!out) return base;
-  mkdirSync(dirname(out), { recursive: true });
-  return base.extend<{ testMapRecording: void }, { testMapBrowser: void }>({
+  mkdirSync(out, { recursive: true });
+  return base.extend<{ testMapRecording: void }, { testMapBrowser: void; testMapApiCalls: void }>({
     testMapBrowser: [
       async ({ browser }, use) => {
         patchBrowser(browser);
@@ -215,18 +316,34 @@ export function withTheTestMap(base: Test): Test {
       },
       { scope: 'worker', auto: true },
     ],
+    testMapApiCalls: [
+      async ({ playwright }, use, workerInfo) => {
+        // The back end's address as `fixtures.ts` reads it, once the worker runs.
+        const backendOrigin = process.env.BACKEND_URL || stack().backendURL;
+        const context = await playwright.request.newContext();
+        recordApiCalls(context, backendOrigin);
+        await context.dispose();
+        startBetween();
+        await use();
+        // After the last test's `afterAll`.
+        appendBetween(recordsFile(out, workerInfo.workerIndex), endBetween());
+      },
+      { scope: 'worker', auto: true },
+    ],
     testMapRecording: [
       async ({}, use, testInfo) => {
-        recording = { requests: new Set(), coverage: new Map() };
+        const file = recordsFile(out, testInfo.workerIndex);
+        appendBetween(file, endBetween());
+        startRecording();
         contexts = new Set();
         const start = Date.now();
         await use();
         await Promise.all([...contexts].map((context) => stopContext(context)));
         const end = Date.now();
-        const mine = recording;
-        recording = null;
+        const mine = endRecording()!;
+        startBetween();
         appendFileSync(
-          out,
+          file,
           `${JSON.stringify({
             spec: testInfo.titlePath[0],
             title: testInfo.titlePath.slice(1).join(' › '),

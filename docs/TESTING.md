@@ -357,6 +357,11 @@ otherwise pass against a still-loading page.
 Configuration: `front-end/playwright.config.ts` (auto-detects the worktree
 frontend port via `stack().frontendPort`).
 
+The config has two projects: `chromium-serial`, the spec files of the serial list (`front-end/e2e/serialSpecs.ts`), which need the stack to themselves, at one worker, and `chromium`, every other spec file.
+Its `workers` is `E2E_WORKERS`, one when it is unset or not a positive integer.
+`E2E_WORKERS` is for CI's shard script (`front-end/scripts/e2e-shards.ts`), which runs the serial project first and alone, then the other at the config's workers, two on CI's shards ([CI and the gate](implementation/testing/ci-and-the-gate.md#ci)); a plain `npx playwright test` with `E2E_WORKERS` above one would run the serial files beside the rest.
+A local run and `scripts/nm-test.sh` set none, so they run at one worker, the serial files among the rest.
+
 **Prerequisite**: Docker stack running with seeded test users.
 Email: `e2e@example.com` (default, change via `TEST_EMAIL` env var when seeding),
 plus the organization-less user `e2e-noorg@example.com` (change via `NO_ORG_EMAIL`).
@@ -371,6 +376,7 @@ A failed attempt's trace is `front-end/test-results/<test>/trace.zip`, and a ret
 A failed attempt also keeps its video (`video.webm`) and its final screenshot (`test-failed-1.png`) beside its trace, and an attempt that passes keeps neither (`video: 'retain-on-failure'`, `screenshot: 'only-on-failure'`), so on CI a flaky test's failed first attempt has both while its passing retry has only its trace.
 Open one with `npx playwright show-trace <path>` from `front-end/`, or from the HTML report (`npx playwright show-report`), which lists every attempt; on CI each has its own trace there, while on a local run only a failed attempt's opens, since a passing retry's trace file was removed when the retry passed.
 On CI a failed shard uploads `front-end/playwright-report/` and `front-end/test-results/` as the artifact `playwright-artifacts-shard-<n>`, kept 7 days; a flaky test fails its shard, so its failing attempt's trace is there too ([CI and the gate](implementation/testing/ci-and-the-gate.md#ci)).
+A shard runs its hand in two passes, so in that artifact each pass's report and traces are under its name: `playwright-report/serial/` and `test-results/serial/`, `playwright-report/parallel/` and `test-results/parallel/`.
 Which tests passed only on a retry over `dev`'s last runs is the nightly `e2e-retries` job's summary ([a flaky test fails the build](implementation/testing/ci-and-the-gate.md#ci)).
 A rerun empties `test-results/` before it starts, so read or copy a failure's output first, or give the rerun an output directory of its own with `--output=<a new directory>`.
 Reproducing a flake under load is [chasing a flake](implementation/testing/e2e-patterns.md#chasing-a-flake).

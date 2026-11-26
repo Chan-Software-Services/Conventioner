@@ -66,6 +66,7 @@ sources:
   - T422
   - T411
   - T496
+  - T568
 ---
 
 # E2E seeds
@@ -78,8 +79,8 @@ They live in `front-end/e2e/helpers/`; how a spec is written around them is [E2E
 **Every seed needs a verified user, and only `back-end/create_test_user.py` makes one.**
 The sign-up, `/register`, leaves its account unverified until the emailed link is opened, so a user it makes cannot log in; do not hand-roll the user document.
 [`scripts/seed_fixture.sh`](../../../scripts/seed_fixture.sh) runs the script for two users: `TEST_EMAIL` (`e2e@example.com`, owner of `Seed Test Org`) and `NO_ORG_EMAIL` (`e2e-noorg@example.com`), deliberately in no organization so `new-market-org.spec.ts` can exercise the zero-organization fallback.
-A spec needing more users calls `ensureVerifiedUser(email, password)` ([`helpers/verifiedUser.ts`](../../../front-end/e2e/helpers/verifiedUser.ts)) in `beforeAll`: it runs [`create_test_user.py`](../../../back-end/create_test_user.py) inside the back-end container ([`helpers/backendScript.ts`](../../../front-end/e2e/helpers/backendScript.ts); `E2E_BACKEND_CONTAINER` overrides the name) and is idempotent.
-The script exits 0 whether it created the user, found one, or failed to insert (it refuses outright, exiting non-zero, when `MONGODB_URI` is set, as it is to reach production, when neither `MONGODB_HOST` nor `MONGODB_URI` names a database, or when they name the primary checkout's MongoDB from the host, but every stack's back-end container sets `MONGODB_HOST=mongodb` alone), so the helper reads its output for one of the two outcomes that leave a usable user and throws otherwise: a seeding failure surfaces at the `beforeAll` that caused it, not later as a login timeout.
+A spec needing more users calls `ensureVerifiedUser(email, password)` ([`helpers/verifiedUser.ts`](../../../front-end/e2e/helpers/verifiedUser.ts)) in `beforeAll`: it runs [`create_test_user.py`](../../../back-end/create_test_user.py) inside the back-end container ([`helpers/backendScript.ts`](../../../front-end/e2e/helpers/backendScript.ts); `E2E_BACKEND_CONTAINER` overrides the name) and is idempotent, also when two workers make one account at once: the unique email index refuses the second insert, and it runs the script once more and passes on its "already exists" ([E2E patterns](e2e-patterns.md#specs-that-need-the-stack-to-themselves)).
+The script exits 0 whether it created the user, found one, or its insert answered no id (an insert the database refuses, as the unique email index refuses a second, raises and exits non-zero, and it refuses outright, exiting non-zero, when `MONGODB_URI` is set, as it is to reach production, when neither `MONGODB_HOST` nor `MONGODB_URI` names a database, or when they name the primary checkout's MongoDB from the host, but every stack's back-end container sets `MONGODB_HOST=mongodb` alone), so the helper reads its output for one of the two outcomes that leave a usable user and throws otherwise: a seeding failure surfaces at the `beforeAll` that caused it, not later as a login timeout.
 The script hashes the password at bcrypt's lowest cost, 4, where the app hashes at 12: a hash carries its cost, so a fixture account's sign-in checks it in about a millisecond against about 0.16 s at 12, and the suite signs in thousands of times a run.
 A sign-up through `/register` still hashes at 12, and [`test_the_app_hashes_at_bcrypts_full_cost.py`](../../../back-end/tests/test_the_app_hashes_at_bcrypts_full_cost.py) holds the app to it.
 A seed of many people makes them with one run of its bulk form, `create_test_user.py --bulk <password> <email>...`: each address made as the one-address form makes it, in one process with the password hashed once, an address already made left as it is.
@@ -90,9 +91,9 @@ A spec that needs an account not yet verified signs up through the real route, `
 ## Markets require an organization
 
 `POST /markets` answers 400 to a payload with no `organizationId`, an unknown organization, or one the caller is not a member of ([the organization document](../data/organization-document.md)).
-So anything that creates a market attaches one: [`helpers/seeds.ts`](../../../front-end/e2e/helpers/seeds.ts) exports `ensureTestOrgAuthenticated()` (for a request context already signed in, by `loginViaApi()` or, on `page.request`, by the page's own sign-in) and `ensureTestOrg()` (which logs in first), both reusing the user's first organization or creating `E2E Test Org`; the seed helpers return it as `orgId`.
+So anything that creates a market attaches one: [`helpers/seeds.ts`](../../../front-end/e2e/helpers/seeds.ts) exports `ensureTestOrgAuthenticated()` (for a request context already signed in, by `loginViaApi()` or, on `page.request`, by the page's own sign-in) and `ensureTestOrg()` (which logs in first), both reusing the user's first organization or creating `E2E Test Org`, under the stack's lock after reading again, so two workers that both find none make one ([E2E patterns](e2e-patterns.md#specs-that-need-the-stack-to-themselves)); the seed helpers return it as `orgId`.
 A spec that creates a market through the UI calls `ensureTestOrg()` in `beforeAll`, or the create dialog's organization list is empty and its submit stays disabled.
-`ensureTestOrgs(count)` is for a spec whose subject is a choice of organization, which a split run (CI shards) no longer guaranteed by accident.
+`ensureTestOrgs(count)` is for a spec whose subject is a choice of organization, which a split run (CI shards) no longer guaranteed by accident; it reads the user's organizations and creates the rest under the stack's lock, so two workers that both find too few make the rest once.
 `ensureOrganizationAdmin(orgId, person)` ([`helpers/grantMarketRole.ts`](../../../front-end/e2e/helpers/grantMarketRole.ts)) makes a verified user an admin of that organization, through the owner's session the request carries, and so Admin on every market it holds.
 It is idempotent across runs, so it reads the organization first: an admin already is left as they are, a member is made an admin by the place change their row's "Make admin" sends, and anyone else is invited and accepts, as below.
 Every spec using it adds its own account to the shared `E2E Test Org`, so that account is Admin on every market seeded there and no other spec signs in as it.
@@ -166,7 +167,7 @@ Each helper is one block, what it leaves and its notes, one note a line; a new h
 **`seedPeopleAtScale()`** ([file](../../../front-end/e2e/helpers/seedPeopleAtScale.ts))
 
 - Leaves: a `form` market in `applications` whose organization has 150 people, the case every people list and chooser must hold (T204):
-  - 153 accounts, `person-001@people-at-scale.test` to `person-153@people-at-scale.test`, made by one `create_test_user.py --bulk`
+  - 153 accounts, `person-001@people-at-scale.test` to `person-153@people-at-scale.test`, made by one `create_test_user.py --bulk` under the stack's lock, since every spec that seeds people at scale asks for the same addresses
   - an organization of its own, "Example People Org" and a unique number, owned by the seed owner, persons 001 to 003 its admins and 004 to 153 its members, each invited and accepting one at a time through `placeInOrganization()`
   - 5 open applications
   - Editor on the market for the first 20 members, invited and accepting through `grantMarketRole()`
@@ -259,6 +260,7 @@ Each helper is one block, what it leaves and its notes, one note a line; a new h
     - its name 72 characters and its admin's and member's addresses 32 and 43, found by name on a later run, so Manage organization draws its people
     - holding a draft of its own, made anew on each run and dated after every other seeded market, its admin also Editor on it, so Manage market draws an organization's people and a market role that adds nothing (E38/F12/S01)
     - the organizer always has a second organization, and "the new-market dialog" always draws the organization select rather than naming one (T148)
+    - it, its admin's and member's places, and the two invitations sent only when none waits are made under the stack's lock, so two workers seeding at once make them once ([E2E patterns](e2e-patterns.md#specs-that-need-the-stack-to-themselves))
     - an admin's invitation to a long address waiting on it, beside `SCREENS_INVITEE`'s member one, so Manage organization draws "Invited" with a row of each place (T538); sent only when no admin's invitation waits, since the organization is the same on every seed of a stack and an invitation waits 14 days
   - the review market's cards lead with two answers and fold the rest behind "N more answers"
   - a `seedLayout()` draft whose Upper Hall layout has its floorplan and no scale, which the sweeps walk calibrating (T257)

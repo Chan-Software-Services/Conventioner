@@ -3,6 +3,7 @@ import { BACKEND_URL, TEST_USER } from '../fixtures';
 import { runBackendScript } from './backendScript';
 import { loginViaApi } from './seeds';
 import { grantMarketRole, placeInOrganization } from './grantMarketRole';
+import { withStackLock } from './stackLock';
 import { seedApplicationWithStatus, seedPhaseMarket, transitionMarket } from './seedPhaseMarket';
 import { uniqueMarketName } from './uniqueName';
 
@@ -62,10 +63,14 @@ function signingIn(person: SeededPerson) {
 /**
  * Make the verified accounts with one run of `create_test_user.py --bulk`, the one maker of a
  * login-ready account, and answer each one's id from what it printed: "created <email> <id>" or
- * "exists <email> <id>", so a second run finds the first run's accounts.
+ * "exists <email> <id>", so a second run finds the first run's accounts. The script reads which
+ * accounts exist and then inserts the rest, and every spec that seeds people at scale asks for the
+ * same addresses, so it runs under the stack's lock: a second worker waits, then finds them all.
  */
-function ensureVerifiedPeople(emails: string[], password: string): SeededPerson[] {
-  const output = runBackendScript('create_test_user.py', '--bulk', password, ...emails);
+async function ensureVerifiedPeople(emails: string[], password: string): Promise<SeededPerson[]> {
+  const output = await withStackLock('the people at scale accounts', async () =>
+    runBackendScript('create_test_user.py', '--bulk', password, ...emails),
+  );
   const ids = new Map<string, string>();
   for (const line of output.split('\n')) {
     const [outcome, email, id] = line.trim().split(' ');
@@ -93,7 +98,7 @@ function ensureVerifiedPeople(emails: string[], password: string): SeededPerson[
  * answers, never a number typed twice.
  */
 export async function seedPeopleAtScale(request: APIRequestContext): Promise<PeopleAtScaleSeed> {
-  const people = ensureVerifiedPeople(
+  const people = await ensureVerifiedPeople(
     Array.from({ length: PEOPLE }, (_, i) => personAtScale(i + 1)),
     PEOPLE_AT_SCALE_PASSWORD,
   );
