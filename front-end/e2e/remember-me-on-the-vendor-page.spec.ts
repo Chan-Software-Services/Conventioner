@@ -23,9 +23,9 @@ let market: ApplicantMarketSeed;
 
 test.beforeEach(async ({ request }) => {
   // Every signed-out vendor page asks to resume, counted per caller (`RESUME_PER_CALLER` in
-  // `back-end/sign_in_limits.py`), and the serial run is one caller: by this spec the run's earlier
-  // pages may have used them up, and a refused resume draws the sign-in, as no cookie does. The
-  // counters start again here.
+  // `back-end/sign_in_limits.py`), and every page of a run reaches the back end as one caller: by
+  // this spec the run's earlier pages may have used them up, and a refused resume draws the
+  // sign-in, as no cookie does. The counters start again here.
   mongoEval('db.sign_in_attempts.deleteMany({})');
   market = await seedApplicantMarket(request, BACKEND_URL, TEST_USER.email, TEST_USER.password);
 });

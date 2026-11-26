@@ -130,7 +130,8 @@ for (const { name, viewport } of WIDTHS) {
         await login.waitForMarkets();
       } finally {
         deleteUser(email);
-        // The serial run is one caller, and these tries counted against it.
+        // Every page of a run reaches the back end as one caller, and these tries counted
+        // against it.
         mongoEval('db.sign_in_attempts.deleteMany({})');
       }
     });
@@ -164,7 +165,8 @@ for (const { name, viewport } of WIDTHS) {
         await expect(page).toHaveURL(/\/reset-password-request$/);
       } finally {
         deleteUser(email);
-        // The serial run is one caller, and these tries counted against it.
+        // Every page of a run reaches the back end as one caller, and these tries counted
+        // against it.
         mongoEval('db.sign_in_attempts.deleteMany({})');
       }
     });
@@ -197,7 +199,8 @@ for (const { name, viewport } of WIDTHS) {
         await expectAccessible('asking for a reset link, past its limit');
       } finally {
         deleteUser(email);
-        // The serial run is one caller, and these requests counted against it.
+        // Every page of a run reaches the back end as one caller, and these requests counted
+        // against it.
         mongoEval('db.sign_in_attempts.deleteMany({})');
       }
     });
