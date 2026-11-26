@@ -13,9 +13,13 @@ vi.mock('@/utils/organizations', async (importOriginal) => ({
   fetchOrganizations: () => fetchOrganizations(),
 }));
 const post = vi.fn();
+const get = vi.fn();
 vi.mock('@/utils/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/utils/api')>()),
-  api: { post: (...args: unknown[]) => post(...args) },
+  api: {
+    post: (...args: unknown[]) => post(...args),
+    get: (...args: unknown[]) => get(...args),
+  },
 }));
 
 import { createMemoryHistory, createRouter } from 'vue-router';
@@ -164,6 +168,69 @@ describe('Manage organization from its address', () => {
 
     expect(manage(wrapper).props('manageOpen')).toBe(false);
     expect(router.currentRoute.value.query).toEqual({});
+  });
+});
+
+/** The page keeps one Manage organization, which it opens for whichever organization is asked. */
+describe('Manage organization, opened again from the list', () => {
+  const managed = (org: typeof OLD) => ({
+    ...org,
+    ownerEmail: 'owner@example.com',
+    adminPeople: [],
+    memberPeople: [],
+    marketsWithOwnRole: {},
+  });
+
+  it('starts with both invite rows empty after Escape or the close button', async () => {
+    fetchOrganizations.mockReset().mockResolvedValue([managed(OLD), managed(NEW)]);
+    get.mockResolvedValue({ data: { invitations: [] } });
+    const router = await at('/organizations');
+    const wrapper = mount(OrganizationsView, {
+      attachTo: document.body,
+      global: { plugins: [router] },
+    });
+    await flushPromises();
+
+    const find = (testid: string) => wrapper.find(`[data-testid="${testid}"]`);
+    const press = async (testid: string) => {
+      await find(testid).trigger('click');
+      await flushPromises();
+    };
+    const manage = async ({ name }: typeof OLD) => {
+      const card = wrapper
+        .findAll('[data-testid="organization-card"]')
+        .find((each) => each.text().includes(name))!;
+      await card.get('[data-testid="organizations-manage-button"]').trigger('click');
+      await flushPromises();
+      expect(find('manage-org-window').text()).toContain(name);
+    };
+    const field = (row: string) =>
+      wrapper.get<HTMLInputElement>(`[data-testid="manage-org-add-${row}-input"]`);
+    /** Opens both invite rows and types an address in each, answering what each field came up with. */
+    const openBothAndType = async () => {
+      const cameUpWith: string[] = [];
+      for (const row of ['admin', 'member']) {
+        await press(`manage-org-add-${row}-button`);
+        cameUpWith.push(field(row).element.value);
+        await field(row).setValue(`new.${row}@example.com`);
+      }
+      return cameUpWith;
+    };
+
+    await manage(OLD);
+    expect(await openBothAndType()).toEqual(['', '']);
+    await field('member').trigger('keydown', { key: 'Escape' });
+    await flushPromises();
+    expect(find('manage-org-window').exists()).toBe(false);
+
+    await manage(NEW);
+    expect(await openBothAndType()).toEqual(['', '']);
+    await press('manage-org-close-button');
+    expect(find('manage-org-window').exists()).toBe(false);
+
+    await manage(NEW);
+    expect(await openBothAndType()).toEqual(['', '']);
+    wrapper.unmount();
   });
 });
 
