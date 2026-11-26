@@ -1,7 +1,7 @@
 ---
 layer: business
 kind: concept
-verified: 2026-10-29
+verified: 2026-11-26
 ---
 
 # Intake mode
@@ -11,7 +11,7 @@ verified: 2026-10-29
 ## Rules
 
 - [Intake mode decides how vendors arrive](../rules/intake-mode-decides-how-vendors-arrive.md): imported or applying online, exactly one, fixed after draft.
-- [A gated market answers as absent](../rules/a-gated-market-answers-as-absent.md): a CSV market answers its vendors as no market at all until its results are published.
+- [A gated market answers as absent](../rules/a-gated-market-answers-as-absent.md): a CSV market answers its vendors as no market at all until its results are published or it reaches its market days.
 - [A vendor signs in before they have applied](../rules/a-vendor-signs-in-before-applying.md): how a vendor reaches a form market's application.
 - [Publish results waits for the allocation](../rules/publish-results-waits-for-the-allocation.md): one rule for both kinds of market, and Publish market waits for it.
 - [Review needs an import](../rules/review-needs-an-import.md): on the CSV path the import is the collection, so review waits for one.

@@ -4,7 +4,7 @@ kind: flow
 describes:
   - front-end/src/views/AttendanceStatusView.vue
   - front-end/src/components/vendorPage/VendorCheckIn.vue
-verified: 2026-11-19
+verified: 2026-11-26
 sources:
   - brain-dump/2026-10-19#15
   - E10/F01/S02
@@ -86,7 +86,7 @@ A scanned code is used once: the page reloaded checks nobody in again.
 On a device vendors share at the door, a scanned code checks in only the vendor it is held for: the first address sent a sign-in code, or the vendor whose sign-in ran out as it checked them in; anyone else who signs in next is not checked in, and types the code or scans it again.
 Before any address was sent a code, the first sign-in, a remembered device's included, is taken for the scanner's own and checked in.
 The seats shown are the stored assignment, so a vendor placed, swapped or freed by hand is sent where they were put (bug 1).
-It works alike on a Google Form market, whose vendor page opens once its results are published ([the Google Form path](the-google-form-path.md)).
+It works alike on a Google Form market, whose vendor page opens once its results are published or it reaches its market days ([the Google Form path](the-google-form-path.md)).
 Covered by:
 
 - `a-vendor-checks-out.spec.ts`: the scan at a market with the switch off, and a second scan once checked in

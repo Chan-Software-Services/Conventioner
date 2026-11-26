@@ -5,7 +5,7 @@ describes:
   - back-end/api/markets.py#save_plan
   - back-end/market_documents.py#market_serves_applicants
   - front-end/src/components/elements/ElementIntakeMode.vue
-verified: 2026-11-16
+verified: 2026-11-26
 sources:
   - wayfinding/v0-1-0/map
   - wayfinding/v0-1-0/06
@@ -64,7 +64,7 @@ After that whoever the Market Setup row lets in, an Editor and above by default,
 - `market_serves_applicants` in [`back-end/market_documents.py`](../../../back-end/market_documents.py) is the one statement of "this market's vendors apply on its page", read by both lookups and by the vendor's own read, which leaves out a CSV market's answers ([a gated market answers as absent](a-gated-market-answers-as-absent.md)).
 - `import_refusal` in [the CSV import](../../implementation/modules/csv-import.md) refuses a form market; on the CSV path the rail offers "Import responses" from Draft and "Redo import" in Review ([review needs an import](review-needs-an-import.md)).
 - An application does not record how it arrived: the market's mode already says, so a field on the application would be a second copy ([ADR 0011](../../adr/0011-re-import-upserts-on-market-and-email.md)).
-- `back-end/tests/test_market_intake_mode.py` pins the default, the one writer and the freeze.
+- `back-end/tests/test_market_intake_mode.py` pins the default, and `back-end/tests/test_the_plan_saves_only_the_plan.py` that the plan write sets it on a draft and refuses a change after.
 
 ## Superseded
 

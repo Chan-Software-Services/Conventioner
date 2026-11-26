@@ -162,8 +162,9 @@ def _published_market_doc(market_id="test-market-1", name="Test Market",
     """A minimal market document the slug lookup can resolve.
 
     Applicant login serves a market with a vendor page (``vendor_page_market_by_slug``). A market
-    that takes its vendors by CSV import has none before its results are published, and answers
-    here exactly as a market that does not exist, which is what ``intake_mode="csv"`` is for.
+    that takes its vendors by CSV import has none before its results are out (published, or its
+    market days reached unpublished), and answers here exactly as a market that does not exist,
+    which is what ``intake_mode="csv"`` is for.
     """
     slug = market_name_slug(name)
     return {

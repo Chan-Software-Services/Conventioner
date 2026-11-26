@@ -4,7 +4,8 @@ Intake mode (E03/F02/S01) says how vendors reach a market. This is the gate it f
 public form and the save, serves form-intake markets only, and before its results a CSV market's
 sign-in and vendor read answer as absent too; the check-in endpoints serve every published market
 regardless, because how a vendor entered a market has no bearing on whether they can scan in on the
-day. A CSV market's vendor page once its results are published is `test_a_google_form_markets_page`.
+day. A CSV market's vendor page once its results are out (published, or its market days reached
+unpublished) is `test_a_google_form_markets_page`.
 """
 from types import SimpleNamespace
 

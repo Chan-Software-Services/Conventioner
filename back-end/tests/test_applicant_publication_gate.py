@@ -2,9 +2,9 @@
 
 The rule (``docs/business/rules/an-applicant-never-reads-a-verdict-early.md``):
     - An applicant's status reads ``open``, "Submitted", whatever is stored, both before and
-      after results are published.
-    - After publication the response also carries an outcome, a table or none, and still no
-      verdict.
+      after the results are out (published, or the market days reached unpublished).
+    - Once the results are out the response also carries an outcome, a table or none, and still
+      no verdict.
     - The organizer always sees the stored status.
 
 All three are tested here, on the applicant-visible-status function and on the applicant's and
@@ -44,16 +44,16 @@ import market_write as MarketWrite
 
 
 @pytest.mark.parametrize("status", list(ApplicationStatus))
-def test_before_publication_every_application_reads_submitted(status):
+def test_before_the_results_are_out_every_application_reads_submitted(status):
     """One status, whatever is stored (E36/F05/S01): the rules judge an application as it is saved,
     so "Under Review" beside "Submitted" told an applicant a rule had rejected them."""
     assert applicant_visible_status(status, False) == ApplicationStatus.OPEN
 
 
 @pytest.mark.parametrize("status", list(ApplicationStatus))
-def test_after_publication_no_verdict_is_read_either(status):
-    """After publication the applicant reads an outcome, a table or none, and never a verdict
-    (E36/F05/S02): rejected and approved-without-a-seat read the same."""
+def test_once_the_results_are_out_no_verdict_is_read_either(status):
+    """Once the results are out the applicant reads an outcome, a table or none, and never a
+    verdict (E36/F05/S02): rejected and approved-without-a-seat read the same."""
     assert applicant_visible_status(status, True) == ApplicationStatus.OPEN
 
 
@@ -85,8 +85,8 @@ def test_application_response_hides_rejection_when_unpublished():
     assert response["status"] == ApplicationStatus.OPEN.value
 
 
-def test_application_response_reads_an_outcome_after_publication_never_a_verdict():
-    """After publication, the applicant reads whether they have a table (E36/F05/S02)."""
+def test_application_response_reads_an_outcome_once_the_results_are_out_never_a_verdict():
+    """Once the results are out, the applicant reads whether they have a table (E36/F05/S02)."""
     response = _application_response(_app(ApplicationStatus.REVIEWER_APPROVED), True)
     assert response["status"] == ApplicationStatus.OPEN.value
     assert response["outcome"] == "not_assigned"

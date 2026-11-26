@@ -1,7 +1,7 @@
 ---
 layer: business
 kind: flow
-verified: 2026-11-04
+verified: 2026-11-26
 sources:
   - wayfinding/real-market-readiness/map
   - brain-dump/2026-10-19#1
@@ -93,7 +93,7 @@ Covered by:
 
 **Status:** Works, read from the code at T202 ticket 05 ([ADR 0022](../../adr/0022-the-vendor-page-is-signed-in.md)).
 
-1. Before the organizer publishes results, the market's address, `/<slug>`, and its vendor page's, `/<slug>/vendor`, read "page not found", exactly as an address that names no market ([a gated market answers as absent](../rules/a-gated-market-answers-as-absent.md)).
+1. Until the organizer publishes results or the market reaches its market days, the market's address, `/<slug>`, and its vendor page's, `/<slug>/vendor`, read "page not found", exactly as an address that names no market ([a gated market answers as absent](../rules/a-gated-market-answers-as-absent.md)).
 2. Once results are published (or the market reached its market days), the market page reads "The map isn't published yet.", or shows the map once it is open, with "Vendor sign-in" (or "Your vendor page" for a tab signed in for that market); the vendor page names the market and its dates and asks for an email address, then the six-digit code sent to it ([a vendor signs in before they have applied](../rules/a-vendor-signs-in-before-applying.md)).
 3. With the address their response gave, the vendor reads "You have a table" and each day's table, or "You did not get assigned"; the page shows no application, and no "Submitted" date, since nobody applies on it.
 4. An address the market has no vendor for reads "There's no application from this address at <market>. Use the address you gave on the market's form, or ask the organizer."
@@ -109,7 +109,7 @@ Covered by:
 - [The setup settles on leaving draft](../rules/the-setup-settles-on-leaving-draft.md): the plan is complete before "Import responses".
 - [No question is inferred required](../rules/no-question-is-inferred-required.md).
 - [What an import may leave unasked](../rules/what-an-import-may-leave-unasked.md): a file with no "how many days" column imports with no personal limit.
-- [A gated market answers as absent](../rules/a-gated-market-answers-as-absent.md): this market has no application form to fill in, and its vendor page answers once its results are published.
+- [A gated market answers as absent](../rules/a-gated-market-answers-as-absent.md): this market has no application form to fill in, and its vendor page answers once its results are published or it reaches its market days.
 - [Publish results waits for the allocation](../rules/publish-results-waits-for-the-allocation.md): on this path too, and the market goes live only after it.
 
 Its gaps worth a spec are in [walking the flows](../../implementation/testing/walking-the-flows.md#coverage-map).
