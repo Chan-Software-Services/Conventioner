@@ -198,7 +198,8 @@ export function timingsFromReports(
   const missing = listed.filter((file) => !(file in seconds));
   if (missing.length > 0) {
     throw new Error(
-      `${missing.length} listed spec files are in no report: ${missing.join(', ')}. ` +
+      `${counted(missing.length, 'listed spec file')} ${missing.length === 1 ? 'is' : 'are'} ` +
+        `in no report: ${missing.join(', ')}. ` +
         "Download every shard's report from one run of this suite.",
     );
   }
@@ -228,8 +229,8 @@ const tenth = (seconds: number) => Math.round(seconds * 10) / 10;
 /** A list's spec files in alphabetical order, each once. */
 const sorted = (files: Iterable<string>) => [...new Set(files)].sort();
 
-/** The noun after a count of spec files: "1 spec file", "2 spec files". */
-const specFileNoun = (count: number) => (count === 1 ? 'spec file' : 'spec files');
+/** A count and its noun, in the singular for one: "1 spec file", "2 spec files". */
+const counted = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`;
 
 /** Timings read from JSON, refusing anything but a non-empty object of finite, non-negative seconds. */
 export function parseTimings(text: string): Timings {
@@ -411,8 +412,8 @@ export function checkShards(
     const dealt = sorted(deal.files);
     if (JSON.stringify(dealt) !== JSON.stringify(selection)) {
       problems.push(
-        `${shard} dealt ${dealt.join(', ')}, not the ${selection.length} ` +
-          `${specFileNoun(selection.length)} the selection named`,
+        `${shard} dealt ${dealt.join(', ')}, not the ` +
+          `${counted(selection.length, 'spec file')} the selection named`,
       );
     }
   }
@@ -490,7 +491,7 @@ export function shardSummary(
   const subject =
     ran.scope === 'whole'
       ? 'Every spec file the suite lists'
-      : `The ${ran.files} ${specFileNoun(ran.files)} the test map named, ` +
+      : `The ${counted(ran.files, 'spec file')} the test map named, ` +
         `of the ${ran.listed} the suite lists,`;
   const opening =
     problems.length > 0 ? `Dealt by ${source}.` : `${subject} ran, dealt by ${source}.`;
@@ -505,7 +506,7 @@ export function shardSummary(
     const share = slowest > 0 ? Math.round((spread / slowest) * 100) : 0;
     lines.push(
       '',
-      `Spread: ${Math.round(spread)} seconds between the fastest and the slowest shard ` +
+      `Spread: ${counted(Math.round(spread), 'second')} between the fastest and the slowest shard ` +
         `(${share}% of the slowest).`,
     );
   }
@@ -775,8 +776,8 @@ function runShard(
   const minutes = hand.reduce((sum, file) => sum + (timings[file] ?? fallback), 0) / 60;
   const dealtFrom =
     scope === 'whole'
-      ? `${files.length} spec files`
-      : `the ${files.length} named ${specFileNoun(files.length)} (of ${listed.length} listed)`;
+      ? counted(files.length, 'spec file')
+      : `the ${counted(files.length, 'named spec file')} (of ${listed.length} listed)`;
   console.log(
     `e2e shard ${current}/${total}: ${hand.length} of ${dealtFrom}, ` +
       `about ${minutes.toFixed(1)} minutes of tests by ${source}`,
@@ -857,7 +858,7 @@ function checkCommand(
     writeFileSync(publish, `${JSON.stringify(timings, null, 2)}\n`);
     const minutes = Object.values(timings).reduce((sum, value) => sum + value, 0) / 60;
     const note =
-      `Published ${TIMINGS_ARTIFACT}: ${Object.keys(timings).length} spec files, ` +
+      `Published ${TIMINGS_ARTIFACT}: ${counted(Object.keys(timings).length, 'spec file')}, ` +
       `${minutes.toFixed(1)} minutes of tests.\n`;
     console.log(note);
     if (summaryFile) appendFileSync(summaryFile, `\n${note}`);
@@ -897,7 +898,7 @@ function refresh(dirs: readonly string[]): number {
   writeFileSync(timingsFile(), `${JSON.stringify(seconds, null, 2)}\n`);
   const minutes = Object.values(seconds).reduce((sum, value) => sum + value, 0) / 60;
   console.log(
-    `${timingsFile()}: ${files} spec files from ${runs.length} runs, ` +
+    `${timingsFile()}: ${counted(files, 'spec file')} from ${counted(runs.length, 'run')}, ` +
       `${minutes.toFixed(1)} minutes of tests`,
   );
   return 0;
