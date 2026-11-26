@@ -802,9 +802,10 @@ class End(NamedTuple):
     outputs: dict
 
 
-# Each end a needed job can reach. `suite` and `e2e-select` set their outputs in their last step, so
-# one that did not succeed set none, and each reads as empty. A `suite` that succeeded printed a
-# word, and a whole decision of `e2e-select` wrote its scope alone.
+# The ends a needed job can reach, one list of shards and its specs standing for any the selection
+# names. `suite` and `e2e-select` set their outputs in their last step, so one that did not succeed
+# set none, and each reads as empty. A `suite` that succeeded printed a word, and a whole decision
+# of `e2e-select` wrote its scope alone.
 NOT_SUCCEEDED = ["failure", "cancelled", "skipped"]
 ENDS = {
     "suite": [
@@ -823,7 +824,7 @@ ENDS = {
 
 
 @cache
-def needed_outputs(name):
+def needed_jobs(name):
     """Each job that job `name` needs, with the names of the outputs it declares."""
     jobs_found = workflow_jobs()
     needs = jobs_found[name].get("needs", "").strip("[]")
@@ -834,7 +835,7 @@ def needed_outputs(name):
 def job_cases(name):
     """Every run job `name`'s condition can decide: each trigger, the run cancelled or not, and each
     end of each job it needs."""
-    needed = needed_outputs(name)
+    needed = needed_jobs(name)
     return [
         {"event": event, "ref": ref, "base_ref": base_ref, "cancelled": cancelled, "needs": dict(zip(needed, ends))}
         for (event, ref, base_ref), cancelled, *ends in product(TRIGGERS, [False, True], *(ENDS[n] for n in needed))
@@ -851,7 +852,7 @@ def job_context(name, case):
         "cancelled()": case["cancelled"],
         "success()": not case["cancelled"] and all(end.result == "success" for end in case["needs"].values()),
     }
-    for needed, outputs in needed_outputs(name).items():
+    for needed, outputs in needed_jobs(name).items():
         end = case["needs"][needed]
         context[f"needs.{needed}.result"] = end.result
         context.update({f"needs.{needed}.outputs.{output}": end.outputs[output] for output in outputs})
@@ -862,7 +863,8 @@ def assert_the_job_runs_exactly(name, expected):
     """Job `name`'s `if:` runs it in each of its cases that `expected` says, and in no other."""
     condition = workflow_jobs()[name]["if"]
     for case in job_cases(name):
-        assert evaluate(condition, job_context(name, case)) == expected(case), case
+        # As a string, which pytest prints whole: it cuts a dict short.
+        assert evaluate(condition, job_context(name, case)) == expected(case), str(case)
 
 
 def test_the_workflow_has_exactly_these_jobs_suite_first():
@@ -1450,7 +1452,7 @@ def test_the_advisory_scan_reads_no_word_so_a_warm_push_and_every_nightly_run_sc
     # and every push; only a trial commit skips it. gitleaks, in real-data-and-workflows, stays
     # skipped on a warm push, as each of the six above is.
     assert advisories["needs"] == "real-data-and-workflows"
-    # A case holds only what the job needs, so a condition reading `suite`'s word would raise.
+    # Its context holds nothing of a job it does not need, so a condition reading `suite`'s word raises.
     assert_the_job_runs_exactly(
         "python-advisories",
         lambda case: not case["cancelled"] and case["event"] != "merge_group",
