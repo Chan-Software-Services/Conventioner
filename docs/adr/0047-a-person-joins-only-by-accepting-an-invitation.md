@@ -6,6 +6,7 @@ describes:
 verified: 2026-11-24
 sources:
   - T538
+  - T647
 status: accepted
 ---
 
@@ -32,6 +33,7 @@ Only someone signed in with that address accepts it, on the Invitations page.
   It names who invited them, to what, as what and until when, and points at the Invitations page.
   A link that accepted by itself would let whoever holds the email join, a forwarded copy included; signing in with the address is what proves it is theirs.
 - **An invitation waits 14 days**, and inviting the address again replaces it, so inviting again is how an organizer resends.
+  The replaced invitation keeps its id, so a withdrawal names the send it was confirmed for, and one that names an earlier send is refused.
 - **Transferring an organization's ownership answers alike too**: to an address outside it, it answers "Transfer ownership only to one of the organization's admins or members.", whether or not the address has an account.
 - **Nothing migrates**: every role and place held before this stands.
 

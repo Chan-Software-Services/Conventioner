@@ -12,6 +12,7 @@ describes:
 verified: 2026-11-24
 sources:
   - T538
+  - T647
 ---
 
 # Answering an invitation
@@ -29,7 +30,7 @@ No place in the app bar leads to it.
 
 Covered by:
 
-- [`answering-an-invitation.spec.ts`](../../../front-end/e2e/answering-an-invitation.spec.ts), O1 to O4 end to end at 1440 and 390, through [`InvitationsPage.ts`](../../../front-end/e2e/pages/InvitationsPage.ts) and the invitations [`helpers/invitations.ts`](../../../front-end/e2e/helpers/invitations.ts) sends
+- [`answering-an-invitation.spec.ts`](../../../front-end/e2e/answering-an-invitation.spec.ts), O1 to O4 end to end at 1440 and 390, through [`InvitationsPage.ts`](../../../front-end/e2e/pages/InvitationsPage.ts) and the invitations [`helpers/invitations.ts`](../../../front-end/e2e/helpers/invitations.ts) sends, the one O4 withdraws named by its `sentAt`
 - [`screen-sweeps-*.spec.ts`](../../design-system.md#what-keeps-this-true), two invitations waiting, none, and the Markets list's line
 - [`theInvitationsPage.test.ts`](../../../front-end/src/__tests__/theInvitationsPage.test.ts), every state and answer below
 

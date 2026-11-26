@@ -55,6 +55,7 @@ sources:
   - T504
   - T538
   - T452
+  - T647
 ---
 
 # The market's history
@@ -327,7 +328,7 @@ One block per action, in the order of [the actions table](../modules/market-acti
 - `invited`: an address invited to a role ([invitations](../modules/invitations.md)), under the row that gives the role
   - Subject: `email`, the address alone, whether or not it has an account
   - Detail: `role`, the role it offers; inviting the address again records again, with the new role; read "<actor> invited <email> as an Editor"
-- `invitation_withdrawn`: a waiting invitation withdrawn, under the row that gives its role
+- `invitation_withdrawn`: a waiting invitation withdrawn, under the row that gives its role; a withdrawal naming a send the invitation no longer stands at is refused and records nothing
   - Subject: `email`
   - Detail: `role`; read "<actor> withdrew the invitation to <email>"
 - `invitation_declined`: an invitation declined by the person it was sent to, through the unasked door `AN_INVITEE_ANSWERS`, under the row that gives its role
