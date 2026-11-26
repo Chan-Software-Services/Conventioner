@@ -131,7 +131,7 @@ The evidence is `.lavish/aesthetics-2026-09-20.html`; the decisions were taken o
 A value not in this file does not belong in a component.
 The product had no shared component layer, and that was the root cause of everything aesthetic: at the walk, 17 radius declarations, 24 font sizes, 32 spacing values, and 351 hardcoded hex colours against 704 token uses.
 Do not add a 72nd set of local decisions: reach for the tokens and the primitives.
-[`front-end/src/assets/base.css`](../front-end/src/assets/base.css) is where these become tokens, [`front-end/src/assets/primitives.css`](../front-end/src/assets/primitives.css) holds the primitives, and the checks in `E16/F01`, among them the Stylelint rules of [`front-end/stylelint.config.js`](../front-end/stylelint.config.js), are what keep them there.
+[`front-end/src/assets/base.css`](../front-end/src/assets/base.css) is where these become tokens, [`front-end/src/assets/primitives.css`](../front-end/src/assets/primitives.css) holds the primitives, and the checks in `E16/F01` and `E16/F02`, among them the Stylelint rules of [`front-end/stylelint.config.js`](../front-end/stylelint.config.js), are what keep them there.
 
 ## How this was decided
 
@@ -567,9 +567,10 @@ An icon is added when a screen uses it, and [`everyIconIsUsed.test.ts`](../front
 
 Tokens alone cannot fix what is actually wrong. A `--radius-control` does not stop a file writing `height: 45px`, and the concentrated damage is exactly there: five control heights on the login screen, ten on Market Setup, four disabled treatments, sixty button-ish class names, two designs for the same `Manage` button.
 
-Three primitives own height, padding, radius, type and the disabled state, and `primitives.css` holds the one focus border every button draws and the one focus halo every other control wears. They live in `front-end/src/assets/primitives.css`, and `src/__tests__/primitives.test.ts` is the reference a migration checks against.
+`.btn` and `.field` own height, padding, radius, type and the disabled state, `.chip` its padding, radius and type, and `primitives.css` holds the shared focus rules, a border for a button and a halo for a link, a `summary` and any other keyboard stop but a field, which a component's own rule may redraw, as set out below.
+They live in `front-end/src/assets/primitives.css`, and `src/__tests__/primitives.test.ts` is the reference a migration checks against.
 
-**Every global rule is in one cascade layer, `global`**: `main.css` imports `base.css` and `primitives.css` into it and holds its own rules in it, so a component's own rule, which is in no layer, outranks every global one whatever its specificity or the order the sheets arrive in.
+**Every rule of the global sheets is in one cascade layer, `global`**: `main.css` imports `base.css` and `primitives.css` into it and holds its own rules in it, so a component's own rule, which is in no layer, outranks each of theirs whatever its specificity or the order the sheets arrive in.
 The order is not the same everywhere: the dev server injects `main.css` before each component's style, while a production build links a shared chunk's CSS before the entry's.
 Without the layer a component rule in a shared chunk that tied a global one on specificity won on the dev server and lost in production, as every `ScrollBox` scroller that is a Tab stop did: it drew the outer halo of the `[tabindex='0']` rule, which the dialog or panel around it cut off, in place of its own inset one.
 A global sheet names no layer of its own, and `primitives.test.ts` fails on a rule of `main.css` outside `global`.
@@ -849,7 +850,7 @@ Prettier leaves the file alone (`front-end/.prettierignore`), so the formatter a
 
 **The lint fails on every error and every warning but `orphaned-tokens`, and prints how many of those it allowed.**
 That rule takes every colour to be a component's fill or ink, while most of Conventioner's colours draw a layout, a chart, a line or a shade, which no primitive uses; the contract keeps every token rather than dropping those to quiet it.
-[`front-end/src/__tests__/designMd.test.ts`](../front-end/src/__tests__/designMd.test.ts) holds the allowance to exactly the colours no component uses, so it cannot hide another finding, and a bump of the pinned linter that finds something new fails its own pull request ([ADR 0048](adr/0048-the-design-contract-is-generated-from-the-css.md)).
+[`front-end/src/__tests__/designMd.test.ts`](../front-end/src/__tests__/designMd.test.ts) holds the allowance to exactly the colours no component uses, so it cannot hide another finding, and a bump of the pinned linter that finds a new error or warning fails its own pull request ([ADR 0048](adr/0048-the-design-contract-is-generated-from-the-css.md)).
 
 **The generator refuses, and writes nothing, rather than write a contract that is wrong.**
 It refuses a token declared twice, a token whose value holds a backslash, which a table cell cannot show as written, a family `main.css` does not load, a component's font size that is not a `--text-*` token, a component selector no rule of `primitives.css` has, a component whose group `design-md-content.ts` does not list, a rule of `primitives.css` that nests a rule or an at-rule, whose declarations no line would write, and words that name a token or class the CSS no longer has; each refusal says what is wrong.
