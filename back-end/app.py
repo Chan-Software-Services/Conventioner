@@ -985,8 +985,9 @@ def get_market_invitations(market_id: str) -> Response:
 @app.route('/markets/<market_id>/invitations/<invitation_id>', methods=['DELETE'])
 @login_required
 def withdraw_market_invitation(market_id: str, invitation_id: str) -> Response:
-    """Withdraw a waiting invitation, as whoever may give its role."""
-    MarketsApi.withdraw_market_invitation(market_id, invitation_id, authenticated_email())
+    """Withdraw a waiting invitation, as whoever may give its role: the send ``?sentAt=`` names."""
+    MarketsApi.withdraw_market_invitation(
+        market_id, invitation_id, request.args.get("sentAt"), authenticated_email())
     return jsonify({"message": "Invitation withdrawn"}), 200
 
 #: Said of an invitation to an organization that names no address or no place, or names either as
@@ -1030,8 +1031,10 @@ def get_organization_invitations(org_id: str) -> Response:
 @app.route('/organizations/<org_id>/invitations/<invitation_id>', methods=['DELETE'])
 @login_required
 def withdraw_organization_invitation(org_id: str, invitation_id: str) -> Response:
-    """Withdraw a waiting invitation, as whoever may invite to its place."""
-    OrgsApi.withdraw_organization_invitation(org_id, invitation_id, authenticated_email())
+    """Withdraw a waiting invitation, as whoever may invite to its place: the send ``?sentAt=``
+    names."""
+    OrgsApi.withdraw_organization_invitation(
+        org_id, invitation_id, request.args.get("sentAt"), authenticated_email())
     return jsonify({"message": "Invitation withdrawn"}), 200
 
 # The invitee's side (T538): the invitations waiting for the signed-in address, and their answers.

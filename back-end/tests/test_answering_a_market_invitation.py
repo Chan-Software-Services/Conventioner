@@ -154,6 +154,13 @@ def decline(invitation_id, person=INVITEE):
     return signed_in_as(person).post(f"/invitations/{invitation_id}/decline")
 
 
+def withdraw(person, invitation_id):
+    """Withdraw through the organizer's route, naming the send ``invite`` made, at ``SENT_AT``."""
+    return signed_in_as(person).delete(
+        f"/markets/{MARKET_ID}/invitations/{invitation_id}",
+        query_string={"sentAt": SENT_AT.isoformat()})
+
+
 def entries(history):
     return [doc for doc in history.documents if doc.get(History.MARKET_ID_FIELD) == MARKET_ID]
 
@@ -332,8 +339,7 @@ class TestAnInvitationThatHasEnded:
 
     def test_one_withdrawn_has_ended(self, market):
         invitation = invite(OWNER)
-        assert signed_in_as(OWNER).delete(
-            f"/markets/{MARKET_ID}/invitations/{invitation}").status_code == 200
+        assert withdraw(OWNER, invitation).status_code == 200
 
         response = accept(invitation)
 
@@ -466,7 +472,7 @@ def landing_before_the_claim(monkeypatch, meanwhile):
 class TestAcceptingAndWithdrawing:
     def test_a_withdrawal_first_leaves_nothing_to_accept(self, market, invitations):
         invitation = invite(OWNER)
-        signed_in_as(ADMIN).delete(f"/markets/{MARKET_ID}/invitations/{invitation}")
+        withdraw(ADMIN, invitation)
 
         assert accept(invitation).get_json() == ENDED
         assert INVITEE.id not in market.docs[0]["roles"]
@@ -477,7 +483,7 @@ class TestAcceptingAndWithdrawing:
         invitation = invite(OWNER)
         assert accept(invitation).status_code == 200
 
-        response = signed_in_as(ADMIN).delete(f"/markets/{MARKET_ID}/invitations/{invitation}")
+        response = withdraw(ADMIN, invitation)
 
         assert (response.status_code, response.get_json()) == (
             404, {"error": "That invitation has already ended."})
@@ -488,8 +494,7 @@ class TestAcceptingAndWithdrawing:
 class TestWhicheverCameFirstWins:
     def test_a_withdrawal_meanwhile_gives_nothing(self, monkeypatch, market, invitations, history):
         invitation = invite(OWNER)
-        landing_before_the_claim(monkeypatch, lambda: signed_in_as(ADMIN).delete(
-            f"/markets/{MARKET_ID}/invitations/{invitation}"))
+        landing_before_the_claim(monkeypatch, lambda: withdraw(ADMIN, invitation))
 
         response = accept(invitation)
 
@@ -628,8 +633,7 @@ class TestEndingWhileAnAcceptMeetsAChange:
             monkeypatch.setattr(MarketsApi, "_write_role", write_role)
             market.docs[0]["roles"].update({OWNER.id: "admin", ADMIN.id: "owner"})
             endings.append(on_its_own_thread(
-                (lambda: signed_in_as(ADMIN).delete(
-                    f"/markets/{MARKET_ID}/invitations/{invitation}"))
+                (lambda: withdraw(ADMIN, invitation))
                 if ending == "withdrawal" else (lambda: decline(invitation))))
             return write_role(*args, **kwargs)
         monkeypatch.setattr(MarketsApi, "_write_role", handed_on_and_ended_meanwhile)

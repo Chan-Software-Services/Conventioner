@@ -10,13 +10,14 @@
 import { computed, ref } from 'vue';
 import type { SentInvitation } from '@/assets/types/datatypes';
 import { getApiErrorStatus } from '@/utils/api';
+import type { InvitationSend } from '@/utils/invitations';
 import { useServerRead } from '@/utils/useServerRead';
 
 export interface InvitationsWaitingOptions<Role extends string> {
   /** What they are read on, or `null` for no read: the dialog closed, or a reader who may not see them. */
   key: () => string | null;
   fetch: (key: string) => Promise<SentInvitation<Role>[]>;
-  withdraw: (key: string, id: string) => Promise<void>;
+  withdraw: (key: string, send: InvitationSend) => Promise<void>;
   /**
    * Reads the people again inside the write `isCurrent` belongs to, after a withdrawal found the
    * invitation already ended: one accepted meanwhile has put its person among them.
@@ -59,16 +60,16 @@ export function useInvitationsWaiting<Role extends string>(
   }
 
   /**
-   * Withdraws the invitation `id` on `key`, then reads the invitations again, inside the write that
-   * `isCurrent` belongs to. A 404 is an invitation already accepted, declined, ended or withdrawn:
-   * nobody can accept it any more, which is what was asked, so it is done, and the people are read
-   * again too (`ended`), as one accepted meanwhile is among them now. A 409 is one sent again
-   * meanwhile, to another role or place: it is thrown for the confirmation to say, with the list
-   * behind it read again, so what was sent again is in sight before it is withdrawn.
+   * Withdraws the invitation `send` names on `key`, then reads the invitations again, inside the
+   * write that `isCurrent` belongs to. A 404 is an invitation already accepted, declined, ended or
+   * withdrawn: nobody can accept it any more, which is what was asked, so it is done, and the people
+   * are read again too (`ended`), as one accepted meanwhile is among them now. A 409 is one sent
+   * again since the send named: it is thrown for the confirmation to say, with the list behind it
+   * read again, so what was sent again is in sight before it is withdrawn.
    */
-  async function withdraw(key: string, id: string, isCurrent: () => boolean) {
+  async function withdraw(key: string, send: InvitationSend, isCurrent: () => boolean) {
     try {
-      await options.withdraw(key, id);
+      await options.withdraw(key, send);
     } catch (err) {
       if (getApiErrorStatus(err) !== 404) {
         if (getApiErrorStatus(err) === 409) await reread(isCurrent);

@@ -91,3 +91,31 @@ class TestInvitingAtOnce:
         sent = datetime.fromisoformat(listed[0]["sentAt"])
         assert sent.utcoffset() == timedelta(0)
         assert datetime.fromisoformat(listed[0]["endsAt"]) - sent == Invitations.LIFETIME
+
+
+class TestWithdrawingTheSendItWasReadAt:
+    def test_the_served_send_withdraws_it_and_an_earlier_one_does_not(self, market, mail):
+        """The server keeps ``sent_at`` to the millisecond and hands it back without its zone:
+        the ``sentAt`` a reader is served is still the one the withdrawal's read and delete
+        match."""
+        document, owner, _admin = market
+        invitations = f"/markets/{document['id']}/invitations"
+
+        def invite():
+            return owner.post(
+                invitations, json={"email": INVITED, "role": "editor"}).get_json()["invitation"]
+
+        def withdraw(read):
+            return owner.delete(
+                f"{invitations}/{read['id']}", query_string={"sentAt": read["sentAt"]})
+
+        confirmed = invite()
+        again = invite()
+
+        refused = withdraw(confirmed)
+        assert (refused.status_code, refused.get_json()) == (
+            409, {"error": Invitations.CHANGED_MEANWHILE})
+        [listed] = owner.get(invitations).get_json()["invitations"]
+        assert listed["sentAt"] == again["sentAt"]
+        assert withdraw(listed).status_code == 200
+        assert owner.get(invitations).get_json()["invitations"] == []

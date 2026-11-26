@@ -38,6 +38,7 @@ describes:
 verified: 2026-11-25
 sources:
   - T538
+  - T647
 ---
 
 # Invitations
@@ -78,7 +79,9 @@ Two upserts that both match nothing race on the unique index; the refused one is
 **An answered invitation ends**: `end` deletes it by id and address, on a decline or once it can no longer be accepted; a successful accept claims it instead (`claim`, step 5 below).
 An accepted one's two limit counts are taken back (`take_back`) in the window of its `counted_at`, read as UTC since the driver hands a stored time back without its zone, so only invitations nobody accepts pile up against the limits.
 
-**A withdrawal holds the role it read**: `withdraw` deletes by id, target and role, so an invitation sent again to another role between the read and the delete is left, and the withdrawal answers 409 `CHANGED_MEANWHILE`; one gone meanwhile answers 404 `ALREADY_ENDED`, "That invitation has already ended."
+**A withdrawal names the send it was confirmed for**: sending an invitation again keeps its `id`, so the request names the `sentAt` it was served with, `?sentAt=<sentAt>`, and one that stands at another send, or a request naming none, is left and answers 409 `CHANGED_MEANWHILE`, writing and recording nothing (`stands_at`).
+`withdraw` then deletes by id, target, role and `sent_at` as read, so one sent again between the read and the delete is left and answers that 409 too; one gone meanwhile answers 404 `ALREADY_ENDED`, "That invitation has already ended."
+The id is kept across sends because a withdrawal of a replaced id would answer that 404, which Withdraw reads as done, while the newer invitation waited.
 
 **A market's invitations go with it**: `delete_for_market`, in `market_deletion.delete_records` ([market deletion](market-deletion.md#sharp-edges)).
 **An organization's go with it**: `delete_for_organization`, in `api/organizations.delete_organization` beside its own history, and each of its markets' with the market ([when an organization may be deleted](../../business/rules/when-an-organization-may-be-deleted.md)).
@@ -91,7 +94,7 @@ The routes, in [`back-end/app.py`](../../../back-end/app.py), each `@login_requi
 | --------------------------------------------------------- | ------------------------------------------------------------------------- |
 | `POST /markets/<market_id>/invitations`                   | body `{"email", "role"}`; `200 {"invitation": <served>, "emailed": bool}` |
 | `GET /markets/<market_id>/invitations`                    | `200 {"invitations": [<served>, ...]}`, newest first                      |
-| `DELETE /markets/<market_id>/invitations/<invitation_id>` | `200 {"message": "Invitation withdrawn"}`                                 |
+| `DELETE /markets/<market_id>/invitations/<invitation_id>` | query `sentAt`; `200 {"message": "Invitation withdrawn"}`                 |
 
 An invitation is served as `{id, email, role, invitedBy, sentAt, endsAt}`, `invitedBy` the inviter's address and both times ISO 8601 in UTC (`served`).
 
@@ -111,7 +114,7 @@ The answer depends only on the address typed, the role, the inviter and the time
 Nothing writes the market's `roles`.
 
 The list is for a reader whom either roles row lets through, else 403 with the Editor and Viewer row's sentence.
-The withdrawal refuses such a reader first in the same sentence, whether or not the invitation waits, then finds it, then asks the row of its role, and records `invitation_withdrawn` through that asking.
+The withdrawal refuses such a reader first in the same sentence, whether or not the invitation waits, then finds it, then holds it to the send named, then asks the row of its role, and records `invitation_withdrawn` through that asking.
 
 ## Inviting to an organization
 
@@ -121,7 +124,7 @@ The routes, in [`back-end/app.py`](../../../back-end/app.py), each `@login_requi
 | ------------------------------------------------------------ | -------------------------------------------------------------------------- |
 | `POST /organizations/<org_id>/invitations`                   | body `{"email", "place"}`; `200 {"invitation": <served>, "emailed": bool}` |
 | `GET /organizations/<org_id>/invitations`                    | `200 {"invitations": [<served>, ...]}`, both places, newest first          |
-| `DELETE /organizations/<org_id>/invitations/<invitation_id>` | `200 {"message": "Invitation withdrawn"}`                                  |
+| `DELETE /organizations/<org_id>/invitations/<invitation_id>` | query `sentAt`; `200 {"message": "Invitation withdrawn"}`                  |
 
 The invite refuses, in this order, before anything is written:
 
@@ -136,7 +139,7 @@ Then `invite_to_organization` in [`back-end/api/organizations.py`](../../../back
 Nothing writes the organization's `people`.
 
 The list is its owner's and its admins'; anyone else is 403 "Only the organization's owner and its admins see its invitations.".
-The withdrawal refuses anyone else first in that sentence, whether or not the invitation waits, then finds it, then asks the place's authority of the requester (an admin may not withdraw an invitation to be an admin), and records `invitation_withdrawn`; it holds the place it read, as a market's holds its role.
+The withdrawal refuses anyone else first in that sentence, whether or not the invitation waits, then finds it, then holds it to the send named, then asks the place's authority of the requester (an admin may not withdraw an invitation to be an admin), and records `invitation_withdrawn`.
 
 ## Answering an invitation
 
@@ -202,8 +205,8 @@ A send that fails keeps the invitation and answers `"emailed": false`.
 
 ## How it is tested
 
-- [`back-end/tests/test_inviting_someone_to_a_market.py`](../../../back-end/tests/test_inviting_someone_to_a_market.py) sends every route through the test client over fakes that apply the writes: the one answer for an address with an account and one without, nobody gaining a role, each refusal in its order and words, inviting again, the race's retry, the email's words and escaping, a failed send, the limits, the list, the withdrawal, the deletion, the boot's refusal, and that no route adds someone to the market directly (`test_no_route_adds_someone_to_a_market_directly`).
-- [`back-end/tests/real_mongo/test_invitations_on_the_server.py`](../../../back-end/tests/real_mongo/test_invitations_on_the_server.py) builds the indexes on a real server and races invitations of one address, which leave one document.
+- [`back-end/tests/test_inviting_someone_to_a_market.py`](../../../back-end/tests/test_inviting_someone_to_a_market.py) sends every route through the test client over fakes that apply the writes: the one answer for an address with an account and one without, nobody gaining a role, each refusal in its order and words, inviting again, the race's retry, the email's words and escaping, a failed send, the limits, the list, the withdrawal, one naming an earlier send or none, one sent again between its read and its delete, the deletion, the boot's refusal, and that no route adds someone to the market directly (`test_no_route_adds_someone_to_a_market_directly`).
+- [`back-end/tests/real_mongo/test_invitations_on_the_server.py`](../../../back-end/tests/real_mongo/test_invitations_on_the_server.py) builds the indexes on a real server, races invitations of one address, which leave one document, and withdraws by the served `sentAt`, an earlier send's refused.
 - [`back-end/tests/test_answering_a_market_invitation.py`](../../../back-end/tests/test_answering_a_market_invitation.py) sends the invitee's routes: the list and its one read of names, accepting and its entry, the take-back, every invitation that has ended and why, the inviter deleted or no longer able, the invitee already on the market, a cut between the claim and the write, an accept and a withdrawal in each order, a withdrawal, a decline or a re-send to another role landing before the claim, a market changed meanwhile judged again in the same accept, one that keeps changing losing the invitation, a withdrawal or a decline landing while the accept meets a change, declining, and an invited person reading the market as before.
 - [`back-end/tests/real_mongo/test_answering_an_invitation_on_the_server.py`](../../../back-end/tests/real_mongo/test_answering_an_invitation_on_the_server.py) races two accepts, which give one role and one entry, lands a role change between an accept's read and its write, which judges again and ends the invitation it claimed, and reads the list and the take-back on a real server.
 - [`back-end/tests/test_inviting_someone_to_an_organization.py`](../../../back-end/tests/test_inviting_someone_to_an_organization.py) and [`back-end/tests/test_answering_an_organization_invitation.py`](../../../back-end/tests/test_answering_an_organization_invitation.py) do the same for an organization: the one answer, nobody placed, each refusal and the "already" sentences after the limits, the email, the list and the withdrawal, an invite landing on a deletion, the list beside a market's, accepting each place and a member made an admin, every way it ends, a withdrawal, a decline or a re-send landing before the claim, a change meanwhile judged again in the same accept, one that keeps changing, a withdrawal or a decline landing while the accept meets a change, and declining; and that no route adds someone to an organization directly (`test_no_route_adds_someone_to_an_organization_directly`) and a transfer to an address outside it answers one sentence, with an account or without (`test_a_transfer_outside_the_organization_says_one_sentence`).

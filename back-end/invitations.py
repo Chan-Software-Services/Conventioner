@@ -11,7 +11,8 @@ collection, so nobody gains a role or a place by being invited.
 address, under the unique ``invitation_target_email_unique`` index, so inviting an address again
 replaces its role, its inviter and its times and keeps its ``id``, and two invitations at once
 leave one document. The two upserts that both matched nothing race on the index, and the one
-refused is sent once more, finding the other's document.
+refused is sent once more, finding the other's document. Since an id outlives a send, a
+withdrawal names the ``sentAt`` it was confirmed for, and one sent since is left.
 
 **It waits 14 days.** ``expires_at`` is 14 days after it was sent, and a TTL index removes it then;
 the TTL monitor runs about once a minute, so every read also asks for ``expires_at`` after now.
@@ -57,8 +58,9 @@ EXPIRY_INDEX = "invitation_ttl"
 #: accepted or ran out first.
 ALREADY_ENDED = "That invitation has already ended."
 
-#: Said of an invitation withdrawn that was sent again to another role between its read and its
-#: delete: the withdrawal asked the row of the role it read, so it leaves the new one.
+#: Said of a withdrawal that names another send than the one the invitation stands at, or none: it
+#: was sent again, to whichever role, since the withdrawal was confirmed or between its read and
+#: its delete, so the newer one is left.
 CHANGED_MEANWHILE = (
     "That invitation was sent again meanwhile. Read the invitations again, and withdraw it if you "
     "still mean to.")
@@ -256,15 +258,22 @@ def take_back(invitation: Dict[str, Any]) -> None:
     sign_in_limits.take_back_attempt(sign_in_limits.INVITATION_PER_ADDRESS, invitation["email"], at)
 
 
-def withdraw(invitation: Dict[str, Any]) -> bool:
-    """Delete the invitation as it was read, holding its role; whether it was there to delete.
+def stands_at(invitation: Dict[str, Any], sent_at: Optional[str]) -> bool:
+    """Whether ``sent_at`` names the send the invitation stands at, by the ``sentAt`` it is served
+    with (``served``): sending it again keeps its ``id`` and moves this."""
+    return sent_at == _instant(invitation["sent_at"])
 
-    Its id and target, and the role the withdrawal asked the row of: one sent again to another
-    role meanwhile is left (``CHANGED_MEANWHILE``).
+
+def withdraw(invitation: Dict[str, Any]) -> bool:
+    """Delete the invitation as it was read; whether it was there to delete.
+
+    Its id and target, the send it was read at, and the role the withdrawal asked the row of: one
+    sent again meanwhile is left (``CHANGED_MEANWHILE``).
     """
     return invitations_collection.delete_one({
         "id": invitation["id"], "target_kind": invitation["target_kind"],
         "target_id": invitation["target_id"], "role": invitation["role"],
+        "sent_at": invitation["sent_at"],
     }).deleted_count == 1
 
 

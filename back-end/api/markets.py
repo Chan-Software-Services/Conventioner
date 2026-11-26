@@ -2355,14 +2355,18 @@ def market_invitations(market_id: str, requesting_user: str) -> List[Dict[str, A
             for invitation in Invitations.waiting_for(Invitations.MARKET, context.market.id)]
 
 
-def withdraw_market_invitation(market_id: str, invitation_id: str, requesting_user: str) -> None:
+def withdraw_market_invitation(
+    market_id: str, invitation_id: str, sent_at: Optional[str], requesting_user: str,
+) -> None:
     """Withdraw a waiting invitation, as whoever may give its role (``Actions.roles_row``).
+
+    ``sent_at`` is the ``sentAt`` of the send the withdrawal was confirmed for.
 
     One that has already ended - withdrawn, accepted, declined or past its 14 days - is a 404
     saying so, written and recorded as nothing. A requester
     whom neither roles row lets through is refused first, in one sentence, whether or not the
-    invitation waits. One sent again to another role between the read and the delete is
-    left, and answers 409: the withdrawal asked the row of the role it read.
+    invitation waits. One that stands at another send, because it was sent again since or between
+    the read and the delete, or a request naming none, is left, and answers 409.
     """
     context = _people_context(market_id)
     market = context.market
@@ -2373,6 +2377,8 @@ def withdraw_market_invitation(market_id: str, invitation_id: str, requesting_us
     invitation = Invitations.waiting(Invitations.MARKET, market.id, invitation_id)
     if invitation is None:
         raise NotFoundError(Invitations.ALREADY_ENDED)
+    if not Invitations.stands_at(invitation, sent_at):
+        raise ConflictError(Invitations.CHANGED_MEANWHILE)
 
     role = MarketRole(invitation["role"])
     asked = Actions.ask(Actions.roles_row(role), requesting_user, market, context.organization)

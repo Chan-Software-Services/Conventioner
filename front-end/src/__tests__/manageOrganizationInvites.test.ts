@@ -539,7 +539,9 @@ describe('Withdraw', () => {
     confirm();
     await flushPromises();
 
-    expect(api.delete).toHaveBeenCalledWith('/organizations/org-1/invitations/inv-1');
+    expect(api.delete).toHaveBeenCalledWith('/organizations/org-1/invitations/inv-1', {
+      params: { sentAt: invitation().sentAt },
+    });
     expect(byTestId('manage-org-withdraw-window')).toBeNull();
     expect(byTestId('manage-org-window')).not.toBeNull();
     expect(invitedRows()).toHaveLength(1);
@@ -622,6 +624,37 @@ describe('Withdraw', () => {
     expect(text('manage-org-withdraw-error')).toBe(sentence);
     expect(invitationReads()).toBe(reads + 1);
     expect(invitedRows()[0]!.textContent).toContain('Invited as admin, until 9 December, 10:05');
+  });
+
+  it('names the send its confirmation opened on, though the list behind is read again', async () => {
+    invited = [invitation()];
+    api.delete.mockImplementation(async () => {
+      invited = [invitation({ sentAt: new Date(2026, 10, 25, 9, 30).toISOString() })];
+      throw refusing(409, 'That invitation was sent again meanwhile.');
+    });
+    await open();
+    await askToWithdraw();
+
+    confirm();
+    await flushPromises();
+    confirm();
+    await flushPromises();
+
+    const confirmed = [
+      '/organizations/org-1/invitations/inv-1',
+      { params: { sentAt: invitation().sentAt } },
+    ];
+    expect(api.delete.mock.calls).toEqual([confirmed, confirmed]);
+
+    byTestId('manage-org-withdraw-cancel-button')!.click();
+    await flushPromises();
+    await askToWithdraw();
+    confirm();
+    await flushPromises();
+
+    expect(api.delete).toHaveBeenLastCalledWith('/organizations/org-1/invitations/inv-1', {
+      params: { sentAt: new Date(2026, 10, 25, 9, 30).toISOString() },
+    });
   });
 
   it('sends once for two presses, and holds its confirmation until the list is read again', async () => {

@@ -143,6 +143,13 @@ def decline(invitation_id, person=INVITEE):
     return signed_in_as(person).post(f"/invitations/{invitation_id}/decline")
 
 
+def withdraw(person, invitation_id):
+    """Withdraw through the organizer's route, naming the send ``invite`` made, at ``SENT_AT``."""
+    return signed_in_as(person).delete(
+        f"/organizations/{ORG_ID}/invitations/{invitation_id}",
+        query_string={"sentAt": SENT_AT.isoformat()})
+
+
 def entries(history):
     return [doc for doc in history.documents
             if doc.get(History.ORGANIZATION_ID_FIELD) == ORG_ID]
@@ -508,8 +515,7 @@ class TestEndingWhileAnAcceptMeetsAChange:
         def handed_on_and_ended_meanwhile():
             organization.docs[0]["people"].update({OWNER.id: "admin", ADMIN.id: "owner"})
             endings.append(on_its_own_thread(
-                (lambda: signed_in_as(OWNER).delete(
-                    f"/organizations/{ORG_ID}/invitations/{invitation}"))
+                (lambda: withdraw(OWNER, invitation))
                 if ending == "withdrawal" else (lambda: decline(invitation))))
         organization.before_write = handed_on_and_ended_meanwhile
 
@@ -527,7 +533,7 @@ class TestEndingWhileAnAcceptMeetsAChange:
 class TestAcceptAndWithdrawal:
     def test_a_withdrawal_first_has_ended_it(self, organization, invitations):
         invitation = invite(OWNER)
-        signed_in_as(OWNER).delete(f"/organizations/{ORG_ID}/invitations/{invitation}")
+        withdraw(OWNER, invitation)
 
         assert (accept(invitation).status_code, accept(invitation).get_json()) == (404, ENDED)
         assert INVITEE.id not in organization.docs[0]["people"]
@@ -536,8 +542,7 @@ class TestAcceptAndWithdrawal:
         invitation = invite(OWNER)
         assert accept(invitation).status_code == 200
 
-        response = signed_in_as(OWNER).delete(
-            f"/organizations/{ORG_ID}/invitations/{invitation}")
+        response = withdraw(OWNER, invitation)
 
         assert (response.status_code, response.get_json()) == (
             404, {"error": "That invitation has already ended."})
@@ -549,8 +554,7 @@ class TestWhicheverCameFirstWins:
         self, monkeypatch, organization, invitations, history,
     ):
         invitation = invite(OWNER)
-        landing_before_the_claim(monkeypatch, lambda: signed_in_as(OWNER).delete(
-            f"/organizations/{ORG_ID}/invitations/{invitation}"))
+        landing_before_the_claim(monkeypatch, lambda: withdraw(OWNER, invitation))
 
         response = accept(invitation)
 

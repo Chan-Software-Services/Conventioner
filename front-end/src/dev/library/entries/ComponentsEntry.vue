@@ -252,7 +252,7 @@ function waitingOn<Role extends string>(
   return useInvitationsWaiting<Role>({
     key: () => 'library',
     fetch: async () => [...served],
-    withdraw: async (_key, id) => {
+    withdraw: async (_key, { id }) => {
       served.splice(
         served.findIndex((invitation) => invitation.id === id),
         1,

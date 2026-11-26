@@ -1,7 +1,12 @@
 import { randomInt } from 'node:crypto';
 import type { APIRequestContext, Page } from '@playwright/test';
 import { test, expect, BACKEND_URL, TEST_USER } from './fixtures';
-import { inviteToMarket, inviteToOrganization } from './helpers/invitations';
+import {
+  inviteToMarket,
+  inviteToOrganization,
+  withdrawInvitation,
+  type SentInvitation,
+} from './helpers/invitations';
 import { seedDraftMarket } from './helpers/seedDraftMarket';
 import { uniqueMarketName } from './helpers/uniqueName';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
@@ -27,7 +32,7 @@ const ENDED =
 interface Invited {
   invitee: { email: string; password: string };
   market: { id: string; name: string };
-  withdrawn: { id: string; name: string; invitationId: string };
+  withdrawn: { id: string; name: string; invitation: SentInvitation };
   organization: { id: string; name: string };
 }
 
@@ -65,7 +70,7 @@ async function invite(request: APIRequestContext): Promise<Invited> {
     withdrawn: {
       id: withdrawn.marketId,
       name: withdrawn.marketName,
-      invitationId: toWithdraw.id,
+      invitation: toWithdraw,
     },
     organization: { id: organizationId, name: organizationName },
   };
@@ -117,8 +122,10 @@ for (const window of [
           await expectNoSidewaysScroll(page, window.viewport.width);
 
           // Withdrawn while the page was open: accepting it says it has ended, and offers nothing.
-          const withdrawn = await request.delete(
-            `${BACKEND_URL}/markets/${invited.withdrawn.id}/invitations/${invited.withdrawn.invitationId}`,
+          const withdrawn = await withdrawInvitation(
+            request,
+            `markets/${invited.withdrawn.id}`,
+            invited.withdrawn.invitation,
           );
           expect(withdrawn.ok(), await withdrawn.text()).toBe(true);
           await invitations.accept(invited.withdrawn.name);

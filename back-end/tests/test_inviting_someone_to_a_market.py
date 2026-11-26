@@ -500,13 +500,16 @@ class TestTheList:
 
 
 class TestWithdrawing:
-    def withdraw(self, person, invitation_id):
-        return signed_in_as(person).delete(f"/markets/{MARKET_ID}/invitations/{invitation_id}")
+    def withdraw(self, person, invitation):
+        """Withdraw the invitation as it was served, naming the send it was read at."""
+        return signed_in_as(person).delete(
+            f"/markets/{MARKET_ID}/invitations/{invitation['id']}",
+            query_string={"sentAt": invitation["sentAt"]})
 
     def test_withdrawing_ends_the_invitation_and_records_it(self, market, invitations, history):
         invitation = invite(OWNER, NO_ACCOUNT).get_json()["invitation"]
 
-        response = self.withdraw(ADMIN, invitation["id"])
+        response = self.withdraw(ADMIN, invitation)
 
         assert response.status_code == 200
         assert response.get_json() == {"message": "Invitation withdrawn"}
@@ -521,9 +524,9 @@ class TestWithdrawing:
         self, market, invitations, history,
     ):
         invitation = invite(OWNER, NO_ACCOUNT).get_json()["invitation"]
-        assert self.withdraw(OWNER, invitation["id"]).status_code == 200
+        assert self.withdraw(OWNER, invitation).status_code == 200
 
-        response = self.withdraw(OWNER, invitation["id"])
+        response = self.withdraw(OWNER, invitation)
 
         assert response.status_code == 404
         assert response.get_json() == {"error": "That invitation has already ended."}
@@ -534,12 +537,12 @@ class TestWithdrawing:
         invitation = invite(OWNER, NO_ACCOUNT).get_json()["invitation"]
         clock.now = ENDS_AT
 
-        assert self.withdraw(OWNER, invitation["id"]).status_code == 404
+        assert self.withdraw(OWNER, invitation).status_code == 404
 
     def test_an_admin_may_not_withdraw_an_admin_invitation(self, market, invitations, history):
         invitation = invite(OWNER, NO_ACCOUNT, role="admin").get_json()["invitation"]
 
-        response = self.withdraw(ADMIN, invitation["id"])
+        response = self.withdraw(ADMIN, invitation)
 
         assert response.status_code == 403
         assert response.get_json() == {
@@ -553,39 +556,75 @@ class TestWithdrawing:
     ):
         invitation = invite(OWNER, NO_ACCOUNT).get_json()["invitation"]
 
-        waiting = self.withdraw(person, invitation["id"])
-        none = self.withdraw(person, "no-such-invitation")
+        waiting = self.withdraw(person, invitation)
+        none = self.withdraw(person, {**invitation, "id": "no-such-invitation"})
 
         assert (waiting.status_code, waiting.get_json()) == (none.status_code, none.get_json())
         assert waiting.status_code == 403
         assert len(invitations.documents) == 1
 
-    def test_a_re_invitation_to_another_role_meanwhile_is_not_withdrawn_unseen(
-        self, market, invitations, history, monkeypatch,
+    @pytest.mark.parametrize("role", ["editor", "admin"])
+    def test_one_sent_again_since_it_was_read_is_left_and_says_why(
+        self, market, invitations, history, clock, role,
     ):
-        """The withdrawal holds the role it asked the row of: an invitation made an Admin one
-        between its read and its delete is left, and the organizer is told it changed."""
+        """A re-send keeps the id, so the withdrawal names the send it was confirmed for: one sent
+        since, to any role, is not that one. An Admin hears this of one now sent as an Admin
+        too, which they may not withdraw."""
+        confirmed = invite(OWNER, NO_ACCOUNT).get_json()["invitation"]
+        clock.now = SENT_AT + timedelta(hours=1)
+        again = invite(OWNER, NO_ACCOUNT, role=role).get_json()["invitation"]
+        assert again["id"] == confirmed["id"]
+
+        response = self.withdraw(ADMIN, confirmed)
+
+        assert response.status_code == 409
+        assert response.get_json() == {"error": Invitations.CHANGED_MEANWHILE}
+        assert [doc["role"] for doc in invitations.documents] == [role]
+        assert [entry["kind"] for entry in entries(history)] == [History.INVITED] * 2
+        assert self.withdraw(OWNER, again).status_code == 200
+
+    @pytest.mark.parametrize("query", [{}, {"sentAt": ""}, {"sentAt": "yesterday"}])
+    def test_a_withdrawal_naming_no_send_it_stands_at_is_refused_the_same_way(
+        self, market, invitations, history, query,
+    ):
         invitation = invite(OWNER, NO_ACCOUNT).get_json()["invitation"]
-        read = Invitations.waiting
 
-        def read_then_reinvited(*args, **kwargs):
-            found = read(*args, **kwargs)
-            invitations.documents[0]["role"] = "admin"
-            return found
-        monkeypatch.setattr(Invitations, "waiting", read_then_reinvited)
-
-        response = self.withdraw(ADMIN, invitation["id"])
+        response = signed_in_as(OWNER).delete(
+            f"/markets/{MARKET_ID}/invitations/{invitation['id']}", query_string=query)
 
         assert response.status_code == 409
         assert response.get_json() == {"error": Invitations.CHANGED_MEANWHILE}
         assert len(invitations.documents) == 1
         assert [entry["kind"] for entry in entries(history)] == [History.INVITED]
 
+    @pytest.mark.parametrize("role", ["editor", "admin"])
+    def test_one_sent_again_between_the_read_and_the_delete_is_left(
+        self, market, invitations, history, monkeypatch, role,
+    ):
+        """The delete holds the send it read, and the role it asked the row of."""
+        invitation = invite(OWNER, NO_ACCOUNT).get_json()["invitation"]
+        read = Invitations.waiting
+
+        def read_then_sent_again(*args, **kwargs):
+            found = read(*args, **kwargs)
+            Invitations.invite(
+                Invitations.MARKET, MARKET_ID, NO_ACCOUNT, role, OWNER.id, OWNER.email,
+                SENT_AT + timedelta(hours=1))
+            return found
+        monkeypatch.setattr(Invitations, "waiting", read_then_sent_again)
+
+        response = self.withdraw(ADMIN, invitation)
+
+        assert response.status_code == 409
+        assert response.get_json() == {"error": Invitations.CHANGED_MEANWHILE}
+        assert [doc["role"] for doc in invitations.documents] == [role]
+        assert [entry["kind"] for entry in entries(history)] == [History.INVITED]
+
     def test_another_markets_invitation_is_not_found_here(self, market, invitations):
         invitation = invite(OWNER, NO_ACCOUNT).get_json()["invitation"]
         invitations.documents[0]["target_id"] = "another-market"
 
-        assert self.withdraw(OWNER, invitation["id"]).status_code == 404
+        assert self.withdraw(OWNER, invitation).status_code == 404
         assert len(invitations.documents) == 1
 
 

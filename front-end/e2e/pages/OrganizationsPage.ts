@@ -54,6 +54,8 @@ export class OrganizationsPage {
   readonly invitedWithdrawButtons: Locator;
   readonly withdrawConfirm: Locator;
   readonly withdrawConsequence: Locator;
+  /** What the Withdraw confirmation says of a withdrawal the server refused. */
+  readonly withdrawError: Locator;
   readonly withdrawConfirmButton: Locator;
   readonly withdrawCancelButton: Locator;
   readonly removeUserButtons: Locator;
@@ -153,6 +155,7 @@ export class OrganizationsPage {
     // Withdraw asks first: its own destructive dialog, a sibling of Manage organization.
     this.withdrawConfirm = page.getByTestId('manage-org-withdraw-window');
     this.withdrawConsequence = page.getByTestId('manage-org-withdraw-consequence');
+    this.withdrawError = page.getByTestId('manage-org-withdraw-error');
     this.withdrawConfirmButton = page.getByTestId('manage-org-withdraw-submit-button');
     this.withdrawCancelButton = page.getByTestId('manage-org-withdraw-cancel-button');
     this.removeUserButtons = page.getByTestId('manage-org-remove-user-button');

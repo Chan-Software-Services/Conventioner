@@ -136,9 +136,19 @@ export async function fetchMarketInvitations(
   return (response.data.invitations ?? []) as SentInvitation<MarketInvitationRole>[];
 }
 
-export async function withdrawMarketInvitation(marketId: string, id: string): Promise<void> {
+/**
+ * The send a withdrawal is confirmed for. An invitation sent again keeps its `id` and moves its
+ * `sentAt`, so a withdrawal names both, and the server leaves one sent since (a 409).
+ */
+export type InvitationSend = Pick<SentInvitation, 'id' | 'sentAt'>;
+
+export async function withdrawMarketInvitation(
+  marketId: string,
+  { id, sentAt }: InvitationSend,
+): Promise<void> {
   await api.delete(
     `/markets/${encodeURIComponent(marketId)}/invitations/${encodeURIComponent(id)}`,
+    { params: { sentAt } },
   );
 }
 
@@ -166,9 +176,13 @@ export async function fetchOrganizationInvitations(
   return (response.data.invitations ?? []) as SentInvitation<OrganizationPlace>[];
 }
 
-export async function withdrawOrganizationInvitation(orgId: string, id: string): Promise<void> {
+export async function withdrawOrganizationInvitation(
+  orgId: string,
+  { id, sentAt }: InvitationSend,
+): Promise<void> {
   await api.delete(
     `/organizations/${encodeURIComponent(orgId)}/invitations/${encodeURIComponent(id)}`,
+    { params: { sentAt } },
   );
 }
 

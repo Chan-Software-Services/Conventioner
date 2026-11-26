@@ -711,7 +711,8 @@ def _withdraw_invitation(client, world):
         "email": SAM, "role": "editor", "invited_by": "user-owner", "invited_by_email": OWNER,
         "sent_at": sent, "expires_at": sent + Invitations.LIFETIME, "counted_at": sent,
     })
-    return client.delete(f"/markets/{MARKET}/invitations/invitation-1")
+    return client.delete(
+        f"/markets/{MARKET}/invitations/invitation-1", query_string={"sentAt": sent.isoformat()})
 
 
 def _as(client, email):

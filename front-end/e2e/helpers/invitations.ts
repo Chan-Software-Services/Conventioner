@@ -6,7 +6,8 @@ import { loginViaApi } from './seeds';
  * Invitations through the API (T538, ADR 0047): a role on a market and a place in an organization
  * are offered to an address, and given only once someone signed in with it accepts.
  *
- * `inviteToMarket` and `inviteToOrganization` invite as whoever `request`'s session is.
+ * `inviteToMarket` and `inviteToOrganization` invite, and `withdrawInvitation` withdraws, as whoever
+ * `request`'s session is.
  * `acceptInvitation` accepts as the invitee on a request
  * context of its own, signed in for the call and disposed after it, never on the inviter's: a sign-in
  * ends the sign-in that context held.
@@ -57,6 +58,20 @@ export async function inviteToOrganization(
       data: { email, place },
     }),
   );
+}
+
+/**
+ * Withdraw the invitation as whoever `request`'s session is, naming the send it was read at, as the
+ * app's Withdraw does. The target is its address in the API.
+ */
+export function withdrawInvitation(
+  request: APIRequestContext,
+  target: `markets/${string}` | `organizations/${string}`,
+  invitation: Pick<SentInvitation, 'id' | 'sentAt'>,
+) {
+  return request.delete(`${BACKEND_URL}/${target}/invitations/${invitation.id}`, {
+    params: { sentAt: invitation.sentAt },
+  });
 }
 
 /** An invitation as its invitee reads it, `GET /invitations`'s rows. */

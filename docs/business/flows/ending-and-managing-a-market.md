@@ -57,6 +57,7 @@ sources:
   - T421
   - T469
   - T501
+  - T647
 ---
 
 # Ending and managing a market
@@ -149,7 +150,8 @@ Covered by:
    Nobody invited is under "Users with access", among the transfer's choices or in any count until they accept, as [answering an invitation](answering-an-invitation.md) says; the dialog then lists them at their role when it next reads the market.
    "Withdraw" asks first, in a destructive confirmation that opens on Cancel: "Withdraw the invitation to <address>?", then "They can no longer accept it.".
    Cancel and Escape change nothing and give focus back to that Withdraw; "Withdraw" ends the invitation, the list re-reads in place with the dialog open, and focus goes to "Invited", or to "Users with access" when none is left.
-   An invitation already accepted, declined, ended or withdrawn is read as withdrawn, closing the confirmation and re-reading the list and "Users with access", so one accepted meanwhile is listed at its role; one sent again meanwhile, to another role, is not withdrawn: the confirmation says "That invitation was sent again meanwhile. Read the invitations again, and withdraw it if you still mean to." and the list behind it is re-read.
+   An invitation already accepted, declined, ended or withdrawn is read as withdrawn, closing the confirmation and re-reading the list and "Users with access", so one accepted meanwhile is listed at its role.
+   The confirmation withdraws the invitation as its row listed it when it opened, so one sent again since, to the same role or another, is not withdrawn: the confirmation says "That invitation was sent again meanwhile. Read the invitations again, and withdraw it if you still mean to." and the list behind it is re-read.
 8. A refused change of role closes the confirmation, re-reads the list and is said beneath that person's row, which states the role the server holds, since someone else may have moved it first.
    When that moved the row past those shown, the find field takes their address, so the refusal is still read.
    When someone else removed them first, the row is gone and the words stand at the foot of the list, after their address; inviting them again takes the words away, and their row is back once they accept.
@@ -168,7 +170,7 @@ Covered by:
 - [`changing-a-role-asks-first.spec.ts`](../../../front-end/e2e/changing-a-role-asks-first.spec.ts) (the confirmation's words, its closes, one write on confirm and where focus goes, a table whose owner moved a row, a refusal, one after someone else moved or removed them first, the arrow keys, and Viewer to Admin in sight at 1280 and 390)
 - [`everyone-with-access.spec.ts`](../../../front-end/e2e/everyone-with-access.spec.ts) (the walk's case, and at 390 nothing overflowing and each Remove a 44px target, on one edge)
 - [`inviting-someone-to-a-market.spec.ts`](../../../front-end/e2e/inviting-someone-to-a-market.spec.ts) (an address with an account and one without each answered "Invitation sent to <address>." and waiting under "Invited", neither under "Users with access"; a withdrawal asked first, Cancel's focus and the row gone; the invitee accepting and listed at their role; at 1440 and 390, each address the run's own and what it left withdrawn after it)
-- `manageMarketInvites.test.ts` (the row's words, the sent and mail lines, a refusal and the limit in the server's words, "Invited" and its rows, its find and pages, who reads it and who may withdraw, its failed read, the transfer's choices without an invited person, and the withdrawal asked first, done, read as done on a 404 with the people read again so one accepted meanwhile shows, and said on a 409, each held and sent once)
+- `manageMarketInvites.test.ts` (the row's words, the sent and mail lines, a refusal and the limit in the server's words, "Invited" and its rows, its find and pages, who reads it and who may withdraw, its failed read, the transfer's choices without an invited person, and the withdrawal asked first, done, read as done on a 404 with the people read again so one accepted meanwhile shows, said on a 409, and naming the send its confirmation opened on though the list is read again, each held and sent once)
 - `manageMarketMeetsAChangedMarket.test.ts` (a role's change and take refused over a changed market, and an invitation's refusal reading nothing again)
 - `manageMarketPeople.test.ts` (the shown count kept through a role change, a removal and an invitation, which adds nobody, and an invitation held, sent once, and its answer kept out of Manage market opened on another market)
 - `manageMarketReadsTheMarketItOpened.test.ts` (opened on another market while the last one's read is out, Loading and its name, a failed read of the last market said nowhere, a failed first read said over the opener's copy, a table change taken into it and it kept drawn through a write's re-read, a name being typed kept over a re-read that brings the same name, and an older re-read never undoing a rename or a table change)

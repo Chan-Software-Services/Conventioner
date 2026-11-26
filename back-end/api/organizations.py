@@ -738,15 +738,17 @@ def organization_invitations(org_id: str, requesting_user_email: str) -> List[Di
 
 
 def withdraw_organization_invitation(
-    org_id: str, invitation_id: str, requesting_user_email: str,
+    org_id: str, invitation_id: str, sent_at: Optional[str], requesting_user_email: str,
 ) -> None:
     """Withdraw a waiting invitation, as whoever may invite to its place: its owner either, an
     admin a member's.
 
+    ``sent_at`` is the ``sentAt`` of the send the withdrawal was confirmed for.
+
     Anyone but its owner and its admins is refused first, in one sentence, whether or not the
     invitation waits. One that has already ended is a 404 saying so, written and recorded as
-    nothing. One sent again to another place between the
-    read and the delete is left, and answers 409: the withdrawal asked about the place it read.
+    nothing. One that stands at another send, because it was sent again since or between the read
+    and the delete, or a request naming none, is left, and answers 409.
     """
     _org, people, requester = _people_and_requester(org_id, requesting_user_email)
     _refused_unless_it_invites(people, requester)
@@ -754,6 +756,8 @@ def withdraw_organization_invitation(
     invitation = Invitations.waiting(Invitations.ORGANIZATION, org_id, invitation_id)
     if invitation is None:
         raise NotFoundError(Invitations.ALREADY_ENDED)
+    if not Invitations.stands_at(invitation, sent_at):
+        raise ConflictError(Invitations.CHANGED_MEANWHILE)
     place = invitation["role"]
     OrganizationPeople.may(people, OrganizationPeople.INVITED_TO[place], requester.id)
 

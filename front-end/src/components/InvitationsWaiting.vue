@@ -22,7 +22,7 @@ import AppDialog from '@/components/AppDialog.vue';
 import EmailAddress from '@/components/EmailAddress.vue';
 import ListFrame from '@/components/ListFrame.vue';
 import ReadFailed from '@/components/ReadFailed.vue';
-import { invitedAs } from '@/utils/invitations';
+import { invitedAs, type InvitationSend } from '@/utils/invitations';
 import { useDialogSubmit } from '@/utils/useDialogSubmit';
 import { INVITATIONS_READ_FAILED, type InvitationsWaiting } from '@/utils/useInvitationsWaiting';
 
@@ -56,10 +56,11 @@ const keyOf = (invitation: SentInvitation<Role>) => invitation.id;
 const list = ref<HTMLElement | null>(null);
 
 /**
- * The invitation a Withdraw is asking about, until it is confirmed or cancelled, with the words its
- * confirmation says, taken when it opens, as Remove's are.
+ * The invitation a Withdraw is asking about, until it is confirmed or cancelled: the words its
+ * confirmation says, as Remove's are, and the send it withdraws, both taken when it opens, so a
+ * list read again behind it changes neither.
  */
-const withdrawing = ref<{ id: string; email: string } | null>(null);
+const withdrawing = ref<(InvitationSend & { email: string }) | null>(null);
 const withdrawal = useDialogSubmit({
   opening: () => (props.open ? withdrawing.value : null),
   failure: 'The invitation was not withdrawn.',
@@ -69,7 +70,8 @@ watch([() => props.open, key], () => (withdrawing.value = null));
 
 /** Withdraw asks first: a mistyped address must not be able to join, nor a typed one lose it by a slip. */
 function ask(invitation: SentInvitation<Role>) {
-  withdrawing.value = { id: invitation.id, email: invitation.email };
+  const { id, sentAt, email } = invitation;
+  withdrawing.value = { id, sentAt, email };
 }
 
 /** Cancel, Escape and the backdrop change nothing; the shell gives focus back to the row's Withdraw. */
@@ -88,7 +90,7 @@ async function withdraw() {
   const target = withdrawing.value;
   const on = key.value;
   if (!on || !target) return;
-  await withdrawal.submit((isCurrent) => props.waiting.withdraw(on, target.id, isCurrent), {
+  await withdrawal.submit((isCurrent) => props.waiting.withdraw(on, target, isCurrent), {
     done: async () => {
       withdrawing.value = null;
       emit('withdrawn');

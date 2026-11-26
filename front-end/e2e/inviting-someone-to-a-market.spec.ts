@@ -1,7 +1,7 @@
 import { randomInt } from 'node:crypto';
 import type { APIRequestContext, Page } from '@playwright/test';
 import { test, expect, BACKEND_URL, TEST_USER } from './fixtures';
-import { acceptInvitation } from './helpers/invitations';
+import { acceptInvitation, withdrawInvitation, type SentInvitation } from './helpers/invitations';
 import { seedDraftMarket } from './helpers/seedDraftMarket';
 import { loginViaApi } from './helpers/seeds';
 import { uniqueMarketName } from './helpers/uniqueName';
@@ -34,11 +34,9 @@ async function withdrawWhatWaits(request: APIRequestContext, marketId: string): 
   await loginViaApi(request, BACKEND_URL, TEST_USER.email, TEST_USER.password);
   const listed = await request.get(`${BACKEND_URL}/markets/${marketId}/invitations`);
   expect(listed.ok(), await listed.text()).toBe(true);
-  const { invitations } = (await listed.json()) as { invitations: Array<{ id: string }> };
+  const { invitations } = (await listed.json()) as { invitations: SentInvitation[] };
   for (const invitation of invitations) {
-    const withdrawn = await request.delete(
-      `${BACKEND_URL}/markets/${marketId}/invitations/${invitation.id}`,
-    );
+    const withdrawn = await withdrawInvitation(request, `markets/${marketId}`, invitation);
     expect([200, 404], await withdrawn.text()).toContain(withdrawn.status());
   }
 }

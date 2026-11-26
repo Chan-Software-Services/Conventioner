@@ -2,7 +2,12 @@ import { randomInt } from 'node:crypto';
 import type { APIRequestContext, Page } from '@playwright/test';
 import { test, expect, BACKEND_URL, TEST_USER, OrganizationsPage } from './fixtures';
 import { placeInOrganization } from './helpers/grantMarketRole';
-import { acceptInvitation, inviteToOrganization } from './helpers/invitations';
+import {
+  acceptInvitation,
+  inviteToOrganization,
+  withdrawInvitation,
+  type SentInvitation,
+} from './helpers/invitations';
 import { loginViaApi } from './helpers/seeds';
 import { uniqueMarketName } from './helpers/uniqueName';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
@@ -18,7 +23,8 @@ import { withUser } from './helpers/withUser';
  * no account and one with an account are each answered "Invitation sent to <address>.", each listed
  * under "Invited" and none under Admins or Members; a member invited as an admin is refused and
  * pointed at "Make admin"; withdrawing asks first and takes the row away; the person with the
- * account accepting puts them under Admins. An admin sees every invitation, and Withdraw only on
+ * account accepting puts them under Admins. A withdrawal confirmed before the invitation was sent
+ * again leaves the newer one, and says why. An admin sees every invitation, and Withdraw only on
  * the member ones.
  *
  * The addresses are each run's own, in the fixture domains, never the fixture organizer's, so the
@@ -54,11 +60,9 @@ async function withdrawWhatWaits(request: APIRequestContext, orgId: string): Pro
   await loginViaApi(request, BACKEND_URL, TEST_USER.email, TEST_USER.password);
   const listed = await request.get(`${BACKEND_URL}/organizations/${orgId}/invitations`);
   expect(listed.ok(), await listed.text()).toBe(true);
-  const { invitations } = (await listed.json()) as { invitations: Array<{ id: string }> };
+  const { invitations } = (await listed.json()) as { invitations: SentInvitation[] };
   for (const invitation of invitations) {
-    const withdrawn = await request.delete(
-      `${BACKEND_URL}/organizations/${orgId}/invitations/${invitation.id}`,
-    );
+    const withdrawn = await withdrawInvitation(request, `organizations/${orgId}`, invitation);
     expect([200, 404], await withdrawn.text()).toContain(withdrawn.status());
   }
 }
@@ -166,6 +170,41 @@ for (const window of [
       // The page does not scroll sideways.
       const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
       expect(scrollWidth).toBeLessThanOrEqual(window.viewport.width);
+    });
+
+    test('a withdrawal confirmed before the invitation was sent again leaves the new one, and says why', async ({
+      authenticatedPage: page,
+      request,
+    }) => {
+      orgId = await seedOrganization(request);
+      const invited = runAddress('sent-again', 'example.test');
+      await inviteToOrganization(request, orgId, invited, 'member');
+      const orgs = await openManage(page, orgId);
+      await orgs.withdrawButton(invited).click();
+      await expect(orgs.withdrawConfirm).toBeVisible();
+
+      // Sent again from another tab while the confirmation waits.
+      const otherTab = await page.context().newPage();
+      await otherTab.setViewportSize(window.viewport);
+      const there = await openManage(otherTab, orgId);
+      await there.inviteMember(invited);
+      await expect(there.addMemberSent).toHaveText(`Invitation sent to ${invited}.`);
+      await otherTab.close();
+
+      await orgs.withdrawConfirmButton.click();
+      await expect(orgs.withdrawError).toHaveText(
+        'That invitation was sent again meanwhile. Read the invitations again, and withdraw it if you still mean to.',
+      );
+      await expect(orgs.withdrawConfirm).toBeVisible();
+      const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+      expect(scrollWidth).toBeLessThanOrEqual(window.viewport.width);
+
+      // The newer invitation waits, and Withdraw asked again from its row ends it.
+      await orgs.withdrawCancelButton.click();
+      await expect(orgs.withdrawConfirm).toHaveCount(0);
+      await expect(orgs.invitation(invited)).toHaveCount(1);
+      await orgs.withdraw(invited);
+      await expect(orgs.invitation(invited)).toHaveCount(0);
     });
 
     test('an admin reads every invitation, and withdraws only the member ones', async ({
