@@ -40,7 +40,7 @@ env:
   ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
   # The E2E shards a whole run takes. The shard matrix's fallback list, which cannot read `env`,
   # lists 1 to it; `e2e-select` asks for no more, and `test-map` expects this many.
-  E2E_SHARDS: "10"
+  E2E_SHARDS: "5"
 
 # Each job's `name:` is its check's name, which the rules of dev and main require a check by:
 # renaming a required job drops its check from the required list.
@@ -444,12 +444,13 @@ jobs:
             echo "scope=whole" >>"$GITHUB_OUTPUT"
           fi
 
-  # Split by spec file across runners, each with its own Docker stack: ten for a whole run
-  # (`E2E_SHARDS`), so it waits for a tenth of the suite rather than all of it (89 runner-minutes
-  # of tests on 2026-11-11, 1 to 3 more per runner to set up, by what the caches hold). When
-  # `e2e-select` named a list, which it does only for a pull request into dev, the run deals only
-  # those specs, across the shards it asked for, and runs no shard when the list is empty. The
-  # tests share one database WITHIN a runner (`workers: 1`), never across runners.
+  # Split by spec file across runners, each with its own Docker stack: five for a whole run
+  # (`E2E_SHARDS`), so it waits for a fifth of the suite rather than all of it (89 runner-minutes
+  # of tests at one worker on 2026-11-11, 1 to 3 more per runner to set up, by what the caches
+  # hold), and the shards take five of the account's 20 jobs, not ten. When `e2e-select` named a
+  # list, which it does only for a pull request into dev, the run deals only those specs, across
+  # the shards it asked for, and runs no shard when the list is empty. The tests share one database
+  # WITHIN a runner (two workers, the serial files first at one), never across runners.
   # `front-end/scripts/e2e-shards.ts` deals the spec files to the shards by their measured
   # seconds, not Playwright's `--shard`, which cuts the alphabetical list by test count and once
   # left one shard at 24 minutes and another at 6. The seconds are the newest
@@ -469,11 +470,14 @@ jobs:
       fail-fast: false
       matrix:
         # The whole run's shards, 1 to E2E_SHARDS, unless e2e-select named fewer.
-        shard: ${{ fromJSON(needs.e2e-select.outputs.shards || '[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]') }}
+        shard: ${{ fromJSON(needs.e2e-select.outputs.shards || '[1, 2, 3, 4, 5]') }}
     env:
       DISABLE_CAPTCHA: "true"
       DISABLE_EMAIL: "true"
       DISCORD_FAKE: "true"
+      # Two Playwright workers per shard, the serial project's files first at one
+      # (front-end/scripts/e2e-shards.ts).
+      E2E_WORKERS: "2"
       # On the nightly run only, or one started by hand, the shards record the test map
       # (front-end/e2e/helpers/testMap.ts), which the test-map job below builds; every other run
       # records nothing, so recording's slowdown is never on a pull request's or the queue's path.
@@ -508,7 +512,7 @@ jobs:
           # The specs a pull request's run deals, as a JSON list; empty deals every spec.
           E2E_SPECS: ${{ needs.e2e-select.outputs.specs }}
           # Empty, so off, unless this run records the test map.
-          TEST_MAP_OUT: ${{ env.RECORD_TEST_MAP == 'true' && format('{0}/test-map/records.jsonl', github.workspace) || '' }}
+          TEST_MAP_OUT: ${{ env.RECORD_TEST_MAP == 'true' && format('{0}/test-map', github.workspace) || '' }}
         run: |
           set -- "--shard=$SHARD/$TOTAL" "--timings=$RUNNER_TEMP/e2e-shard-timings.json"
           if [ -n "$E2E_SPECS" ]; then
@@ -548,8 +552,8 @@ jobs:
       - name: Docker compose logs
         if: always()
         run: docker compose logs
-      # The test map lays each line of the back end's log against the test running then, by its
-      # timestamp (scripts/test_map.py build).
+      # The test map's build audits the back end's log for request lines no running test recorded,
+      # by their timestamps (scripts/test_map.py build).
       - name: The back end's log, for the test map
         if: always() && env.RECORD_TEST_MAP == 'true'
         run: |
@@ -563,7 +567,8 @@ jobs:
           if-no-files-found: ignore
           retention-days: 90
       # The report and the deal record, which the `e2e` job checks and blends into the next
-      # timings; the selection's audits read the report too.
+      # timings, and each pass's seconds (`e2e-phases.json`), which its summary shows; the
+      # selection's audits read the report too.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
@@ -571,6 +576,7 @@ jobs:
           path: |
             front-end/test-results/results.json
             front-end/test-results/e2e-deal.json
+            front-end/test-results/e2e-phases.json
           if-no-files-found: ignore
           retention-days: 90
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -664,7 +670,7 @@ jobs:
 
   # The e2e tests that passed only on a retry over dev's last 20 Test runs that ran the shards, its
   # merge queue's among them (scripts/e2e_retries.py), as this job's summary, on a nightly or
-  # hand-started run alone. 20 runs are about 250 of the 1,000 API requests an hour the run's token
+  # hand-started run alone. 20 runs are about 150 of the 1,000 API requests an hour the run's token
   # may make for the repository, which the other runs' reads share; a rate limit stops the walk.
   # A test that passes only on a retry fails its shard (failOnFlakyTests), so its run went red and
   # was run or queued again; this gathers which tests did it, across runs.
@@ -744,7 +750,7 @@ jobs:
           SELECTED_SHARDS: ${{ needs.e2e-select.outputs.shards }}
         run: |
           results="$RUNNER_TEMP/e2e-results"
-          for file in results.json e2e-deal.json; do
+          for file in results.json e2e-deal.json e2e-phases.json; do
             if [ -f "$results/$file" ]; then
               mkdir -p "$results/e2e-results-shard-1"
               mv "$results/$file" "$results/e2e-results-shard-1/"
@@ -760,10 +766,11 @@ jobs:
               rm -r -- "$folder"
             fi
           done
-      # Once every shard passed: every shard dealt by the same timings and their reports hold every
-      # spec file exactly once, or with `--named` each file of the selection's list exactly once, or
-      # this fails the job, since a file no shard ran was never tested.
-      # The job summary names the timings' source, each shard's seconds and the spread. When this run
+      # Once every shard passed: every shard dealt by the same timings, serial files and worker
+      # count, and their reports hold every spec file exactly once, or with `--named` each file of
+      # the selection's list exactly once, or this fails the job, since a file no shard ran was never
+      # tested. The job summary names the timings' source, each shard's seconds and two passes, and
+      # the spread. When this run
       # publishes the timings (PUBLISHES_TIMINGS) it also writes the next timings, the ones the run dealt
       # by blended with what it measured, for the step after it to publish.
       - name: Every spec file ran on one shard

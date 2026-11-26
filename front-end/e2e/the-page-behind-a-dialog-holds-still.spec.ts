@@ -142,10 +142,10 @@ test.describe('The page behind a dialog holds still', () => {
         await cardManage.click();
         const manage = new ManageMarketPage(page);
         await manage.waitForOverlay();
-        // Nothing of the window is measured before the market lands: at a desk the window grows
-        // then, so a point taken on the scrim over the loading window lies inside the loaded one,
-        // and at either width the loading body has nothing to scroll.
-        await expect(manage.deleteButton).toBeVisible();
+        // Its read landed, before anything of the window is measured: at a desk the window opens
+        // on "Loading..." and grows round the market once the read does, over a point of scrim
+        // taken before, and at either width the loading body has nothing to scroll.
+        await expect(manage.peopleRows.first()).toBeVisible();
         expect((await pageScroll(page)).y, 'opening scrolled nothing').toBe(start);
         expect(await cardManage.boundingBox(), 'the Manage behind, where it was').toEqual(
           cardManageAt,

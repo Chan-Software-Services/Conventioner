@@ -4,6 +4,7 @@ import type { APIRequestContext } from '@playwright/test';
 import { decideReviewSetup } from './decideReviewSetup';
 import { mongoEval } from './mongo';
 import { savePlan } from './savePlan';
+import { withStackLock } from './stackLock';
 import {
   approvedVendorApplication,
   insertApplications,
@@ -177,33 +178,40 @@ export async function loginViaApi(
  * Helper: ensure the test user has at least one organization.
  * Assumes the request context already carries a Flask session cookie
  * (the /organizations endpoints are login-protected).
- * Creates an organization named 'E2E Test Org' if none exist.
+ * Creates an organization named 'E2E Test Org' if none exist, under the stack's lock and after
+ * reading again inside it, so two workers that both find none make one (`stackLock.ts`).
  * Returns the organization ID.
  */
 export async function ensureTestOrgAuthenticated(
   request: APIRequestContext,
   baseURL: string,
 ): Promise<string> {
-  const orgsRes = await request.get(`${baseURL}/organizations`);
-  if (!orgsRes.ok()) {
-    throw new Error(`Organization list failed: ${orgsRes.status()} ${await orgsRes.text()}`);
-  }
-  const body = (await orgsRes.json()) as { organizations: { id: string }[] };
-  if (body.organizations && body.organizations.length > 0) {
-    return body.organizations[0].id;
-  }
+  const first = async (): Promise<string | undefined> => {
+    const orgsRes = await request.get(`${baseURL}/organizations`);
+    if (!orgsRes.ok()) {
+      throw new Error(`Organization list failed: ${orgsRes.status()} ${await orgsRes.text()}`);
+    }
+    const body = (await orgsRes.json()) as { organizations: { id: string }[] };
+    return body.organizations?.[0]?.id;
+  };
+  const found = await first();
+  if (found) return found;
 
-  const createRes = await request.post(`${baseURL}/organizations`, {
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    data: { name: 'E2E Test Org' },
+  return withStackLock('the test organization', async () => {
+    const madeMeanwhile = await first();
+    if (madeMeanwhile) return madeMeanwhile;
+    const createRes = await request.post(`${baseURL}/organizations`, {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      data: { name: 'E2E Test Org' },
+    });
+    if (!createRes.ok()) {
+      throw new Error(`Test org creation failed: ${createRes.status()} ${await createRes.text()}`);
+    }
+    const createBody = (await createRes.json()) as { organization_id: string };
+    return createBody.organization_id;
   });
-  if (!createRes.ok()) {
-    throw new Error(`Test org creation failed: ${createRes.status()} ${await createRes.text()}`);
-  }
-  const createBody = (await createRes.json()) as { organization_id: string };
-  return createBody.organization_id;
 }
 
 /**
@@ -245,7 +253,9 @@ export async function removeFromOrganization(
  *
  * For a spec whose subject needs a CHOICE of organization: with one, the create-market dialog
  * picks it for you. Such a spec passed only when an earlier one happened to have created more,
- * which split runs (CI shards) stopped guaranteeing.
+ * which split runs (CI shards) stopped guaranteeing. The list is read and the rest created under
+ * the stack's lock for the user's organizations, so two workers that both find too few make the
+ * rest once (`stackLock.ts`).
  */
 export async function ensureTestOrgs(
   request: APIRequestContext,
@@ -255,20 +265,22 @@ export async function ensureTestOrgs(
   count: number,
 ): Promise<void> {
   await loginViaApi(request, baseURL, email, password);
-  const orgsRes = await request.get(`${baseURL}/organizations`);
-  if (!orgsRes.ok()) {
-    throw new Error(`Organization list failed: ${orgsRes.status()} ${await orgsRes.text()}`);
-  }
-  const { organizations = [] } = (await orgsRes.json()) as { organizations?: unknown[] };
-  for (let n = organizations.length; n < count; n++) {
-    const res = await request.post(`${baseURL}/organizations`, {
-      headers: { 'Content-Type': 'application/json' },
-      data: { name: `E2E Test Org ${n + 1} ${Date.now()}` },
-    });
-    if (!res.ok()) {
-      throw new Error(`Test org creation failed: ${res.status()} ${await res.text()}`);
+  await withStackLock(`the organizations of ${email}`, async () => {
+    const orgsRes = await request.get(`${baseURL}/organizations`);
+    if (!orgsRes.ok()) {
+      throw new Error(`Organization list failed: ${orgsRes.status()} ${await orgsRes.text()}`);
     }
-  }
+    const { organizations = [] } = (await orgsRes.json()) as { organizations?: unknown[] };
+    for (let n = organizations.length; n < count; n++) {
+      const res = await request.post(`${baseURL}/organizations`, {
+        headers: { 'Content-Type': 'application/json' },
+        data: { name: `E2E Test Org ${n + 1} ${Date.now()}` },
+      });
+      if (!res.ok()) {
+        throw new Error(`Test org creation failed: ${res.status()} ${await res.text()}`);
+      }
+    }
+  });
 }
 
 /**

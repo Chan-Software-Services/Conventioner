@@ -17,9 +17,9 @@ request's shard is run again, and the test is forgotten. This gathers them, over
   is `flaky` passed only on a retry; a test is named by the spec file Playwright loaded and its
   title under that file, as Playwright joins it
 - GitHub's list of runs is read 100 at a time, ten pages at most
-- each counted run costs about a dozen requests of GitHub's API: its artifacts' list, a zip for each
-  of the ten shards, and the list of a run passed over, about one a merge (its warm push); 20 runs
-  are about 250, a quarter of the 1,000 an hour a run's GITHUB_TOKEN may make for the repository,
+- each counted run costs about seven requests of GitHub's API: its artifacts' list, a zip for each
+  of the five shards, and the list of a run passed over, about one a merge (its warm push); 20 runs
+  are about 150, a seventh of the 1,000 an hour a run's GITHUB_TOKEN may make for the repository,
   which the Test, Promote and Deploy runs' reads share
 - a 403 or a 429 from GitHub's API (the rate limit, or a 403 for a token that may not read Actions,
   which every later read would get too) on a run's artifacts, a zip or a later page of runs stops

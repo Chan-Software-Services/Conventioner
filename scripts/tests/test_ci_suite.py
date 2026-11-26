@@ -285,7 +285,7 @@ def in_progress(stub, *listed, total=None):
 
 
 def test_a_queue_run_still_going_whose_jobs_all_passed_only_warms_the_caches(stub, env):
-    in_progress(stub, job("suite", conclusion="skipped"), job("backend"), job("e2e shard 1/10"), job("e2e"),
+    in_progress(stub, job("suite", conclusion="skipped"), job("backend"), job("e2e shard 1/5"), job("e2e"),
                 job("warm-caches", conclusion="skipped"), job("test-map", conclusion="skipped"))
 
     code, *out = decide(env)
@@ -1205,7 +1205,7 @@ def test_a_check_that_fails_fails_its_step(tmp_path, event):
 
 
 def upload(folder, shard, total, scope, files, hand):
-    """The two files a shard's artifact holds, in `folder`."""
+    """The three files a shard's artifact holds, in `folder`."""
     folder.mkdir(parents=True, exist_ok=True)
     deal = {
         "shard": shard, "total": total, "source": "the test timings", "timings": {},
@@ -1213,12 +1213,15 @@ def upload(folder, shard, total, scope, files, hand):
     }
     (folder / "e2e-deal.json").write_text(json.dumps(deal))
     (folder / "results.json").write_text(json.dumps({"suites": [{"file": file} for file in hand]}))
+    phases = [{"name": "parallel", "files": len(hand), "seconds": 120, "status": 0}]
+    (folder / "e2e-phases.json").write_text(json.dumps(phases))
 
 
 def whole_run_upload(results):
-    files = [f"{n:02}.spec.ts" for n in range(1, 11)]
-    for shard in range(1, 11):
-        upload(results / f"e2e-results-shard-{shard}", shard, 10, "whole", files, [files[shard - 1]])
+    total = whole_run_shards()
+    files = [f"{n:02}.spec.ts" for n in range(1, total + 1)]
+    for shard in range(1, total + 1):
+        upload(results / f"e2e-results-shard-{shard}", shard, total, "whole", files, [files[shard - 1]])
 
 
 def check_the_downloaded_results(tmp_path, temp, scope, shards, specs):
@@ -1265,9 +1268,10 @@ def test_a_one_shard_run_s_lone_artifact_is_checked_as_shard_1_s(tmp_path):
     done = check_the_downloaded_results(tmp_path, tmp_path / "temp", "named", "[1]", '["a.spec.ts","b.spec.ts"]')
 
     assert done.returncode == 0, done.stdout + done.stderr
-    # Where the audit looks for reports.
-    assert (results / "e2e-results-shard-1" / "results.json").exists()
-    assert not (results / "results.json").exists()
+    # Where the audit looks for reports, and the check for each shard's records.
+    for file in ("results.json", "e2e-deal.json", "e2e-phases.json"):
+        assert (results / "e2e-results-shard-1" / file).exists(), file
+        assert not (results / file).exists(), file
 
 
 def test_a_lone_artifact_of_a_run_with_more_shards_still_fails_the_check(tmp_path):
@@ -1309,7 +1313,7 @@ def test_a_whole_run_keeps_every_shard_s_results(tmp_path, scope):
     done = check_the_downloaded_results(tmp_path, tmp_path / "temp", scope, "", "")
 
     assert done.returncode == 0, done.stdout + done.stderr
-    assert len(list(results.iterdir())) == 10
+    assert len(list(results.iterdir())) == whole_run_shards()
 
 
 @pytest.mark.parametrize("shards", ["", "[]", "[1]"])
@@ -1318,7 +1322,7 @@ def test_a_run_with_nothing_downloaded_passes_the_results_step(tmp_path, shards)
         tmp_path,
         step_of("e2e", "name", RESULTS_STEP)["run"],
         RUNNER_TEMP=str(tmp_path / "temp"),
-        E2E_SHARDS="10",
+        E2E_SHARDS=str(whole_run_shards()),
         SELECTED_SHARDS=shards,
     )
 
@@ -1706,9 +1710,9 @@ def run_select(tmp_path, fake="python3", **fakes):
 def test_the_selection_step_asks_for_this_change_s_decision_under_the_whole_run_s_shards(tmp_path):
     run_select(tmp_path, FAKE_STDOUT=decision())
 
-    assert whole_run_shards() == 10
+    assert whole_run_shards() == 5
     assert calls(tmp_path) == [
-        ["scripts/affected-specs.py", "ci", "--github", "--base", "HEAD^1", "--head", "HEAD", "--max-shards", "10"]
+        ["scripts/affected-specs.py", "ci", "--github", "--base", "HEAD^1", "--head", "HEAD", "--max-shards", "5"]
     ]
 
 
@@ -1718,9 +1722,9 @@ def test_the_selection_step_asks_for_this_change_s_decision_under_the_whole_run_
         (decision(), 'scope=named\nshards=[1,2]\nspecs=["a.spec.ts","market/b+c.spec.ts"]\n'),
         (decision(specs=[], shards=0), "scope=named\nshards=[]\nspecs=[]\n"),
         (
-            decision(specs=[f"{n}.spec.ts" for n in range(10)], shards=10),
-            "scope=named\nshards=[1,2,3,4,5,6,7,8,9,10]\nspecs="
-            + json.dumps([f"{n}.spec.ts" for n in range(10)], separators=(",", ":"))
+            decision(specs=[f"{n}.spec.ts" for n in range(5)], shards=5),
+            "scope=named\nshards=[1,2,3,4,5]\nspecs="
+            + json.dumps([f"{n}.spec.ts" for n in range(5)], separators=(",", ":"))
             + "\n",
         ),
     ],

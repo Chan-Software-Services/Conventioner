@@ -26,6 +26,7 @@ import {
 import { seedMarketDayMap, type SeededMarketDayMap } from './seedMarketDayMap';
 import { uniqueMarketName } from './uniqueName';
 import { ensureVerifiedUser } from './verifiedUser';
+import { withStackLock } from './stackLock';
 import { invitationsWaitingFor, inviteToMarket, inviteToOrganization } from './invitations';
 import { saveApplicationForm } from './saveApplicationForm';
 
@@ -880,10 +881,18 @@ export async function seedTheScreens(
 
   // The first applicant of `open`; each sign-in plants its own code, since a code is used once.
   const applicant = { email: 'applicant0@example.com' };
-  const { id: organizationId, ...organization } = await organizationWithPeople(api, backend);
+  // The organization every seed of the stack shares, its people and the invitations sent only
+  // when none waits: each step reads, then writes what it found missing, so under the lock.
+  const { id: organizationId, ...organization } = await withStackLock(
+    'the screens organization',
+    async () => {
+      const shared = await organizationWithPeople(api, backend);
+      await invitationsForTheInvitee(api, big.marketId, shared.id);
+      await anAdminInvitationWaiting(api, backend, shared.id);
+      return shared;
+    },
+  );
   const ofTheOrganization = await organizationMarket(api, backend, email, organizationId);
-  await invitationsForTheInvitee(api, big.marketId, organizationId);
-  await anAdminInvitationWaiting(api, backend, organizationId);
   await twoInvitationsWaiting(api, draft.marketId);
 
   const layout = await seedLayout(api, backend, email, password, { layout: true });
