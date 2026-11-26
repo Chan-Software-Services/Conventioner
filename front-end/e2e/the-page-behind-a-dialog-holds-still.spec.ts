@@ -142,6 +142,9 @@ test.describe('The page behind a dialog holds still', () => {
         await cardManage.click();
         const manage = new ManageMarketPage(page);
         await manage.waitForOverlay();
+        // The window grows as the market lands, so nothing of it is measured before then: a point
+        // taken on the scrim over the loading window lies inside the loaded one.
+        await expect(manage.deleteButton).toBeVisible();
         expect((await pageScroll(page)).y, 'opening scrolled nothing').toBe(start);
         expect(await cardManage.boundingBox(), 'the Manage behind, where it was').toEqual(
           cardManageAt,
