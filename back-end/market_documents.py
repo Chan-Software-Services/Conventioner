@@ -307,10 +307,10 @@ _SLUG_LOOKUP_FIELDS: Tuple[str, ...] = ("name", "phase", "is_draft")
 # `api/applicants.py`); a draft is not published, so it answers as a market that does not exist.
 #
 # This was the open phase alone, which closed the whole surface the moment applications closed -
-# before most organizers publish a verdict, so a vendor could never read theirs (bug 20). APPLYING
-# is still the stage's alone, while the organizer takes applications, and the save says so itself
-# (`takes_applications` in `api/applicants.py`): a stranger applying to a closed market was the old
-# behaviour, and it stays wrong.
+# before most organizers publish results, so a vendor could never read their outcome (bug 20).
+# APPLYING is still the stage's alone, while the organizer takes applications, and the save says so
+# itself (`takes_applications` in `api/applicants.py`): a stranger applying to a closed market was
+# the old behaviour, and it stays wrong.
 APPLICANT_SURFACE_PHASES = tuple(phase for phase in MarketPhase if phase is not MarketPhase.DRAFT)
 
 

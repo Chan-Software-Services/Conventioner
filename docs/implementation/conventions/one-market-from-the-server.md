@@ -6,7 +6,7 @@ describes:
   - front-end/src/__tests__/noMarketInTheBrowser.test.ts
   - front-end/src/__tests__/everyMarketReadIsKeyed.test.ts
   - back-end/api/markets.py#get_market_for_user
-verified: 2026-11-14
+verified: 2026-11-26
 sources:
   - wayfinding/the-market-frame/map
   - wayfinding/the-market-frame/02
