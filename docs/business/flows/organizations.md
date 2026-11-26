@@ -34,6 +34,7 @@ sources:
   - T469
   - T538
   - T637
+  - T646
 ---
 
 # Organizations
@@ -86,6 +87,7 @@ Covered by:
    A first read that fails leaves the copy's people listed, with the failure said; an organization no longer among the reader's is shown no further, with "You are no longer in this organization, or it has been deleted.".
 2. Under Admins, "Invite admin", the owner's alone; under Members, "Invite member", the owner's and the admins'.
    Each adds a person by inviting them, since nobody joins an organization unasked ([a person accepts before they join](../rules/a-person-accepts-before-they-join.md), T538): the field "Email address", "Send invitation" and "Cancel" on one row, or on a phone the field on a line above the two buttons; under it, "They get an email, and join once they accept it signed in with this address.".
+   Each opening of "Manage organization", on this organization or another, starts with both rows closed, their fields empty and nothing said under them, however the last one was left; "Cancel" does the same for its own row.
 3. Every address is answered alike, whether or not it has an account: the field empties, the row stays open for the next address, and "Invitation sent to <address>." is said beneath it, as a screen reader hears it; when the email could not be sent, "<address> is invited, but the email could not be sent. Invite them again to send it." is said in its place, in the warning's yellow rather than the sent line's green, since something was not done ([`InvitationSent.vue`](../../../front-end/src/components/InvitationSent.vue)).
    Inviting an address already invited replaces its invitation, with the place chosen, a new email and a new 14 days, so inviting again is how it is sent again.
    An address already in the organization is refused beneath the row in the server's words, brought into view, as a short window's body can hold it at its very foot: "<address> owns this organization.", "<address> is already an admin of this organization.", or "<address> is already a member of this organization.", which "Invite admin" follows with "Make them an admin from their row." ([B3a](#b3a-make-an-admin-a-member-or-a-member-an-admin)); so is an address the browser accepts and the server does not read as one, such as one with no dot after its "@", and too many invitations in a short time, with how long to wait; the address is kept.
@@ -115,10 +117,10 @@ Covered by:
 - [`everyone-with-access.spec.ts`](../../../front-end/e2e/everyone-with-access.spec.ts) (Manage organization from its address)
 - [`inviting-someone-to-an-organization.spec.ts`](../../../front-end/e2e/inviting-someone-to-an-organization.spec.ts) (an address with an account and one without each answered "Invitation sent to <address>." in each row and waiting under "Invited", nobody under Admins or Members; a member invited as an admin pointed at "Make admin"; a withdrawal asked first, Cancel's focus and the row gone; the invitee accepting and listed under Admins; an admin's Withdraw on the member invitations alone; at 1440 and 390, each address the run's own and what it left withdrawn after it)
 - [`manage-organization-opens-as-it-is.spec.ts`](../../../front-end/e2e/manage-organization-opens-as-it-is.spec.ts) (reopened before the list is read again, the person who accepted meanwhile listed)
-- [`manageOrganizationInvites.test.ts`](../../../front-end/src/__tests__/manageOrganizationInvites.test.ts) (the rows' words, the sent and mail lines, the limit and a refusal in the server's words, "Invited" and its rows, where it stands, its find and pages, who reads it and who may withdraw, its failed read, and the withdrawal asked first, done, read as done on a 404 with the people read again so one accepted meanwhile shows, and said on a 409, each held, sent once, and kept out of Manage organization opened on another organization)
+- [`manageOrganizationInvites.test.ts`](../../../front-end/src/__tests__/manageOrganizationInvites.test.ts) (the rows' words, the sent and mail lines, the limit and a refusal in the server's words, "Invited" and its rows, where it stands, its find and pages, who reads it and who may withdraw, its failed read, and the withdrawal asked first, done, read as done on a 404 with the people read again so one accepted meanwhile shows, and said on a 409, each held, sent once, and kept out of Manage organization opened on another organization; each row empty at the next opening, on this organization or another, and after Cancel)
 - [`manageOrganizationPeople.test.ts`](../../../front-end/src/__tests__/manageOrganizationPeople.test.ts) (the shown count kept through a removal, and a refusal and a re-read kept out of Manage organization opened on another organization)
 - [`manageOrganizationReadsOnOpen.test.ts`](../../../front-end/src/__tests__/manageOrganizationReadsOnOpen.test.ts) (the read as it opens, and what it shows while it is out, when it fails and when the organization is no longer listed)
-- `OrganizationsView.test.ts` for the key it opens on and drops
+- `OrganizationsView.test.ts` for the key it opens on and drops, and an address typed in each invite row gone at the next opening, after Escape on another organization and after the close button on the same one
 - [`people-at-scale-organization.spec.ts`](../../../front-end/e2e/people-at-scale-organization.spec.ts) (Members at 150 people: a page at a time, finding one member, the words kept through a removal; on a phone at 390 and 320)
 - `screen-sweeps-*.spec.ts`, the sweeps' states "the manage-organization dialog, its people and both invite rows" and "the manage-organization dialog, invitations waiting"
 - `screens-match-roles.spec.ts` ("an organization admin with no role on the market")

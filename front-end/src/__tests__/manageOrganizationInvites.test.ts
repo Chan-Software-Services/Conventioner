@@ -263,6 +263,35 @@ describe.each([
     expect(byTestId(`manage-org-add-${row}-sent`)).toBeNull();
   });
 
+  it('is empty when opened again after Cancel', async () => {
+    await open();
+    await openTheRow(row);
+    await type(row, 'a@example.com');
+
+    byTestId(`manage-org-add-${row}-cancel`)!.click();
+    await flushPromises();
+    await openTheRow(row);
+
+    expect(field(row).value).toBe('');
+  });
+
+  it.each([
+    { on: 'the same organization', next: org() },
+    { on: 'another organization', next: OTHER },
+  ])('is empty at the next opening of Manage organization, on $on', async ({ next }) => {
+    const wrapper = await open();
+    await openTheRow(row);
+    await type(row, 'a@example.com');
+
+    // Closed as the list closes it, and opened again by the same list.
+    await wrapper.setProps({ manageOpen: false, org: null });
+    await wrapper.setProps({ manageOpen: true, org: next });
+    await flushPromises();
+    await openTheRow(row);
+
+    expect(field(row).value).toBe('');
+  });
+
   it('sends once for two presses, and holds Manage organization until the list shows it', async () => {
     const answer = held();
     api.post.mockReturnValue(answer.promise);

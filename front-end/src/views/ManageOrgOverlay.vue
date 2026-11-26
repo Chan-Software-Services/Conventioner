@@ -275,18 +275,30 @@ const invitations = useInvitationsWaiting({
   withdraw: withdrawOrganizationInvitation,
   ended: rereadAfterAWrite,
 });
-// Each opening starts with its invite rows closed, nothing asking to be confirmed and its finds
-// empty: the read itself moves with the organization it is open on.
+/** Closes the admin invite row and forgets what was typed and sent in it. */
+function clearAddAdmin() {
+  showAddAdminForm.value = false;
+  newAdminEmail.value = '';
+  adminInviteSent.value = null;
+}
+
+/** As `clearAddAdmin`, for the member row. */
+function clearAddMember() {
+  showAddMemberForm.value = false;
+  newMemberEmail.value = '';
+  memberInviteSent.value = null;
+}
+
+// Each opening starts with its invite rows closed and empty, nothing asking to be confirmed and its
+// finds empty: the read itself moves with the organization it is open on.
 watch(
   () => [props.manageOpen, props.org] as const,
   ([open, org]) => {
     openedCopy.value = open ? org : null;
     if (open && org) {
       renameValue.value = org.name;
-      showAddAdminForm.value = false;
-      showAddMemberForm.value = false;
-      adminInviteSent.value = null;
-      memberInviteSent.value = null;
+      clearAddAdmin();
+      clearAddMember();
       deleteConfirming.value = false;
       removing.value = null;
       placing.value = null;
@@ -395,13 +407,11 @@ async function openAddAdmin() {
 }
 
 /**
- * Cancelling clears what was typed and any error: reopening should not hand back a rejected
- * address as though it were still being considered.
+ * Cancelling clears the row and any error: reopening should not hand back a rejected address as
+ * though it were still being considered.
  */
 async function closeAddAdmin() {
-  showAddAdminForm.value = false;
-  newAdminEmail.value = '';
-  adminInviteSent.value = null;
+  clearAddAdmin();
   addAdmin.edit();
   await nextTick();
   addAdminButton.value?.focus();
@@ -416,9 +426,7 @@ async function openAddMember() {
 
 /** As `closeAddAdmin`, for the member row. */
 async function closeAddMember() {
-  showAddMemberForm.value = false;
-  newMemberEmail.value = '';
-  memberInviteSent.value = null;
+  clearAddMember();
   addMember.edit();
   await nextTick();
   addMemberButton.value?.focus();
